@@ -122,6 +122,8 @@ const INTERCORRENCIAS_OPCOES = [
   "Nenhuma", "Faltas frequentes", "Baixa adesão", "Agravamento clínico", "Barreiras familiares", "Barreiras sociais", "Intercorrências médicas", "Troca de conduta", "Outro"
 ];
 
+const altaPrintText = (s?: string) => (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\r?\n/g,"<br/>");
+
 const fmt = (d: string) => {
   if (!d) return "—";
   try { return new Date(d).toLocaleDateString("pt-BR"); } catch { return d; }
@@ -262,12 +264,15 @@ const RelatorioAlta: React.FC = () => {
   const [tabProf, setTabProf] = useState("");
 
   const generateMultiSummary = () => {
-    const concluidores = profSections.filter(s => s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada");
-    const areas = concluidores.map(s => s.profissao).join(", ");
-    const summary = `Relatório multiprofissional consolidado pelas áreas de: ${areas}. 
-O paciente apresentou evolução global ${nivelIndep.toLowerCase()} no período. 
-As intervenções realizadas focaram em ${multiObjetivosGerais}. 
-Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para alta" : "necessita de seguimento na rede"}.`;
+    if (formReadOnly) return;
+    const areas = profSections.filter(s => s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada").map(s => s.profissao || s.profissional_nome).join(", ");
+    const summary = [
+      areas && `Contribuições concluídas: ${areas}.`,
+      nivelIndep && `Nível de independência avaliado: ${nivelIndep}.`,
+      multiObjetivosGerais.trim() && `Objetivos terapêuticos: ${multiObjetivosGerais}.`,
+      multiContinuarTerapia && `Continuidade do cuidado: ${multiContinuarTerapia === "nao" ? "Não indicada" : multiContinuarTerapia === "sim_mesma" ? "Na mesma área" : multiContinuarTerapia === "sim_outra" ? "Em outra área" : multiContinuarTerapia === "vigilancia" ? "Vigilância em saúde" : multiContinuarTerapia}.`,
+    ].filter(Boolean).join("\n");
+    if (!summary) { toast.error("Preencha os dados clínicos antes de gerar o resumo."); return; }
     setMultiResumoConsolidado(summary);
   };
 
@@ -324,7 +329,9 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
   const reportLoadTokenRef = React.useRef(0);
   const loadedModeRef = React.useRef<ModoRelatorio>("selector");
   const isReportLocked = status !== "rascunho";
-  const formReadOnly = isReportLocked || loading || !pacienteId;
+  const [loadFailed,setLoadFailed] = useState(false);
+  const savingRef = React.useRef(false);
+  const formReadOnly = isReportLocked || loading || loadFailed || !pacienteId;
 
   const resetReportTracking = () => {
     setReportId(null);
@@ -424,7 +431,8 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
   };
 
   const handlePacienteChange = (nextId: string) => {
-    if (nextId === pacienteId) return;
+    if (nextId === pacienteId || savingRef.current) return;
+    setLoadFailed(false);
     reportLoadTokenRef.current += 1;
     activePatientRef.current = nextId;
     resetReportTracking();
@@ -450,6 +458,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
       loadedModeRef.current = modo;
     }
 
+    setLoadFailed(false);
     activePatientRef.current = pacienteId;
     const token = ++reportLoadTokenRef.current;
     if (modo === "multiprofissional") {
@@ -626,6 +635,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
     } catch (err: any) {
       console.error(err);
       if (token === reportLoadTokenRef.current && activePatientRef.current === pid) {
+        setLoadFailed(true);
         toast.error(err?.message || "Não foi possível carregar o relatório multiprofissional.");
       }
     } finally {
@@ -771,6 +781,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
     } catch (error: any) {
       console.error("Error loading individual data:", error);
       if (token === reportLoadTokenRef.current && activePatientRef.current === pid) {
+        setLoadFailed(true);
         toast.error(error?.message || "Não foi possível carregar o relatório individual.");
       }
     } finally {
@@ -855,16 +866,17 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
     if (!pacienteId) errors.push("Selecione um paciente");
     if (!indMotivo) errors.push("Selecione o motivo da alta");
     if (!indTipoAlta) errors.push("Selecione o tipo de alta");
-    if (!indEvolucao) errors.push("A evolução clínica é obrigatória");
-    if (!indOrientacoes) errors.push("Orientações de alta são obrigatórias");
-    if (!indDiagClinico) errors.push("Diagnóstico clínico é obrigatório");
-    if (!indResumoConsolidado) errors.push("O resumo final consolidado é obrigatório");
+    if (!indEvolucao.trim()) errors.push("A evolução clínica é obrigatória");
+    if (!indOrientacoes.trim()) errors.push("Orientações de alta são obrigatórias");
+    if (!indDiagClinico.trim()) errors.push("Diagnóstico clínico é obrigatório");
+    if (!indResumoConsolidado.trim()) errors.push("O resumo final consolidado é obrigatório");
     if (!indMetas) errors.push("Informe a avaliação profissional das metas do PTS");
-    if (indMetas && indMetas !== "totalmente" && !indMetasJust) errors.push("Justificativa de metas obrigatória");
+    if (indMetas && indMetas !== "totalmente" && !indMetasJust.trim()) errors.push("Justificativa de metas obrigatória");
     return errors;
   };
 
   const generateIndSummary = () => {
+    if (formReadOnly) return;
     if (!indMetas) { toast.error("Avalie as metas antes de gerar o resumo."); return; }
     const summary = [
       `Paciente em acompanhamento no período de ${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}, totalizando ${indSessoes} sessões.`,
@@ -1059,7 +1071,6 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
       <div class="section" style="page-break-inside: avoid;">
         <div class="section-title">Plano de Transição e Pós-Alta</div>
         <div class="field"><span class="field-label">Orientações ao Usuário</span><div class="field-value">${orientacoesUsuario || "—"}</div></div>
-        <div class="field"><span class="field-label">Orientações à Família/Cuidador</span><div class="field-value">${orientacoesUbs || "—"}</div></div>
         <div class="field"><span class="field-label">Orientações para UBS/ESF</span><div class="field-value">${orientacoesUbs || "—"}</div></div>
         <div class="field"><span class="field-label">Encaminhamentos Realizados</span><div class="field-value">${encaminhamentos.join(", ") || "—"}</div></div>
         <div class="info-grid">
@@ -1068,6 +1079,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
         </div>
       </div>
 
+      <div class="section"><div class="section-title">Resumo Final Consolidado</div><div class="field-value">${altaPrintText(multiResumoConsolidado) || "—"}</div></div>
       <div class="signature" style="margin-top:40px">
         <div class="signature-line"></div>
         <div class="name">${multiResponsavelTecnico || "Responsável Técnico (RT)"}</div>
@@ -1160,6 +1172,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
         <div class="field"><span class="field-label">Prazo sugerido para reavaliação</span><div class="field-value">${indPrazoReavaliacao || "—"}</div></div>
       </div>
 
+      <div class="section"><div class="section-title">Resumo Final Consolidado</div><div class="field-value">${altaPrintText(indResumoConsolidado) || "—"}</div></div>
       <div class="signature" style="margin-top:50px">
         <div class="signature-line"></div>
         <div class="name">${profNome}</div>
@@ -1169,15 +1182,12 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
   };
 
   const handlePrint = (type: "multi" | "individual") => {
+    if (!pacienteId || !reportId || !isReportLocked || loading || loadFailed) return;
     if (type === "multi") {
-      const errs = validateMulti();
-      if (errs.length > 0) { toast.error(errs[0]); return; }
       openPrintDocument("Relatório de Alta — Multiprofissional", withEvolution(buildMultiPrintBody()), {
         Paciente: paciente?.nome || "", "Data Alta": fmt(dataAlta)
       });
     } else {
-      const errs = validateInd();
-      if (errs.length > 0) { toast.error(errs[0]); return; }
       const func = funcionarios.find(f => f.id === user?.id);
       openPrintDocument(
         `Relatório de Alta — ${func?.profissao || "Individual"}`,
@@ -1188,6 +1198,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
   };
 
   const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any) => {
+    if (savingRef.current || loading || loadFailed) return;
     if (!pacienteId || !user?.id) { toast.error("Selecione um paciente"); return; }
 
     if (isReportLocked && customStatus !== "rascunho") {
@@ -1200,6 +1211,9 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
       if (errs.length > 0) { toast.error(errs[0]); return; }
     }
 
+    savingRef.current = true;
+    setLoading(true);
+    try {
     const newVersion = version + (isDraft ? 0 : 1);
     const actionDate = new Date().toISOString();
     const newHistoryEntry: VersionRecord = {
@@ -1284,16 +1298,21 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
         toast.error("Não foi possível verificar relatório existente: " + existingError.message);
         return;
       }
-      targetReportId = existingBeforeSave?.id || null;
+      if (existingBeforeSave?.id) {
+        toast.error("Já existe um relatório. Selecione novamente o paciente antes de salvar para evitar sobrescrever dados.");
+        return;
+      }
     }
 
     if (targetReportId) {
+      const { profissional_id, profissional_nome, unidade_id, ...changes } = record;
       let updateQuery = supabase
         .from("prontuarios")
-        .update(record)
+        .update(changes)
         .eq("id", targetReportId)
         .eq("paciente_id", pacienteId)
-        .eq("tipo_registro", record.tipo_registro);
+        .eq("tipo_registro", record.tipo_registro)
+        .eq("status", "rascunho");
       if (type === "individual") updateQuery = updateQuery.eq("profissional_id", user.id);
       result = await updateQuery.select("id").maybeSingle();
 
@@ -1316,7 +1335,9 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
     } else {
       toast.success(isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta atualizado");
       setStatus(targetStatus as any);
-      setReportOwnerId(user.id);
+      if (!targetReportId) setReportOwnerId(user.id);
+      setLastUpdatedBy(user.nome || "");
+      setLastUpdatedAt(actionDate);
       setVersion(newVersion);
       setHistory(updatedHistory);
       
@@ -1332,6 +1353,12 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
         profissionalNome: user.nome,
         detalhes: { tipo: type, isDraft, version: newVersion }
       });
+    }
+    } catch (error: any) {
+      toast.error(error?.message || "Não foi possível salvar o relatório.");
+    } finally {
+      savingRef.current = false;
+      setLoading(false);
     }
   };
 
@@ -1442,7 +1469,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setModo("selector")}>
+            <Button variant="ghost" size="icon" onClick={() => setModo("selector")} disabled={loading}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div>
@@ -1525,7 +1552,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-xl text-sm">
                     <div><span className="text-muted-foreground text-xs block">Nome</span><strong>{paciente.nome}</strong></div>
                     <div><span className="text-muted-foreground text-xs block">Nasc.</span>{fmt(paciente.dataNascimento)}</div>
-                    <div><span className="text-muted-foreground text-xs block">Data de Alta</span><Input type="date" value={dataAlta} onChange={e => setDataAlta(e.target.value)} className="h-8" /></div>
+                    <div><span className="text-muted-foreground text-xs block">Data de Alta</span><Input disabled={formReadOnly} type="date" value={dataAlta} onChange={e => setDataAlta(e.target.value)} className="h-8" /></div>
                     {lastUpdatedAt && (
                       <div><span className="text-muted-foreground text-xs block">Última atualização</span>{fmtDateTime(lastUpdatedAt)} por {lastUpdatedBy}</div>
                     )}
@@ -1546,11 +1573,20 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
               <CardHeader className="pb-3"><CardTitle className="text-sm">Diagnóstico Multiprofissional</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input value={cid10} onChange={e => setCid10(e.target.value)} placeholder="CID-10 Principal" />
-                    <Input value={multiCid10Secundario} onChange={e => setMultiCid10Secundario(e.target.value)} placeholder="CID-10 Secundário" />
+                    <Input disabled={formReadOnly} value={cid10} onChange={e => setCid10(e.target.value)} placeholder="CID-10 Principal" />
+                    <Input disabled={formReadOnly} value={multiCid10Secundario} onChange={e => setMultiCid10Secundario(e.target.value)} placeholder="CID-10 Secundário" />
                  </div>
-                 <Textarea value={multiDiagClinico} onChange={e => setMultiDiagClinico(e.target.value)} placeholder="Diagnóstico clínico..." />
-                 <Textarea value={multiDiagFuncional} onChange={e => setMultiDiagFuncional(e.target.value)} placeholder="Diagnóstico funcional..." />
+                 <Textarea disabled={formReadOnly} value={multiDiagClinico} onChange={e => setMultiDiagClinico(e.target.value)} placeholder="Diagnóstico clínico..." />
+                 <Textarea disabled={formReadOnly} value={multiDiagFuncional} onChange={e => setMultiDiagFuncional(e.target.value)} placeholder="Diagnóstico funcional..." />
+                 <details className="border rounded-lg p-3 space-y-3"><summary className="text-sm font-medium cursor-pointer">Contexto funcional e CIF</summary>
+                 <div className="space-y-1"><Label className="text-xs font-semibold">Contexto biopsicossocial</Label><Textarea disabled={formReadOnly} value={multiContextoBiopsicossocial} onChange={e=>setMultiContextoBiopsicossocial(e.target.value)} rows={2} /></div>
+                 <div className="space-y-1"><Label className="text-xs font-semibold">CIF — funções do corpo</Label><Textarea disabled={formReadOnly} value={cifFuncoes} onChange={e=>setCifFuncoes(e.target.value)} rows={2} /></div>
+                 <div className="space-y-1"><Label className="text-xs font-semibold">CIF — atividades e participação</Label><Textarea disabled={formReadOnly} value={cifAtividades} onChange={e=>setCifAtividades(e.target.value)} rows={2} /></div>
+                 <div className="space-y-1"><Label className="text-xs font-semibold">CIF — fatores ambientais</Label><Textarea disabled={formReadOnly} value={cifFatores} onChange={e=>setCifFatores(e.target.value)} rows={2} /></div>
+                 <div className="space-y-1"><Label className="text-xs font-semibold">Barreiras</Label><Textarea disabled={formReadOnly} value={multiBarreiras} onChange={e=>setMultiBarreiras(e.target.value)} rows={2} /></div>
+                 <div className="space-y-1"><Label className="text-xs font-semibold">Potencialidades</Label><Textarea disabled={formReadOnly} value={multiPotencialidades} onChange={e=>setMultiPotencialidades(e.target.value)} rows={2} /></div>
+                 <div className="space-y-1"><Label className="text-xs font-semibold">Fatores contextuais</Label><Textarea disabled={formReadOnly} value={multiFatoresContextuais} onChange={e=>setMultiFatoresContextuais(e.target.value)} rows={2} /></div>
+                 </details>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1558,8 +1594,8 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
           <TabsContent value="resumo" className="space-y-4 pt-4">
             <Card>
               <CardContent className="space-y-4 pt-4">
-                 <Textarea value={multiObjetivosGerais} onChange={e => setMultiObjetivosGerais(e.target.value)} placeholder="Objetivos Terapêuticos Gerais..." rows={4} />
-                 <Textarea value={multiPlanoExecutado} onChange={e => setMultiPlanoExecutado(e.target.value)} placeholder="Resumo do plano terapêutico executado..." rows={4} />
+                 <Textarea disabled={formReadOnly} value={multiObjetivosGerais} onChange={e => setMultiObjetivosGerais(e.target.value)} placeholder="Objetivos Terapêuticos Gerais..." rows={4} />
+                 <Textarea disabled={formReadOnly} value={multiPlanoExecutado} onChange={e => setMultiPlanoExecutado(e.target.value)} placeholder="Resumo do plano terapêutico executado..." rows={4} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -1659,14 +1695,14 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-xs">Tipo de Alta *</Label>
-                        <Select value={multiTipoAlta} onValueChange={setMultiTipoAlta}>
+                        <Select disabled={formReadOnly} value={multiTipoAlta} onValueChange={setMultiTipoAlta}>
                            <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                            <SelectContent>{TIPOS_ALTA.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-xs">Nível de Independência</Label>
-                        <Select value={nivelIndep} onValueChange={setNivelIndep}>
+                        <Select disabled={formReadOnly} value={nivelIndep} onValueChange={setNivelIndep}>
                            <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                            <SelectContent>{NIVEIS_INDEPENDENCIA.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
                         </Select>
@@ -1678,14 +1714,31 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                       <Label className="text-xs">Detalhes do motivo</Label>
                       <Textarea disabled={formReadOnly} value={motivoDetalhe} onChange={e=>setMultiMotivoDetalhe(e.target.value)} rows={2}/>
                     </div>
+                    <details className="border rounded-lg p-3 space-y-3"><summary className="text-sm font-medium cursor-pointer">Condição funcional e plano pós-alta</summary>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Condição funcional</Label><Textarea disabled={formReadOnly} value={condicaoFuncional} onChange={e=>setCondicaoFuncional(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Comparação admissão e alta</Label><Textarea disabled={formReadOnly} value={multiComparacaoFuncional} onChange={e=>setMultiComparacaoFuncional(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Ganhos clínicos</Label><Textarea disabled={formReadOnly} value={multiGanhosPrincipais} onChange={e=>setMultiGanhosPrincipais(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Limitações persistentes</Label><Textarea disabled={formReadOnly} value={multiLimitacoesPersistentes} onChange={e=>setMultiLimitacoesPersistentes(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Risco de regressão</Label><Select disabled={formReadOnly} value={multiRiscoRegressao} onValueChange={setMultiRiscoRegressao}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{RISCO_POS_ALTA.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Fatores de alerta</Label><Textarea disabled={formReadOnly} value={multiFatoresAlerta} onChange={e=>setMultiFatoresAlerta(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Orientações ao paciente/família</Label><Textarea disabled={formReadOnly} value={orientacoesUsuario} onChange={e=>setOrientacoesUsuario(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Orientações UBS/ESF</Label><Textarea disabled={formReadOnly} value={orientacoesUbs} onChange={e=>setOrientacoesUbs(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Orientações à escola</Label><Textarea disabled={formReadOnly} value={multiOrientacoesEscola} onChange={e=>setMultiOrientacoesEscola(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Pontos de atenção</Label><Textarea disabled={formReadOnly} value={multiPontosAtencao} onChange={e=>setMultiPontosAtencao(e.target.value)} rows={2} /></div>
+                    <div className="space-y-2"><Label className="text-xs">Encaminhamentos</Label><div className="flex flex-wrap gap-3">{ENCAMINHAMENTOS.map(m=><label key={m} className="flex items-center gap-2 text-sm"><Checkbox checked={encaminhamentos.includes(m)} disabled={formReadOnly} onCheckedChange={v=>setEncaminhamentos(prev=>v===true?Array.from(new Set([...prev,m])):prev.filter(x=>x!==m))}/>{m}</label>)}</div></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Frequência APS</Label><Select disabled={formReadOnly} value={freqAps} onValueChange={setFreqAps}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{FREQUENCIAS_APS.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div>
+                    <div className="space-y-1"><Label className="text-xs">Continuidade do cuidado</Label><Select disabled={formReadOnly} value={multiContinuarTerapia} onValueChange={setMultiContinuarTerapia}><SelectTrigger><SelectValue placeholder="Selecione..."/></SelectTrigger><SelectContent><SelectItem value="sim_mesma">Sim, na mesma área</SelectItem><SelectItem value="sim_outra">Sim, em outra área</SelectItem><SelectItem value="nao">Não indicada</SelectItem><SelectItem value="vigilancia">Vigilância em saúde</SelectItem></SelectContent></Select></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Prazo de retorno</Label><Textarea disabled={formReadOnly} value={multiPrazoRetorno} onChange={e=>setMultiPrazoRetorno(e.target.value)} rows={1} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Responsável técnico</Label><Textarea disabled={formReadOnly} value={multiResponsavelTecnico} onChange={e=>setMultiResponsavelTecnico(e.target.value)} rows={1} /></div>
+                    </details>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <Label className="text-xs font-semibold">Resumo Consolidado Final (Editável)</Label>
-                        <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={generateMultiSummary}>
+                        <Button variant="ghost" size="sm" disabled={formReadOnly} className="h-7 text-[10px]" onClick={generateMultiSummary}>
                           <RefreshCw className="w-3 h-3 mr-1" /> Gerar Automático
                         </Button>
                       </div>
-                      <Textarea value={multiResumoConsolidado} onChange={e => setMultiResumoConsolidado(e.target.value)} rows={6} className="text-sm font-serif" />
+                      <Textarea disabled={formReadOnly} value={multiResumoConsolidado} onChange={e => setMultiResumoConsolidado(e.target.value)} rows={6} className="text-sm font-serif" />
                     </div>
                   </CardContent>
                 </Card>
@@ -1720,8 +1773,9 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
         </Tabs>
 
         {/* Footer Actions */}
-        <div className="flex gap-3 pt-6 border-t">
-          <Button onClick={() => handleSave("multi", false)} disabled={isReportLocked || loading}>Finalizar Consolidação</Button>
+        <div className="flex flex-wrap gap-3 pt-6 border-t">
+          <Button onClick={() => handleSave("multi", false)} disabled={formReadOnly}>Finalizar Consolidação</Button>
+          <Button variant="outline" onClick={() => handlePrint("multi")} disabled={!pacienteId || !reportId || !isReportLocked || loading || loadFailed}><Printer className="w-4 h-4 mr-1"/>Imprimir / Salvar PDF</Button>
         </div>
       </div>
     );
@@ -1732,7 +1786,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => setModo("selector")}>
+          <Button variant="ghost" size="icon" onClick={() => setModo("selector")} disabled={loading}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
@@ -1827,18 +1881,18 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Período de Acompanhamento</Label>
                       <div className="flex items-center gap-2">
-                        <Input type="date" value={indPeriodoInicio} onChange={e => setIndPeriodoInicio(e.target.value)} className="h-9 text-sm" />
+                        <Input disabled={formReadOnly} type="date" value={indPeriodoInicio} onChange={e => setIndPeriodoInicio(e.target.value)} className="h-9 text-sm" />
                         <span className="text-muted-foreground">até</span>
-                        <Input type="date" value={indPeriodoFim} onChange={e => setIndPeriodoFim(e.target.value)} className="h-9 text-sm" />
+                        <Input disabled={formReadOnly} type="date" value={indPeriodoFim} onChange={e => setIndPeriodoFim(e.target.value)} className="h-9 text-sm" />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Data de Alta</Label>
-                      <Input type="date" value={indDataAlta} onChange={e => setIndDataAlta(e.target.value)} className="h-9 text-sm" />
+                      <Input disabled={formReadOnly} type="date" value={indDataAlta} onChange={e => setIndDataAlta(e.target.value)} className="h-9 text-sm" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Modalidade</Label>
-                      <Select value={indModalidade} onValueChange={setIndModalidade}>
+                      <Select disabled={formReadOnly} value={indModalidade} onValueChange={setIndModalidade}>
                         <SelectTrigger className="h-9 text-sm">
                           <SelectValue placeholder="Selecione..." />
                         </SelectTrigger>
@@ -1863,21 +1917,21 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Queixa Principal</Label>
-                    <Textarea value={indQueixaPrincipal} onChange={e => setIndQueixaPrincipal(e.target.value)} rows={3} className="text-sm" placeholder="Resumo da queixa inicial..." />
+                    <Textarea disabled={formReadOnly} value={indQueixaPrincipal} onChange={e => setIndQueixaPrincipal(e.target.value)} rows={3} className="text-sm" placeholder="Resumo da queixa inicial..." />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Motivo do Encaminhamento</Label>
-                    <Textarea value={indMotivoEncaminhamento} onChange={e => setIndMotivoEncaminhamento(e.target.value)} rows={3} className="text-sm" placeholder="Por que o paciente foi encaminhado?" />
+                    <Textarea disabled={formReadOnly} value={indMotivoEncaminhamento} onChange={e => setIndMotivoEncaminhamento(e.target.value)} rows={3} className="text-sm" placeholder="Por que o paciente foi encaminhado?" />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Contexto Familiar / Social</Label>
-                    <Textarea value={indContextoFamiliar} onChange={e => setIndContextoFamiliar(e.target.value)} rows={3} className="text-sm" placeholder="Rede de apoio, barreiras sociais..." />
+                    <Textarea disabled={formReadOnly} value={indContextoFamiliar} onChange={e => setIndContextoFamiliar(e.target.value)} rows={3} className="text-sm" placeholder="Rede de apoio, barreiras sociais..." />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Comorbidades / Medicamentos</Label>
                     <div className="space-y-2">
-                      <Input value={indComorbidades} onChange={e => setIndComorbidades(e.target.value)} placeholder="Outras doenças conhecidas" className="h-9 text-sm" />
-                      <Input value={indMedicacao} onChange={e => setIndMedicacao(e.target.value)} placeholder="Medicamentos em uso" className="h-9 text-sm" />
+                      <Input disabled={formReadOnly} value={indComorbidades} onChange={e => setIndComorbidades(e.target.value)} placeholder="Outras doenças conhecidas" className="h-9 text-sm" />
+                      <Input disabled={formReadOnly} value={indMedicacao} onChange={e => setIndMedicacao(e.target.value)} placeholder="Medicamentos em uso" className="h-9 text-sm" />
                     </div>
                   </div>
                 </CardContent>
@@ -1895,12 +1949,12 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label className="text-xs font-semibold">CID-10 Princial</Label>
-                      <Input value={indDiagCid} onChange={e => setIndDiagCid(e.target.value)} placeholder="Código ou descrição" className="h-9 text-sm" />
+                      <Label className="text-xs font-semibold">CID-10 Principal</Label>
+                      <Input disabled={formReadOnly} value={indDiagCid} onChange={e => setIndDiagCid(e.target.value)} placeholder="Código ou descrição" className="h-9 text-sm" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Nível de Comprometimento</Label>
-                      <Select value={indNivelComprometimento} onValueChange={setIndNivelComprometimento}>
+                      <Select disabled={formReadOnly} value={indNivelComprometimento} onValueChange={setIndNivelComprometimento}>
                         <SelectTrigger className="h-9 text-sm">
                           <SelectValue placeholder="Selecione..." />
                         </SelectTrigger>
@@ -1917,14 +1971,15 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Diagnóstico Clínico / Funcional</Label>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Textarea value={indDiagClinico} onChange={e => setIndDiagClinico(e.target.value)} placeholder="Hipótese diagnóstica clínica..." rows={3} className="text-sm" />
-                      <Textarea value={indDiagFuncional} onChange={e => setIndDiagFuncional(e.target.value)} placeholder="Descrição da funcionalidade (CIF base)..." rows={3} className="text-sm" />
+                      <Textarea disabled={formReadOnly} value={indDiagClinico} onChange={e => setIndDiagClinico(e.target.value)} placeholder="Hipótese diagnóstica clínica..." rows={3} className="text-sm" />
+                      <Textarea disabled={formReadOnly} value={indDiagFuncional} onChange={e => setIndDiagFuncional(e.target.value)} placeholder="Descrição da funcionalidade (CIF base)..." rows={3} className="text-sm" />
                     </div>
                   </div>
 
                   <div className="space-y-2">
+                    <div className="space-y-1"><Label className="text-xs font-semibold">CIF</Label><Textarea disabled={formReadOnly} value={indCif} onChange={e=>setIndCif(e.target.value)} rows={2} /></div>
                     <Label className="text-xs font-semibold">Observações Diagnósticas Adicionais</Label>
-                    <Textarea value={indObsDiagnosticas} onChange={e => setIndObsDiagnosticas(e.target.value)} rows={2} className="text-sm" />
+                    <Textarea disabled={formReadOnly} value={indObsDiagnosticas} onChange={e => setIndObsDiagnosticas(e.target.value)} rows={2} className="text-sm" />
                   </div>
                 </CardContent>
               </Card>
@@ -1942,7 +1997,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Adesão ao Tratamento</Label>
-                      <Select value={indAdesaoTratamento} onValueChange={setIndAdesaoTratamento}>
+                      <Select disabled={formReadOnly} value={indAdesaoTratamento} onValueChange={setIndAdesaoTratamento}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           {ADESAO_TRATAMENTO.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
@@ -1951,7 +2006,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Evolução Global</Label>
-                      <Select value={indEvolucaoGlobal} onValueChange={setIndEvolucaoGlobal}>
+                      <Select disabled={formReadOnly} value={indEvolucaoGlobal} onValueChange={setIndEvolucaoGlobal}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           {EVOLUCAO_GLOBAL.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
@@ -1960,7 +2015,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Frequência de Atendimento</Label>
-                      <Select value={indFrequenciaAtendimento} onValueChange={setIndFrequenciaAtendimento}>
+                      <Select disabled={formReadOnly} value={indFrequenciaAtendimento} onValueChange={setIndFrequenciaAtendimento}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="semanal">Semanal</SelectItem>
@@ -1975,23 +2030,24 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Objetivos Terapêuticos Alcançados</Label>
-                      <Textarea value={indObjetivos} onChange={e => setIndObjetivos(e.target.value)} rows={4} className="text-sm" placeholder="Liste os objetivos trabalhados..." />
+                      <Textarea disabled={formReadOnly} value={indObjetivos} onChange={e => setIndObjetivos(e.target.value)} rows={4} className="text-sm" placeholder="Liste os objetivos trabalhados..." />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Resumo das Intervenções Realizadas</Label>
-                      <Textarea value={indIntervencoes} onChange={e => setIndIntervencoes(e.target.value)} rows={4} className="text-sm" placeholder="Quais procedimentos foram mais frequentes?" />
+                      <Textarea disabled={formReadOnly} value={indIntervencoes} onChange={e => setIndIntervencoes(e.target.value)} rows={4} className="text-sm" placeholder="Quais procedimentos foram mais frequentes?" />
                     </div>
                   </div>
 
+                  <div className="space-y-1"><Label className="text-xs font-semibold">Tecnologia assistiva</Label><Textarea disabled={formReadOnly} value={indTA} onChange={e=>setIndTA(e.target.value)} rows={2} /></div>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Evolução Clínica e Funcional (Texto Livre)</Label>
-                    <Textarea value={indEvolucao} onChange={e => setIndEvolucao(e.target.value)} rows={5} className="text-sm" placeholder="Descreva detalhadamente a evolução do paciente no período..." />
+                    <Textarea disabled={formReadOnly} value={indEvolucao} onChange={e => setIndEvolucao(e.target.value)} rows={5} className="text-sm" placeholder="Descreva detalhadamente a evolução do paciente no período..." />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-primary/5 rounded-xl border border-primary/10">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold text-primary">Status das Metas (PTS)</Label>
-                      <Select value={indMetas} onValueChange={v => setIndMetas(v as "totalmente" | "parcialmente" | "nao_atingidas")}>
+                      <Select disabled={formReadOnly} value={indMetas} onValueChange={v => setIndMetas(v as "totalmente" | "parcialmente" | "nao_atingidas")}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Avalie as metas" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="totalmente">Totalmente atingidas</SelectItem>
@@ -2000,19 +2056,19 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                         </SelectContent>
                       </Select>
                       {!!indMetas && indMetas !== "totalmente" && (
-                        <Textarea value={indMetasJust} onChange={e => setIndMetasJust(e.target.value)} placeholder="Justificativa clínica para metas não atingidas..." rows={2} className="text-sm mt-2" />
+                        <Textarea disabled={formReadOnly} value={indMetasJust} onChange={e => setIndMetasJust(e.target.value)} placeholder="Justificativa clínica para metas não atingidas..." rows={2} className="text-sm mt-2" />
                       )}
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold text-primary">Intercorrências no Período</Label>
-                      <Select value={indIntercorrencias} onValueChange={setIndIntercorrencias}>
+                      <Select disabled={formReadOnly} value={indIntercorrencias} onValueChange={setIndIntercorrencias}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           {INTERCORRENCIAS_OPCOES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}
                         </SelectContent>
                       </Select>
                       {indIntercorrencias !== "Nenhuma" && (
-                        <Input value={indIntercorrenciasObs} onChange={e => setIndIntercorrenciasObs(e.target.value)} placeholder="Detalhes da intercorrência..." className="h-9 text-sm mt-2" />
+                        <Input disabled={formReadOnly} value={indIntercorrenciasObs} onChange={e => setIndIntercorrenciasObs(e.target.value)} placeholder="Detalhes da intercorrência..." className="h-9 text-sm mt-2" />
                       )}
                     </div>
                   </div>
@@ -2020,11 +2076,11 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Resposta Terapêutica</Label>
-                      <Textarea value={indRespostaTerapeutica} onChange={e => setIndRespostaTerapeutica(e.target.value)} rows={3} className="text-sm" placeholder="Como o paciente respondeu às estratégias?" />
+                      <Textarea disabled={formReadOnly} value={indRespostaTerapeutica} onChange={e => setIndRespostaTerapeutica(e.target.value)} rows={3} className="text-sm" placeholder="Como o paciente respondeu às estratégias?" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Comparação Início vs Alta</Label>
-                      <Textarea value={indComparacaoInicioAlta} onChange={e => setIndComparacaoInicioAlta(e.target.value)} rows={3} className="text-sm" placeholder="Diferença clínica observada entre a admissão e agora..." />
+                      <Textarea disabled={formReadOnly} value={indComparacaoInicioAlta} onChange={e => setIndComparacaoInicioAlta(e.target.value)} rows={3} className="text-sm" placeholder="Diferença clínica observada entre a admissão e agora..." />
                     </div>
                   </div>
                 </CardContent>
@@ -2043,7 +2099,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Tipo de Alta *</Label>
-                      <Select value={indTipoAlta} onValueChange={setIndTipoAlta}>
+                      <Select disabled={formReadOnly} value={indTipoAlta} onValueChange={setIndTipoAlta}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           {TIPOS_ALTA.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
@@ -2052,7 +2108,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Motivo da Alta *</Label>
-                      <Select value={indMotivo} onValueChange={setIndMotivo}>
+                      <Select disabled={formReadOnly} value={indMotivo} onValueChange={setIndMotivo}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           {MOTIVOS_ALTA.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
@@ -2061,7 +2117,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Necessidade de Continuidade</Label>
-                      <Select value={indContinuarTerapia} onValueChange={setIndContinuarTerapia}>
+                      <Select disabled={formReadOnly} value={indContinuarTerapia} onValueChange={setIndContinuarTerapia}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="sim_mesma">Sim, na mesma área</SelectItem>
@@ -2076,7 +2132,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Risco de Regressão</Label>
-                      <Select value={indRiscoRegressao} onValueChange={setIndRiscoRegressao}>
+                      <Select disabled={formReadOnly} value={indRiscoRegressao} onValueChange={setIndRiscoRegressao}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="baixo">Baixo</SelectItem>
@@ -2088,28 +2144,30 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Prazo para Reavaliação</Label>
-                      <Input value={indPrazoReavaliacao} onChange={e => setIndPrazoReavaliacao(e.target.value)} placeholder="Ex: 6 meses, 1 ano..." className="h-9 text-sm" />
+                      <Input disabled={formReadOnly} value={indPrazoReavaliacao} onChange={e => setIndPrazoReavaliacao(e.target.value)} placeholder="Ex: 6 meses, 1 ano..." className="h-9 text-sm" />
                     </div>
                   </div>
 
+                  <div className="space-y-1"><Label className="text-xs font-semibold">Detalhes do motivo da alta</Label><Textarea disabled={formReadOnly} value={indMotivoDet} onChange={e=>setIndMotivoDet(e.target.value)} rows={2} /></div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3"><div className="space-y-1"><Label className="text-xs font-semibold">Risco pós-alta</Label><Select disabled={formReadOnly} value={indRiscoPosAlta} onValueChange={setIndRiscoPosAlta}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{RISCO_POS_ALTA.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1"><Label className="text-xs font-semibold">Complexidade do caso</Label><Select disabled={formReadOnly} value={indComplexidade} onValueChange={setIndComplexidade}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{COMPLEXIDADE_CASO.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div></div>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Orientações Específicas para Paciente / Cuidador</Label>
-                    <Textarea value={indOrientacoes} onChange={e => setIndOrientacoes(e.target.value)} rows={4} className="text-sm" placeholder="Exercícios domiciliares, sinais de alerta..." />
+                    <Textarea disabled={formReadOnly} value={indOrientacoes} onChange={e => setIndOrientacoes(e.target.value)} rows={4} className="text-sm" placeholder="Exercícios domiciliares, sinais de alerta..." />
                   </div>
 
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Encaminhamentos (Internos e Externos)</Label>
-                    <Textarea value={indEncaminhamento} onChange={e => setIndEncaminhamento(e.target.value)} rows={3} className="text-sm" placeholder="Liste para onde o paciente está sendo encaminhado..." />
+                    <Textarea disabled={formReadOnly} value={indEncaminhamento} onChange={e => setIndEncaminhamento(e.target.value)} rows={3} className="text-sm" placeholder="Liste para onde o paciente está sendo encaminhado..." />
                   </div>
 
                   <div className="space-y-2 pt-2 border-t">
                     <div className="flex items-center justify-between">
                       <Label className="text-xs font-semibold">Resumo Final Consolidado *</Label>
-                      <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={generateIndSummary}>
+                      <Button variant="ghost" size="sm" disabled={formReadOnly} className="h-7 text-[10px]" onClick={generateIndSummary}>
                         Gerar automaticamente
                       </Button>
                     </div>
-                    <Textarea
+                    <Textarea disabled={formReadOnly}
                       value={indResumoConsolidado}
                       onChange={e => setIndResumoConsolidado(e.target.value)}
                       rows={6}
@@ -2157,7 +2215,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                   variant="outline" 
                   className="w-full justify-start h-9" 
                   onClick={() => handleSave("individual", true)}
-                  disabled={!pacienteId || loading || isReportLocked}
+                  disabled={formReadOnly}
                 >
                   <Clock className="w-4 h-4 mr-2 text-muted-foreground" />
                   Salvar Rascunho
@@ -2166,7 +2224,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                 <Button 
                   className="w-full justify-start h-9 bg-primary" 
                   onClick={() => handleSave("individual", false)}
-                  disabled={!pacienteId || loading || isReportLocked}
+                  disabled={formReadOnly}
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   Finalizar Relatório
@@ -2180,7 +2238,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                   variant="ghost" 
                   className="w-full justify-start h-9 text-xs" 
                   onClick={() => handlePrint("individual")}
-                  disabled={!pacienteId || status === "rascunho"}
+                  disabled={!pacienteId || status === "rascunho" || loading || loadFailed}
                 >
                   <Printer className="w-4 h-4 mr-2" />
                   Imprimir Documento
@@ -2189,7 +2247,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                   variant="ghost" 
                   className="w-full justify-start h-9 text-xs" 
                   onClick={() => handlePrint("individual")}
-                  disabled={!pacienteId || status === "rascunho"}
+                  disabled={!pacienteId || status === "rascunho" || loading || loadFailed}
                 >
                   <FileDown className="w-4 h-4 mr-2" />
                   Gerar PDF Oficial
