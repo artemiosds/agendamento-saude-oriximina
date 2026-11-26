@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, CheckCircle2, Clock3, FileText, Loader2, Search, Stethoscope, Activity, Monitor, Plus, RefreshCw, UserCheck, ChevronDown, ChevronRight, CalendarX, AlertCircle, Hospital } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, FileText, Loader2, Search, Stethoscope, Activity, Monitor, Plus, RefreshCw, UserCheck, ChevronDown, ChevronRight, CalendarX, AlertCircle, Hospital, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -305,7 +305,10 @@ export default function AgendaExames() {
       observacoes: selectedExam.exigePreparo ? selectedExam.instrucoesPreparo : "",
       origem: "recepcao", criado_por: user?.id || "", custom_data: custom,
     });
-    if (error) { toast.error(error.message || "Não foi possível agendar o exame."); return; }
+    if (error) {
+      if ((error as any).code === "23P01") { setSlot(""); toast.error("Este horário acabou de ser ocupado por outro agendamento. Selecione outro horário."); await loadRows(); return; }
+      toast.error(error.message || "Não foi possível agendar o exame."); return;
+    }
     void auditService.log({
       acao: "agendamento_exame_diagnostico", modulo: "exames_diagnosticos", entidade: "agendamentos",
       entidadeId: id, pacienteId: patient.id, pacienteNome: patient.nome, unidadeId: selectedUnit,
@@ -454,6 +457,24 @@ export default function AgendaExames() {
     }
   };
 
+  const printLaudo = (row: ExamRow) => {
+    const l = row.custom_data?.laudo || {};
+    const esc = (v: unknown) => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
+    const unit = unidades.find(u => u.id === row.unidade_id)?.nome || "";
+    const sig = l.assinatura_eletronica || {};
+    const w = window.open("", "_blank", "width=900,height=1000");
+    if (!w) { toast.error("Permita pop-ups para imprimir o laudo."); return; }
+    w.document.write(`<!doctype html><html><head><title>Laudo</title><style>@page{size:A4;margin:18mm}body{font-family:Georgia,serif;color:#111;font-size:12pt}h1{font-size:16pt;text-align:center;margin:0 0 4px}h2{font-size:12pt;border-bottom:1px solid #999;margin:16px 0 6px}.c{text-align:center;font-size:10pt}.p{white-space:pre-wrap}.s{margin-top:40px;text-align:center}.h{font-size:8pt;color:#555;word-break:break-all;margin-top:24px}</style></head><body>
+<p class="c">Secretaria Municipal de Saúde de Oriximiná<br>${esc(unit)}</p><h1>LAUDO DE EXAME — ${esc(row.custom_data?.exame_nome || "Exame diagnóstico")}</h1>
+<p><b>Paciente:</b> ${esc(row.paciente_nome)}<br><b>Data do exame:</b> ${esc(row.data.split("-").reverse().join("/"))} às ${esc(row.hora)}</p>
+<h2>Descrição / Achados</h2><div class="p">${esc(l.descricao || "—")}</div><h2>Hipótese / Impressão</h2><div class="p">${esc(l.hipotese || "—")}</div><h2>Conclusão</h2><div class="p">${esc(l.conclusao || "—")}</div>
+<div class="s">______________________________<br>${esc(l.concluido_por_nome)}<br>CRM ${esc(l.crm_registro)}<br>Liberado em ${esc(l.liberado_em ? new Date(l.liberado_em).toLocaleString("pt-BR") : "")}</div>
+${sig.hash ? `<p class="h">Assinatura eletrônica (SHA-256): ${esc(sig.hash)}</p>` : ""}
+<script>window.onload=()=>{window.print()}</script></body></html>`);
+    w.document.close();
+    void auditService.log({ acao: "laudo_exame_impresso", modulo: "exames_diagnosticos", entidade: "agendamentos", entidadeId: row.id, pacienteId: row.paciente_id, pacienteNome: row.paciente_nome, unidadeId: row.unidade_id, user: user ? { id: user.id, nome: user.nome, role: user.role, unidadeId: user.unidadeId } : null, detalhes: {} });
+  };
+
   const openLaudo = (row: ExamRow) => {
     setLaudoRow(row);
     const saved = row.custom_data?.laudo || {};
@@ -596,7 +617,7 @@ export default function AgendaExames() {
                       {status === "agendado" && canArrive && <Button disabled={busy || row.data > dateToday()} size="sm" className="clinical-record-action clinical-action-main" onClick={() => void changeStatus(row, "paciente_chegou")}><UserCheck className="h-4 w-4" />Paciente chegou</Button>}
                       {status === "paciente_chegou" && canPerform && <Button disabled={busy || row.data > dateToday()} size="sm" className="clinical-record-action clinical-action-main" onClick={() => void changeStatus(row, "exame_realizado_em_laudo")}><CheckCircle2 className="h-4 w-4" />Exame realizado</Button>}
                       {status === "exame_realizado_em_laudo" && canWriteReport && <Button disabled={busy || row.data > dateToday()} size="sm" className="clinical-record-action clinical-action-main" onClick={() => openLaudo(row)}><FileText className="h-4 w-4" />Laudar / liberar</Button>}
-                      {status === "laudo_liberado" && <span className="inline-flex items-center gap-1 text-xs font-semibold clinical-record-type"><CheckCircle2 className="h-4 w-4" />Laudo liberado</span>}
+                      {status === "laudo_liberado" && <><span className="inline-flex items-center gap-1 text-xs font-semibold clinical-record-type"><CheckCircle2 className="h-4 w-4" />Laudo liberado</span><Button type="button" size="sm" variant="outline" className="clinical-record-action" onClick={() => printLaudo(row)}><Printer className="h-4 w-4" />Imprimir laudo</Button></>}
                     </div>
                   </div>
                   {expanded && <div className="clinical-inset rounded-lg border p-2.5 space-y-2">

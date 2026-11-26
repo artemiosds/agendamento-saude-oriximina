@@ -106,6 +106,13 @@
       "when": 1794514015213,
       "tag": "0014_fix_external_patient_empty_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1795668031050,
+      "tag": "0015_diagnostic_exam_atomic_guards",
+      "breakpoints": true
     }
   ]
 }
