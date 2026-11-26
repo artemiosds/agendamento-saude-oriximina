@@ -1,5 +1,5 @@
 import { patientCpfError } from '@/lib/patientCpf';
-import { isDiagnosticAppointment } from '@/lib/diagnosticExams';
+import { isDiagnosticAppointment, getEffectiveDiagnosticStatus, getDiagnosticStatusLabel } from '@/lib/diagnosticExams';
 import React, { useState, useEffect, useRef } from 'react';
 import { parsePortalAccess, mergePortalQueue, type PortalQueueEntry } from '@/lib/portalPatientSecurity';
 import { supabase } from '@/integrations/supabase/client';
@@ -606,11 +606,11 @@ const PortalPaciente: React.FC = () => {
             {examesPaciente.length === 0 ? (
               <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">Você ainda não possui exames diagnósticos agendados.</CardContent></Card>
             ) : examesPaciente.map(exame => {
-              const examStatus = exame.custom_data?.status_exame || "agendado";
+              const examStatus = getEffectiveDiagnosticStatus(exame);
               const laudo = exame.custom_data?.laudo;
               const statusText: Record<string, string> = { agendado: "Agendado", paciente_chegou: "Paciente chegou", exame_realizado_em_laudo: "Em análise técnica", laudo_liberado: "Laudo pronto para consulta", cancelado: "Cancelado" };
               return <Card key={exame.id} className="shadow-card border-0"><CardContent className="p-4 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2"><strong>{exame.custom_data?.exame_nome || "Exame diagnóstico"}</strong><span className="text-xs rounded-full bg-primary/10 px-2 py-1 text-primary">{statusText[examStatus] || "Em processamento"}</span></div>
+                <div className="flex flex-wrap items-center justify-between gap-2"><strong>{exame.custom_data?.exame_nome || "Exame diagnóstico"}</strong><span className="text-xs rounded-full bg-primary/10 px-2 py-1 text-primary">{statusText[examStatus] || getDiagnosticStatusLabel(examStatus)}</span></div>
                 <p className="text-sm text-muted-foreground">{new Date(exame.data + "T12:00:00").toLocaleDateString("pt-BR")} às {exame.hora} • {getUnidadeNome(exame.unidade_id)}</p>
                 {examStatus === "laudo_liberado" && laudo ? (
                   <div className="space-y-2 rounded-md border bg-muted/30 p-3">
