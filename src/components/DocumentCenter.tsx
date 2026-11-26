@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import DocumentLibrary, {DocumentPatientBanner,classifyDocument,modelCode,type DocumentCategory,type LibraryItem} from '@/components/documents/DocumentLibrary';
 import { FileText, FolderOpen, Plus, Printer, FileSignature, ContactRound, ClipboardList } from 'lucide-react';
 import GerarDocumentoModal from '@/components/GerarDocumentoModal';
+import BlankDocumentLibrary from '@/components/documents/BlankDocumentLibrary';
 import { READY_TEMPLATES } from '@/lib/readyTemplates';
 import EnviarAssinaturaAutentiqueModal from '@/components/EnviarAssinaturaAutentiqueModal';
 
@@ -49,6 +50,8 @@ const DocumentCenter: React.FC<Props> = ({
   const navigate = useNavigate();
   const canManage = hasPermission(['master', 'coordenador']);
 
+  const [modalidade, setModalidade] = useState<'digital'|'blank'>('digital');
+  const showBlank = modalidade === 'blank' && !!user?.id && !!paciente?.id;
   const [busca, setBusca] = useState('');
   const [cat, setCat] = useState<Categoria>('Todos');
   const [loading, setLoading] = useState(false);
@@ -59,7 +62,8 @@ const DocumentCenter: React.FC<Props> = ({
   const [assinaturaCtx, setAssinaturaCtx] = useState<{ documentoGeradoId?: string; nomeSugerido?: string } | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) { setModalidade('digital'); return; }
+    setModalidade('digital');
     setBusca('');
     setCat('Todos');
     let active=true;
@@ -169,19 +173,26 @@ const DocumentCenter: React.FC<Props> = ({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="w-[96vw] max-w-[1100px] max-h-[92dvh] p-0 gap-0 flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0 border-b px-4 sm:px-6 py-4 pr-12 text-left">
-            <div className="flex items-center gap-3"><div className="shrink-0 rounded-xl bg-primary/10 text-primary p-2.5"><FolderOpen className="w-6 h-6"/></div><div><DialogTitle className="text-lg">Central de Documentos</DialogTitle><DialogDescription className="text-xs">Emissão e gestão documental do paciente</DialogDescription></div></div>
-            <DocumentPatientBanner name={paciente?.nome}/>
+            <div className="flex items-center gap-3"><div className="shrink-0 rounded-xl bg-primary/10 text-primary p-2.5"><FolderOpen className="w-6 h-6"/></div><div><DialogTitle className="text-lg">Central de Documentos</DialogTitle><DialogDescription className="text-xs">Emissão digital e impressão de formulários em branco</DialogDescription></div></div>
+            <nav aria-label="Modalidades de documentos" className="clinical-hub clinical-hub-tabs mt-2">
+              <Button type="button" variant="ghost" className="clinical-hub-tab flex-1 gap-2 whitespace-normal" aria-pressed={!showBlank} onClick={()=>setModalidade("digital")}><FileText className="h-4 w-4 shrink-0"/>Documentos digitais</Button>
+              <Button type="button" variant="ghost" className="clinical-hub-tab flex-1 gap-2 whitespace-normal" aria-pressed={showBlank} disabled={!user?.id||!paciente?.id||!!gerarTemplateId||assinaturaOpen} onClick={()=>setModalidade("blank")}><Printer className="h-4 w-4 shrink-0"/>Formulários em branco</Button>
+            </nav>
+            {!showBlank&&<DocumentPatientBanner name={paciente?.nome}/>}
           </DialogHeader>
           <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4">
+            <div hidden={showBlank}>
             {open&&<DocumentLibrary items={items} userId={user?.id} loading={loading} error={loadError} search={busca} onSearch={setBusca} category={cat} onCategory={setCat} disabled={!paciente}
               onGenerate={id=>{const item=items.find(i=>i.id===id);if(item)void handleGerar(item);}}
               onSign={id=>{const item=items.find(i=>i.id===id);if(item)void handleAssinar(item);}}
               onEdit={canManage?id=>{const item=items.find(i=>i.id===id);if(item&&!item.builtin)handleEditar(item);}:undefined}/>}
+            </div>
+            {open&&showBlank&&<BlankDocumentLibrary key={`${user?.id}|${user?.role}|${user?.unidadeId||""}`} open={true} onOpenChange={onOpenChange} embedded/>}
           </div>
-          <footer className="shrink-0 border-t bg-background px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
+          {!showBlank&&<footer className="shrink-0 border-t bg-background px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
             <Button variant="outline" className="gap-2" onClick={()=>{setAssinaturaCtx(null);setAssinaturaOpen(true);}} disabled={!paciente}><FileSignature className="w-4 h-4"/>Assinatura eletrônica avulsa</Button>
             {canManage&&<Button variant="ghost" className="gap-2" onClick={handleCriar}><Plus className="w-4 h-4"/>Criar novo tipo de documento</Button>}
-          </footer>
+          </footer>}
         </DialogContent>
       </Dialog>
 
