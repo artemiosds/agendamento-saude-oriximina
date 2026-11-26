@@ -772,12 +772,9 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
   }, [visibleProfessionalPlans, visibleProfessionals, queueDemandRows, unidadesVisiveis]);
 
   return (
-    <section className="space-y-4 rounded-xl border border-border bg-card p-4" aria-label="Visão de capacidade e demanda">
+    <section className="clinical-premium space-y-3 p-3" aria-label="Visão de capacidade e demanda">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">Capacidade e demanda</h2>
-          <p className="text-sm text-muted-foreground">Consulte vagas para avaliação inicial e a carga dos ciclos por unidade e profissional.</p>
-        </div>
+        <div className="flex items-center gap-3 flex-1 min-w-0"><span className="clinical-dock-icon clinical-tone-teal"><Users className="w-4 h-4"/></span><div className="min-w-0"><h2 className="text-sm font-semibold">Capacidade e demanda</h2><p className="text-xs text-muted-foreground">Vagas para avaliação inicial e carga assistencial por unidade e profissional.</p></div></div>
         <div className="flex flex-wrap gap-2">
           {isOpen && !loading && !error && cycleCapacityInput && <MapaVagasSemanalPrint input={cycleCapacityInput} professionals={operationalProfessionals} loadedAt={loadedAt} periodDays={Number(loadedPeriodDays)} disabled={isRefreshing || loadedPeriodDays !== periodDays} />}
           {isOpen && (

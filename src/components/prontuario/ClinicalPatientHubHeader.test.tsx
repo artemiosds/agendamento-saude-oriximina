@@ -11,7 +11,7 @@ describe("Central clínica individual",()=>{
   for(const [label,fn] of [["Todos os prontuários",p.onBack],["Novo Prontuário",p.onNew],["Histórico completo",p.onHistory],["Imprimir histórico",p.onPrint],["Gerar documento",p.onDocument],["Declaração rápida",p.onDeclaration],["Encaminhar paciente",p.onReferral],["Avaliação em equipe",p.onTeam]] as const){
    fireEvent.click(screen.getByRole("button",{name:label}));expect(fn).toHaveBeenCalledTimes(1);
   }
-  for(const [label,section] of [["Prontuários","records"],["Histórico clínico","history"],["Documentos emitidos","documents"]] as const){fireEvent.click(screen.getByRole("button",{name:label,exact:true}));expect(p.onSection).toHaveBeenLastCalledWith(section);}
+  for(const [label,section] of [["Prontuários","records"],["Histórico clínico","history"],["Documentos emitidos","documents"]] as const){fireEvent.click(screen.getByRole("button",{name:label}));expect(p.onSection).toHaveBeenLastCalledWith(section);}
  });
  it("não oferece criação sem permissão e impede nova impressão durante processamento",()=>{
   const p=props();render(<ClinicalPatientHubHeader {...p} canEdit={false} printing section="documents"/>);

@@ -22,6 +22,8 @@ import { useTreatmentCyclesPageLoad } from "@/hooks/useTreatmentCyclesPageLoad";
 
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { Card, CardContent } from "@/components/ui/card";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge, badgeVariants } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -3382,27 +3384,18 @@ const TratamentosUnidade: React.FC = () => {
   }
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold font-display text-foreground">Gestão de Tratamentos</h1>
-          {isMaster && <Button variant="outline" size="sm" onClick={() => setReviewOpen(true)}>Pendências para revisão</Button>}
-          <TreatmentIntegrityReview open={reviewOpen} onOpenChange={setReviewOpen} key={`${user?.id}|${user?.unidadeId}`} isMaster={isMaster} onSelect={setSelectedCycle} />
-          <p className="text-muted-foreground text-sm">{filteredCycles.length} ciclo(s) de tratamento</p>
-        </div>
-        {(isProfissional || canManageFull) && (
-          <Button
-            onClick={() => openCreateCycle()}
-            className="gradient-primary text-primary-foreground"
-          >
-            <Plus className="w-4 h-4 mr-2" /> Novo Ciclo
-          </Button>
-        )}
+    <div className="space-y-3">
+      <div className="clinical-hub-hero flex flex-wrap items-center gap-3">
+        <span className="clinical-patient-avatar flex items-center justify-center shrink-0"><CalendarCheck className="w-5 h-5"/></span>
+        <div className="flex-1 min-w-[9rem]"><p className="clinical-hub-eyebrow">Acompanhamento assistencial</p><h1 className="clinical-hub-name text-xl font-bold font-display">Gestão de Tratamentos</h1><p className="clinical-patient-sub text-xs mt-1">{loading?"Carregando ciclos…":totalCycles.toLocaleString("pt-BR")+" ciclos nos filtros atuais · "+PAGE_SIZE+" por página"}</p></div>
+        {(isProfissional||canManageFull)&&<Button type="button" className="clinical-hub-new" onClick={()=>openCreateCycle()}><Plus className="w-4 h-4 mr-1"/>Novo Ciclo</Button>}
       </div>
-
-      {isMaster && <label className="flex items-center gap-2 text-sm"><Checkbox checked={integrityOnly} onCheckedChange={(value) => { setIntegrityOnly(value === true); setCurrentPage(1); }} />Pendências de integridade</label>}
-      {can("tratamento", "can_view") && <TreatmentCapacityOverview key={(user?.id || "") + "|" + (user?.unidadeId || "") + "|" + user?.role} onCreateFromSimulation={isProfissional || canManageFull ? openCreateCycle : undefined} />}
-
+      <div className="space-y-2">
+        {isMaster&&<Button type="button" variant="outline" className="clinical-premium w-full h-auto min-h-14 justify-start whitespace-normal text-left p-2 gap-3" onClick={()=>setReviewOpen(true)}><span className="clinical-dock-icon clinical-tone-slate"><AlertTriangle className="w-4 h-4"/></span><span className="flex-1"><strong className="block text-sm">Pendências para revisão</strong><span className="text-xs text-muted-foreground">Integridade dos ciclos</span></span><ChevronRight className="w-4 h-4"/></Button>}
+        <TreatmentIntegrityReview open={reviewOpen} onOpenChange={setReviewOpen} key={`${user?.id}|${user?.unidadeId}`} isMaster={isMaster} onSelect={setSelectedCycle} />
+        {can("tratamento","can_view")&&<TreatmentCapacityOverview key={(user?.id||"")+"|"+(user?.unidadeId||"")+"|"+user?.role} onCreateFromSimulation={isProfissional||canManageFull?openCreateCycle:undefined}/>}
+      </div>
+      <div className="clinical-premium p-3 space-y-3">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
@@ -3414,7 +3407,7 @@ const TratamentosUnidade: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {isMaster && <Select value={filterProf} onValueChange={(v) => {
+        {isMaster && <div className="space-y-1 min-w-0"><Label className="text-xs">Profissional</Label><Select value={filterProf} onValueChange={(v) => {
           setFilterProf(v);
         }}>
           <SelectTrigger className="w-full">
@@ -3428,8 +3421,8 @@ const TratamentosUnidade: React.FC = () => {
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>}
-        <Select value={filterUnit} onValueChange={(v) => {
+        </Select></div>}
+        <div className="space-y-1 min-w-0"><Label className="text-xs">Unidade</Label><Select value={filterUnit} onValueChange={(v) => {
           setFilterUnit(v);
         }}>
           <SelectTrigger className="w-full">
@@ -3443,8 +3436,8 @@ const TratamentosUnidade: React.FC = () => {
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>
-        <Select value={filterStatus} onValueChange={(v) => {
+        </Select></div>
+        <div className="space-y-1 min-w-0"><Label className="text-xs">Status</Label><Select value={filterStatus} onValueChange={(v) => {
           setFilterStatus(v);
         }}>
           <SelectTrigger className="w-full">
@@ -3459,7 +3452,7 @@ const TratamentosUnidade: React.FC = () => {
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>
+        </Select></div>
         <Button 
           variant="outline" 
           onClick={() => {
@@ -3467,14 +3460,17 @@ const TratamentosUnidade: React.FC = () => {
             setFilterProf("all");
             setFilterUnit("all");
             setFilterStatus("all");
+            setIntegrityOnly(false);
             setCurrentPage(1);
           }}
-          className="w-full sm:w-auto"
+          className="w-full sm:w-auto self-end"
         >
           Limpar Filtros
         </Button>
       </div>
 
+        <div className="flex flex-wrap gap-1.5 items-center">{[["all","Todos"],["em_andamento","Em andamento"],["aguardando_agendamento","Aguardando agendamento"]].map(([value,label])=><Button key={value} type="button" size="sm" variant={filterStatus===value?"secondary":"outline"} aria-pressed={filterStatus===value} onClick={()=>{setFilterStatus(value);setCurrentPage(1);}}>{label}</Button>)}{isMaster&&<label className="flex items-center gap-2 text-xs px-2 py-1"><Checkbox checked={integrityOnly} onCheckedChange={value=>{setIntegrityOnly(value===true);setCurrentPage(1);}}/>Pendências de integridade</label>}</div>
+      </div>
       {loading ? (
         <CardListSkeleton count={6} showSearch={false} />
       ) : filteredCycles.length === 0 ? (
@@ -3511,67 +3507,29 @@ const TratamentosUnidade: React.FC = () => {
               const pendingAg = stats.pendingAg;
               const cycleFaltasCount = stats.faltas;
 
+              const name=pac?.nome||cycle.paciente_nome||"Paciente não encontrado";
+              const bounded=Math.max(0,Math.min(100,progressPct));
               return (
-                <Card
-                  key={cycle.id}
-                  className={cn(
-                    "shadow-card border-0 cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all",
-                    cycleFaltasCount >= 3 && "border-l-4 border-l-warning",
-                    cycleFaltasCount >= 5 && "border-l-4 border-l-destructive",
-                  )}
-                  onClick={() => setSelectedCycle(cycle)}
-                >
-                  <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-foreground truncate">{pac?.nome || cycle.paciente_nome || "Paciente não encontrado"}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {prof?.nome || "—"} • {cycle.treatment_type}
-                      </p>
-                      {pendingAg > 0 && (
-                        <p className="text-xs text-warning mt-0.5">⏳ {pendingAg} sessão(ões) aguardando agendamento</p>
-                      )}
-                      {cycleFaltasCount > 0 && (
-                        <p className="text-xs text-destructive mt-0.5">⚠️ {cycleFaltasCount} falta(s) registrada(s)</p>
-                      )}
-                      {cycle.pts_id && <p className="text-xs text-purple-500 mt-0.5">📋 PTS vinculado</p>}
+                <Card key={cycle.id} className={cn("clinical-premium treatment-cycle-card cursor-pointer",cycleFaltasCount>=5?"treatment-critical":cycleFaltasCount>=3?"treatment-warning":"")} onClick={()=>setSelectedCycle(cycle)}>
+                  <CardContent className="p-3 space-y-2.5">
+                    <div className="flex items-start gap-2.5">
+                      <span className="clinical-dock-icon clinical-tone-blue treatment-avatar" aria-hidden="true">{name.trim().split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]).join("").toUpperCase()}</span>
+                      <div className="flex-1 min-w-0"><p className="font-semibold text-sm sm:text-base break-words [overflow-wrap:anywhere]">{name}</p><p className="clinical-record-type font-semibold text-xs break-words">{cycle.treatment_type}</p><p className="text-xs text-muted-foreground break-words">{prof?.nome||"—"}</p></div>
+                      <Badge className={cn("border text-xs whitespace-normal shrink-0 max-w-[40%] text-center",awaitingManualDischarge?"bg-warning/15 text-warning border-warning/30":statusColors[cycle.status])}>{awaitingManualDischarge?"Alta pendente":statusLabels[cycle.status]||cycle.status}</Badge>
                     </div>
-                    <div className="flex items-center gap-3 flex-nowrap shrink-0">
-                      <div className="text-center min-w-[60px]">
-                        <p className="text-xs text-muted-foreground">Sessões</p>
-                        <p className="text-sm font-bold">
-                          {cycle.sessions_done}/{cycle.total_sessions}
-                        </p>
+                    <div className="treatment-metrics clinical-inset rounded-lg border p-2.5">
+                      <div className="min-w-0"><p className="clinical-field-label text-[10px] font-semibold uppercase">Sessões realizadas</p><p className="font-bold text-sm tabular-nums">{cycle.sessions_done}/{cycle.total_sessions} <span className="text-xs font-medium text-muted-foreground">· {progressPct}%</span></p><div role="progressbar" aria-label="Progresso de sessões realizadas" aria-valuemin={0} aria-valuemax={100} aria-valuenow={bounded} className="treatment-progress"><div style={{width:bounded+"%"}}/></div></div>
+                      <div><p className="clinical-field-label text-[10px] font-semibold uppercase">Aguardando</p><p className={cn("font-bold text-sm tabular-nums",pendingAg>0&&"treatment-pending-text")}>{pendingAg} <span className="text-xs font-normal">sessões</span></p></div>
+                      <div><p className="clinical-field-label text-[10px] font-semibold uppercase">Início</p><p className="font-semibold text-sm tabular-nums">{new Date(cycle.start_date+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</p></div>
+                    </div>
+                    <div className="flex items-center flex-wrap gap-1.5">
+                      {pendingAg>0&&<span className="treatment-tag treatment-pending"><CalendarClock className="w-3.5 h-3.5"/>{pendingAg} sessão(ões) aguardando agendamento</span>}
+                      {cycleFaltasCount>0&&<span className="treatment-tag treatment-absence"><AlertTriangle className="w-3.5 h-3.5"/>{cycleFaltasCount} falta(s) registrada(s)</span>}
+                      {cycle.pts_id&&<span className="treatment-tag treatment-pts"><FileText className="w-3.5 h-3.5"/>PTS vinculado</span>}
+                      <div className="ml-auto flex items-center gap-1.5">
+                        <Button type="button" size="sm" className="clinical-record-action clinical-action-main" onClick={e=>{e.stopPropagation();setSelectedCycle(cycle);}}>Ver ciclo <ChevronRight className="w-4 h-4"/></Button>
+                        {(user?.role==="master"||user?.role==="profissional")&&<DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" className="h-9 w-9" aria-label="Mais ações do ciclo" onClick={e=>e.stopPropagation()}><MoreVertical className="w-4 h-4"/></Button></DropdownMenuTrigger><DropdownMenuContent align="end" onClick={e=>e.stopPropagation()}><DropdownMenuItem className="text-destructive" onSelect={()=>{setDeleteReason("");setDeleteTarget(cycle);}}><X className="w-4 h-4 mr-2"/>Excluir ciclo</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}
                       </div>
-                      <div className="w-24">
-                        <Progress value={progressPct} className="h-2" />
-                      </div>
-                      <div className="text-center min-w-[50px]">
-                        <p className="text-xs text-muted-foreground">Início</p>
-                        <p className="text-sm">
-                          {new Date(cycle.start_date + "T12:00:00").toLocaleDateString("pt-BR", {
-                            day: "2-digit",
-                            month: "2-digit",
-                          })}
-                        </p>
-                      </div>
-                      <Badge className={cn("border text-xs", awaitingManualDischarge ? "bg-warning/15 text-warning border-warning/30" : statusColors[cycle.status])}>
-                        {awaitingManualDischarge ? "Alta pendente" : statusLabels[cycle.status]}
-                      </Badge>
-                      {(user?.role === "master" || user?.role === "profissional") && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive hover:bg-destructive/10 h-7 w-7 p-0"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteReason("");
-                            setDeleteTarget(cycle);
-                          }}
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      )}
-                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </div>
                   </CardContent>
                 </Card>
