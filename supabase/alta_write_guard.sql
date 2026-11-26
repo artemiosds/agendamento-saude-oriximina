@@ -70,6 +70,10 @@ BEGIN
     RAISE EXCEPTION 'Alta: não é permitido gravar em nome de outro profissional.' USING ERRCODE='42501';
   END IF;
 
+  IF TG_OP='INSERT' AND NEW.profissional_nome IS DISTINCT FROM actor.nome THEN
+    RAISE EXCEPTION 'Alta: nome do autor deve corresponder ao cadastro ativo.' USING ERRCODE='42501';
+  END IF;
+
   -- Resolve as regras do modulo com a mesma precedencia da interface.
   IF raw_role <> 'master' THEN
     IF NOT EXISTS (SELECT 1 FROM public.permissoes p WHERE p.modulo='relatorio_alta' AND p.perfil IN (normalized_role,raw_role) AND p.unidade_id IN (actor.unidade_id,''))
@@ -116,6 +120,14 @@ BEGIN
     END IF;
   END IF;
 
+  IF TG_OP='UPDATE' AND jsonb_typeof(old_payload->'history')='array' THEN
+    IF jsonb_typeof(new_payload->'history') IS DISTINCT FROM 'array' OR
+       jsonb_array_length(new_payload->'history') < jsonb_array_length(old_payload->'history') OR
+       EXISTS (SELECT 1 FROM jsonb_array_elements(old_payload->'history') WITH ORDINALITY AS h(entry,n)
+          WHERE h.entry IS DISTINCT FROM (new_payload->'history'->((h.n-1)::integer))) THEN
+      RAISE EXCEPTION 'Alta: histórico anterior não pode ser removido ou reescrito.' USING ERRCODE='42501';
+    END IF;
+  END IF;
   IF NEW.tipo_registro='alta_individual' THEN RETURN NEW; END IF;
   new_sections:=new_payload->'profissionais';
   IF jsonb_typeof(new_sections) IS DISTINCT FROM 'array' THEN RAISE EXCEPTION 'Alta: equipe inválida.' USING ERRCODE='23514'; END IF;
@@ -149,6 +161,9 @@ BEGIN
     old_section:=NULL;
     IF TG_OP='UPDATE' THEN SELECT value INTO old_section FROM jsonb_array_elements(old_sections) WHERE value->>'profissional_id'=member_id; END IF;
     old_status:=old_section->>'status_contribuicao';
+    IF TG_OP='INSERT' AND member_id<>actor_id AND (NOT manager OR new_payload ? 'altaManualTeam') AND new_status<>'nao_iniciada' THEN
+      RAISE EXCEPTION 'Alta: nova contribuição de outro profissional deve começar não iniciada.' USING ERRCODE='42501';
+    END IF;
     IF old_section IS NOT DISTINCT FROM new_section THEN CONTINUE; END IF;
     old_corrections:=coalesce(old_section->'retificacoes','[]'::jsonb);
     new_corrections:=coalesce(new_section->'retificacoes','[]'::jsonb);
