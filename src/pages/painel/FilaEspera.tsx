@@ -103,7 +103,10 @@ const prioridadeLabel: Record<string, string> = {
 };
 
 const statusLabels: Record<string, { label: string; color: string }> = {
-  aguardando: { label: "Aguardando Triagem", color: "bg-warning/10 text-warning" },
+  aguardando: { label: "Aguardando (fila)", color: "bg-warning/10 text-warning" },
+  chegada_confirmada: { label: "Chegada confirmada", color: "bg-info/10 text-info" },
+  aguardando_triagem: { label: "Aguardando triagem", color: "bg-warning/10 text-warning" },
+  aguardando_atendimento: { label: "Aguardando atendimento", color: "bg-info/10 text-info" },
   aguardando_enfermagem: { label: "Aguardando Enfermagem", color: "bg-blue-500/10 text-blue-600" },
   aguardando_agendamento_interno: {
     label: "Aguard. Agendamento (Encaminhamento Interno)",
@@ -163,7 +166,7 @@ const getWaitMinutes = (f: { criadoEm?: string; horaChegada: string }, nowMs: nu
 
 const getWaitColor = (minutes: number, prioridade: string): { bg: string; text: string; label: string } => {
   if (prioridade === "urgente") return { bg: "bg-destructive", text: "text-destructive-foreground", label: "Urgente" };
-  if (minutes > 60) return { bg: "bg-destructive", text: "text-destructive-foreground", label: `${minutes}min` };
+  if (minutes > 60) return { bg: "bg-muted", text: "text-muted-foreground", label: `${minutes}min` };
   if (minutes >= 30) return { bg: "bg-warning", text: "text-warning-foreground", label: `${minutes}min` };
   return { bg: "bg-success", text: "text-success-foreground", label: `${minutes}min` };
 };
@@ -485,8 +488,20 @@ const FilaEspera: React.FC = () => {
     return [...destinos].sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [fila, user?.unidadeId, user?.usuario, filterUnidade]);
 
+  // Reuse the authorized, locally loaded queue for filters and counters.
+  const scopedFila = useMemo(() => {
+    const query = debouncedSearchQuery.toLowerCase().trim();
+    return fila
+      .filter((f) => !query || resolvePaciente(f.pacienteId, f.pacienteNome).toLowerCase().includes(query))
+      .filter((f) => !(user?.unidadeId && user?.usuario !== "admin.sms") || f.unidadeId === user?.unidadeId)
+      .filter((f) => filterUnidade === "all" || f.unidadeId === filterUnidade)
+      .filter((f) => filterProf === "all" || f.profissionalId === filterProf)
+      .filter((f) => filterEspecialidade === "all" || (!f.profissionalId && !!f.especialidadeDestino
+        && (filterEspecialidade === "open" || f.especialidadeDestino === filterEspecialidade)));
+  }, [fila, debouncedSearchQuery, resolvePaciente, user?.unidadeId, user?.usuario, filterUnidade, filterProf, filterEspecialidade]);
+
   const filteredFila = useMemo(() => {
-    const keys = new Map(fila.map((f) => {
+    const keys = new Map(scopedFila.map((f) => {
       const patient = pacienteMap.get(f.pacienteId);
       const priority = legalPriorityKey(patient, triageByFilaId[f.id]?.tea);
       // Keep an explicitly registered queue priority when the patient record is incomplete.
@@ -494,15 +509,7 @@ const FilaEspera: React.FC = () => {
       return [f.id, { priority, risk: manchesterOrder[triageByFilaId[f.id]?.risco] ?? 6 }] as const;
     }));
 
-    const query = debouncedSearchQuery.toLowerCase().trim();
-    return [...fila]
-      .filter((f) => !query || resolvePaciente(f.pacienteId, f.pacienteNome).toLowerCase().includes(query))
-      .filter((f) => !(user?.unidadeId && user?.usuario !== "admin.sms") || f.unidadeId === user?.unidadeId)
-      .filter((f) => filterUnidade === "all" || f.unidadeId === filterUnidade)
-      .filter((f) => filterProf === "all" || f.profissionalId === filterProf)
-      .filter((f) => filterStatus === "all" || f.status === filterStatus)
-      .filter((f) => filterEspecialidade === "all" || (!f.profissionalId && !!f.especialidadeDestino
-        && (filterEspecialidade === "open" || f.especialidadeDestino === filterEspecialidade)))
+    return scopedFila.filter((f) => filterStatus === "all" || f.status === filterStatus)
       .sort((a, b) => {
         // Keep patients awaiting a call above the other states in every sort mode.
         // Within each group, preserve the selected clinical/time ordering below.
@@ -532,58 +539,26 @@ const FilaEspera: React.FC = () => {
         }
         return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
       });
-  }, [
-    fila,
-    pacienteMap,
-    triageByFilaId,
-    filterUnidade,
-    filterProf,
-    filterStatus,
-    filterEspecialidade,
-    sortField,
-    sortTimestamp,
-    debouncedSearchQuery,
-    resolvePaciente,
-    user?.unidadeId,
-    user?.usuario,
-  ]);
+  }, [scopedFila, pacienteMap, triageByFilaId, filterStatus, sortField, sortTimestamp]);
 
-  const { aguardandoCount, chamadoCount, emAtendimentoCount, greenCount, yellowCount, redCount } = useMemo(() => {
-    let aguardando = 0;
-    let chamado = 0;
-    let emAtendimento = 0;
-    let green = 0;
-    let yellow = 0;
-    let red = 0;
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of scopedFila) counts[item.status] = (counts[item.status] || 0) + 1;
+    return counts;
+  }, [scopedFila]);
 
-    for (const item of fila) {
-      if (item.status === "aguardando") aguardando++;
-      if (item.status === "chamado") chamado++;
-      if (item.status === "em_atendimento") emAtendimento++;
-
-      const isActive = ["aguardando", "chamado", "em_atendimento"].includes(item.status);
-      if (!isActive) continue;
-
-      if (item.prioridade === "urgente") {
-        red++;
-        continue;
-      }
-
-      const minutes = getWaitMinutes(item, now);
-      if (minutes < 30) green++;
-      else if (minutes <= 60) yellow++;
-      else red++;
-    }
-
-    return {
-      aguardandoCount: aguardando,
-      chamadoCount: chamado,
-      emAtendimentoCount: emAtendimento,
-      greenCount: green,
-      yellowCount: yellow,
-      redCount: red,
-    };
-  }, [fila, now]);
+  const activeFilterCount = [filterUnidade, filterProf, filterEspecialidade, filterStatus]
+    .filter((value) => value !== "all").length + Number(!!searchQuery.trim()) + Number(sortField !== "prioridade");
+  const clearFilters = () => {
+    setFilterUnidade("all");
+    setFilterProf("all");
+    setFilterEspecialidade("all");
+    setFilterStatus("all");
+    setSortField("prioridade");
+    setSearchQuery("");
+    setDebouncedSearchQuery("");
+    setPage(1);
+  };
 
   const totalPages = Math.max(1, Math.ceil(filteredFila.length / PAGE_SIZE));
   const pageStart = (page - 1) * PAGE_SIZE;
@@ -1309,14 +1284,12 @@ const FilaEspera: React.FC = () => {
 
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+    <div className="space-y-3 min-w-0">
+      <header className="clinical-hub-hero flex flex-col xl:flex-row xl:items-center justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold font-display text-foreground tracking-tight">Fila de Espera</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            {aguardandoCount} aguardando {chamadoCount > 0 && `• ${chamadoCount} chamado(s)`}{" "}
-            {emAtendimentoCount > 0 && `• ${emAtendimentoCount} em atendimento`}
-          </p>
+          <p className="clinical-hub-eyebrow">Regulação e acesso assistencial</p>
+          <h1 className="clinical-hub-name text-xl sm:text-2xl font-bold font-display">Fila de Espera</h1>
+          <p className="clinical-patient-sub text-sm mt-0.5">Demanda, oferta de vagas e acompanhamento da fila.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           {canManage && (
@@ -1361,7 +1334,7 @@ const FilaEspera: React.FC = () => {
                 }}
               >
                 <ArrowRight className="w-4 h-4 mr-2" />
-                Chamar Próximo da Fila
+                Ofertar próxima vaga
               </Button>
               <Button onClick={openNew} className="gradient-primary text-primary-foreground">
                 <UserPlus className="w-4 h-4 mr-2" />
@@ -1370,46 +1343,32 @@ const FilaEspera: React.FC = () => {
             </>
           )}
         </div>
-      </div>
+      </header>
 
-      {greenCount + yellowCount + redCount > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Card className="shadow-card border-0">
-            <CardContent className="p-3 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-success flex items-center justify-center text-success-foreground font-bold text-sm">
-                {greenCount}
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">Recentes</p>
-                <p className="text-xs text-muted-foreground">&lt; 30 min</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="shadow-card border-0">
-            <CardContent className="p-3 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-warning flex items-center justify-center text-warning-foreground font-bold text-sm">
-                {yellowCount}
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">Atenção</p>
-                <p className="text-xs text-muted-foreground">30–60 min</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="shadow-card border-0">
-            <CardContent className="p-3 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-destructive flex items-center justify-center text-destructive-foreground font-bold text-sm">
-                {redCount}
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">Crítico</p>
-                <p className="text-xs text-muted-foreground">&gt; 60 min / Urgente</p>
-              </div>
-            </CardContent>
-          </Card>
+      <section aria-label="Indicadores da fila" className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        {[
+          { status: "all", label: "Todos os registros", count: scopedFila.length },
+          { status: "aguardando", label: "Aguardando (fila)", count: statusCounts.aguardando || 0 },
+          { status: "chamado", label: "Chamados", count: statusCounts.chamado || 0 },
+          { status: "em_atendimento", label: "Em atendimento", count: statusCounts.em_atendimento || 0 },
+        ].map((item) => (
+          <button key={item.status} type="button" aria-pressed={filterStatus === item.status}
+            onClick={() => setFilterStatus(item.status)}
+            className={cn("clinical-premium text-left p-3 min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+              filterStatus === item.status && "ring-2 ring-primary/60")}>
+            <span className="block text-xs font-medium text-muted-foreground">{item.label}</span>
+            <span className="block text-2xl font-bold tabular-nums text-foreground">{item.count}</span>
+            <span className="block text-[10px] text-muted-foreground">Filtrar registros</span>
+          </button>
+        ))}
+      </section>
+      <p className="text-xs text-muted-foreground">Indicadores do recorte selecionado. Tempo de espera não equivale a risco clínico.</p>
+
+      <section aria-label="Filtros da fila" className="clinical-premium p-3 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Filtros da fila {activeFilterCount > 0 && <span className="text-muted-foreground font-normal">({activeFilterCount} ativos)</span>}</h2>
+          <Button type="button" variant="ghost" size="sm" onClick={clearFilters} disabled={activeFilterCount === 0}>Limpar filtros</Button>
         </div>
-      )}
-
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
@@ -1419,9 +1378,10 @@ const FilaEspera: React.FC = () => {
           className="pl-9"
         />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 items-end gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 items-end gap-2">
+        <div className="space-y-1"><Label htmlFor="fila-unidade" className="text-xs text-muted-foreground">Unidade de saúde</Label>
         <Select value={filterUnidade} onValueChange={setFilterUnidade}>
-          <SelectTrigger>
+          <SelectTrigger id="fila-unidade">
             <SelectValue placeholder="Unidade" />
           </SelectTrigger>
           <SelectContent>
@@ -1432,9 +1392,10 @@ const FilaEspera: React.FC = () => {
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>
+        </Select></div>
+        <div className="space-y-1"><Label htmlFor="fila-profissional" className="text-xs text-muted-foreground">Profissional</Label>
         <Select value={filterProf} onValueChange={(value) => { setFilterProf(value); if (value !== "all") setFilterEspecialidade("all"); }}>
-          <SelectTrigger>
+          <SelectTrigger id="fila-profissional">
             <SelectValue placeholder="Profissional" />
           </SelectTrigger>
           <SelectContent>
@@ -1446,7 +1407,7 @@ const FilaEspera: React.FC = () => {
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>
+        </Select></div>
         <div className="space-y-1">
           <Label htmlFor="fila-profissao-filter" className="text-xs text-muted-foreground">Profissão / CBO (qualquer profissional)</Label>
           <Select value={filterEspecialidade} onValueChange={(value) => {
@@ -1465,13 +1426,19 @@ const FilaEspera: React.FC = () => {
             </SelectContent>
           </Select>
         </div>
+        <div className="space-y-1"><Label htmlFor="fila-status" className="text-xs text-muted-foreground">Situação</Label>
         <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger>
+          <SelectTrigger id="fila-status">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos Status</SelectItem>
-            <SelectItem value="aguardando">Aguardando</SelectItem>
+            <SelectItem value="aguardando">Aguardando (fila)</SelectItem>
+            <SelectItem value="chegada_confirmada">Chegada confirmada</SelectItem>
+            <SelectItem value="aguardando_triagem">Aguardando triagem</SelectItem>
+            <SelectItem value="aguardando_enfermagem">Aguardando enfermagem</SelectItem>
+            <SelectItem value="aguardando_atendimento">Aguardando atendimento</SelectItem>
+            <SelectItem value="aguardando_agendamento_interno">Agendamento interno</SelectItem>
             <SelectItem value="encaixado">Encaixado</SelectItem>
             <SelectItem value="chamado">Chamado</SelectItem>
             <SelectItem value="em_atendimento">Em Atendimento</SelectItem>
@@ -1479,9 +1446,10 @@ const FilaEspera: React.FC = () => {
             <SelectItem value="falta">Faltou</SelectItem>
             <SelectItem value="cancelado">Cancelado</SelectItem>
           </SelectContent>
-        </Select>
+        </Select></div>
+        <div className="space-y-1"><Label htmlFor="fila-ordenacao" className="text-xs text-muted-foreground">Ordenar por</Label>
         <Select value={sortField} onValueChange={(v) => setSortField(v as any)}>
-          <SelectTrigger>
+          <SelectTrigger id="fila-ordenacao">
             <SelectValue placeholder="Ordenar por" />
           </SelectTrigger>
           <SelectContent>
@@ -1490,8 +1458,10 @@ const FilaEspera: React.FC = () => {
             <SelectItem value="entrada">Data de entrada</SelectItem>
             <SelectItem value="solicitacao">Data solicitação original</SelectItem>
           </SelectContent>
-        </Select>
+        </Select></div>
       </div>
+      <p className="text-xs text-muted-foreground">{filteredFila.length} registro(s) no recorte atual. O seletor consulta apenas os registros carregados pela fila.</p>
+      </section>
 
       {/* Manual Call Dialog */}
       <Dialog open={manualCallDialog} onOpenChange={setManualCallDialog}>
@@ -2274,7 +2244,7 @@ const FilaEspera: React.FC = () => {
       <div className={`space-y-2 ${paginatedFila.length > 50 ? 'perf-dense' : ''}`}>
         {filteredFila.length === 0 ? (
           <Card className="shadow-card border-0">
-            <CardContent className="p-8 text-center text-muted-foreground">Fila vazia.</CardContent>
+            <CardContent className="p-8 text-center text-muted-foreground">{activeFilterCount > 0 ? "Nenhum registro encontrado com os filtros selecionados." : "Fila vazia."}</CardContent>
           </Card>
         ) : (
           paginatedFila.map((f, i) => {
