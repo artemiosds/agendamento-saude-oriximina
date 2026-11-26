@@ -10,14 +10,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Label } from '@/components/ui/label';
 import { Loader2, Plus, RefreshCw, Users, CheckCircle2, Clock3, ArrowRight, FileText, Search, Send, ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import { canUseTeamEvaluation, pendingTeamMembers, validateTeamRequest, type TeamRequest, type TeamMember } from '@/lib/teamEvaluation';
 import { listTeamRequests, createTeamRequest, replyTeamRequest, finishTeamRequest } from '@/services/teamEvaluationService';
 
-type Props = { patientId?: string; patientName?: string; onHistory?: () => void };
+type Props = { patientId?: string; patientName?: string; onHistory?: () => void; dashboard?: boolean };
+type QueueFilter = 'all' | 'mine' | 'ready' | 'done';
+const normalizeQueueSearch = (value: string) => value.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 type Candidate = { id: string; nome: string; profissao: string; cargo: string; unidade_id: string };
 type Source = { id: string; unidade_id: string; profissional_nome: string; data_atendimento: string; queixa_principal: string; anamnese: string; soap_avaliacao: string; conduta: string };
 
-export default function TeamEvaluationPanel({ patientId, patientName, onHistory }: Props) {
+export default function TeamEvaluationPanel({ patientId, patientName, onHistory, dashboard = false }: Props) {
  const { user } = useAuth();
  const cache = useQueryClient();
  const allowed = canUseTeamEvaluation(user);
@@ -33,8 +36,11 @@ export default function TeamEvaluationPanel({ patientId, patientName, onHistory 
  const [recommendations, setRecommendations] = useState('');
  const [plan, setPlan] = useState('');
  const [search, setSearch] = useState('');
+ const [queueFilter, setQueueFilter] = useState<QueueFilter>('all');
+ const [queueSearch, setQueueSearch] = useState('');
+ const showDashboard = dashboard && !patientId;
  const scope = `${user?.id || ''}:${patientId || ''}`;
- useEffect(() => { setSelectedId(''); setCreating(false); setEvaluation(''); setRecommendations(''); setPlan(''); }, [scope]);
+ useEffect(() => { setSelectedId(''); setCreating(false); setEvaluation(''); setRecommendations(''); setPlan(''); setQueueFilter('all'); setQueueSearch(''); }, [scope]);
  const requests = useQuery({ queryKey: ['team-evaluation', user?.id, patientId || 'queue'], queryFn: () => listTeamRequests(patientId), enabled: allowed, staleTime: 30000 });
  const sources = useQuery({ queryKey: ['team-evaluation-sources', user?.id, patientId], enabled: allowed && creating && !!patientId, queryFn: async (): Promise<Source[]> => {
   let q = supabase.from('prontuarios').select('id,unidade_id,profissional_nome,data_atendimento,queixa_principal,anamnese,soap_avaliacao,conduta').eq('paciente_id',patientId).eq('status','finalizado').order('data_atendimento',{ascending:false}).limit(30);
@@ -58,22 +64,71 @@ export default function TeamEvaluationPanel({ patientId, patientName, onHistory 
   finally { setSaving(false); }
  }
  function openCreate() { setRequestId(crypto.randomUUID()); setReason(''); setSourceId(''); setMembers([]); setPriority('rotina'); setSearch(''); setCreating(true); }
+ const loadedRequests = requests.data || [];
+ const queueRows = showDashboard ? loadedRequests.map(request => {
+  const remaining = pendingTeamMembers(request);
+  return { request, remaining, completed: request.members.length - remaining.length,
+   mine: request.status === 'aberta' && remaining.some(member => member.id === user?.id),
+   ready: request.status === 'aberta' && request.members.length > 0 && remaining.length === 0,
+   done: request.status === 'concluida' };
+ }) : [];
+ const indicators: { id: QueueFilter; label: string; count: number; Icon: typeof Users; tone: string }[] = [
+  { id: 'all', label: 'Solicitações', count: queueRows.length, Icon: ClipboardList, tone: 'clinical-tone-blue' },
+  { id: 'mine', label: 'Meus pareceres pendentes', count: queueRows.filter(row => row.mine).length, Icon: Clock3, tone: 'clinical-tone-violet' },
+  { id: 'ready', label: 'Aguardando conclusão', count: queueRows.filter(row => row.ready).length, Icon: FileText, tone: 'clinical-tone-slate' },
+  { id: 'done', label: 'Concluídas', count: queueRows.filter(row => row.done).length, Icon: CheckCircle2, tone: 'clinical-tone-teal' },
+ ];
+ const term = normalizeQueueSearch(queueSearch);
+ const visibleQueue = queueRows.filter(row =>
+  (queueFilter === 'all' || row[queueFilter]) &&
+  (!term || [row.request.patient_name, row.request.requested_name].some(value => normalizeQueueSearch(value || '').includes(term))));
+ const confirmed = requests.isSuccess && !requests.isError;
  if(!allowed)return <p className="p-4 text-sm text-muted-foreground">Disponível para profissionais e Master ativos.</p>;
- return <section className="space-y-4 p-3" aria-label="Avaliação em equipe">
+ return <section className={cn("space-y-4 p-3", showDashboard && "clinical-premium space-y-3")} aria-label="Avaliação em equipe">
   <div className="flex flex-wrap items-center justify-between gap-3">
    <div className="flex items-center gap-2.5"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Users className="h-4 w-4"/></span><div><h3 className="text-sm font-semibold">Avaliação em equipe</h3><p className="text-xs text-muted-foreground">Pareceres conectados ao cuidado</p></div></div>
    <div className="flex gap-1"><Button type="button" size="icon" variant="ghost" title="Atualizar solicitações" onClick={()=>void requests.refetch()}><RefreshCw className="h-4 w-4"/></Button>{patientId && <Button type="button" size="sm" className="rounded-lg shadow-sm" onClick={openCreate}><Plus className="mr-1.5 h-3.5 w-3.5"/>Solicitar</Button>}</div>
   </div>
   {requests.isPending && <Loader2 className="h-4 w-4 animate-spin"/>}
   {requests.isError && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">Não foi possível carregar as solicitações. Tente atualizar a lista.</p>}
-  {requests.data?.length===0 && <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-7 text-center"><Users className="mx-auto mb-3 h-6 w-6 text-muted-foreground/60"/><p className="text-sm font-medium">Nenhuma solicitação registrada.</p><p className="mt-1 text-xs text-muted-foreground">Organize a participação dos profissionais neste cuidado.</p></div>}
+  {!showDashboard && requests.data?.length===0 && <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-7 text-center"><Users className="mx-auto mb-3 h-6 w-6 text-muted-foreground/60"/><p className="text-sm font-medium">Nenhuma solicitação registrada.</p><p className="mt-1 text-xs text-muted-foreground">Organize a participação dos profissionais neste cuidado.</p></div>}
   {!patientId && <p className="text-xs text-muted-foreground">Solicite uma avaliação a partir do prontuário do paciente. Até 100 solicitações mais recentes desta unidade.</p>}
-  {requests.data?.map(r=>{const remaining=pendingTeamMembers(r);const completed=r.members.length-remaining.length;return <button type="button" key={r.id} onClick={()=>{setSelectedId(r.id);setEvaluation('');setRecommendations('');setPlan('');}} className="group block w-full rounded-xl border bg-card p-4 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+  {!showDashboard && requests.data?.map(r=>{const remaining=pendingTeamMembers(r);const completed=r.members.length-remaining.length;return <button type="button" key={r.id} onClick={()=>{setSelectedId(r.id);setEvaluation('');setRecommendations('');setPlan('');}} className="group block w-full rounded-xl border bg-card p-4 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
    <div className="flex items-start justify-between gap-3"><span className="min-w-0 break-words text-sm font-semibold leading-relaxed">{patientId ? r.reason : r.patient_name}</span><Badge variant={r.status==='concluida'?'secondary':'outline'} className="shrink-0 rounded-md">{r.status==='concluida'?'Concluída':`${completed}/${r.members.length}`}</Badge></div>
    <p className="mt-2 text-xs text-muted-foreground">{r.requested_name} · {new Date(r.created_at).toLocaleDateString('pt-BR')}</p>
    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{width:`${r.members.length ? completed/r.members.length*100 : 0}%`}}/></div>
    <div className="mt-2 flex items-center justify-between gap-2 text-xs"><span className={remaining.some(m=>m.id===user?.id)?'font-medium text-primary':'text-muted-foreground'}>{remaining.some(m=>m.id===user?.id)?'Seu parecer está pendente':r.status==='concluida'?'Plano de cuidado registrado':`${remaining.length} parecer(es) pendente(s)`}</span><ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-primary"/></div>
   </button>})}
+
+  {showDashboard && <>
+   <div className="grid grid-cols-2 xl:grid-cols-4 gap-2" aria-label="Indicadores das solicitações carregadas">
+    {indicators.map(({id,label,count,Icon,tone}) => <button type="button" key={id} aria-pressed={queueFilter===id} disabled={!confirmed} onClick={()=>setQueueFilter(id)} className={cn("clinical-premium flex min-w-0 items-center gap-2.5 p-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-70",queueFilter===id && "ring-1 ring-primary/50")}>
+     <span className={cn("clinical-dock-icon",tone)}><Icon className="h-4 w-4"/></span><span className="min-w-0 flex-1"><span className="block clinical-field-label text-xs font-semibold break-words">{label}</span><span className="block text-xl font-bold tabular-nums text-[var(--cp-blue)]">{confirmed?count:"—"}</span></span><ArrowRight className="hidden sm:block h-4 w-4 shrink-0 clinical-field-label"/>
+    </button>)}
+   </div>
+   <div className="flex flex-col sm:flex-row gap-2">
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar avaliações">{indicators.map(({id,label})=><Button key={id} type="button" size="sm" variant="outline" className={cn("clinical-record-action h-8 text-xs",queueFilter===id&&"clinical-action-main")} aria-pressed={queueFilter===id} onClick={()=>setQueueFilter(id)}>{id==='mine'?'Minhas pendências':label}</Button>)}</div>
+    <div className="relative flex-1 min-w-[10rem]"><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/><Input type="search" aria-label="Buscar paciente ou solicitante" className="h-9 pl-9 bg-background" placeholder="Buscar paciente ou solicitante..." value={queueSearch} onChange={e=>setQueueSearch(e.target.value)}/></div>
+   </div>
+   {confirmed && visibleQueue.length===0 && <div className="clinical-inset rounded-lg border p-4 flex flex-col sm:flex-row items-center gap-3">
+     <svg viewBox="0 0 210 100" className="w-32 h-16 shrink-0" fill="none" aria-hidden="true">
+      {[45,105,165].map((x,i)=><g key={x} fill={i===1?'var(--cp-teal)':'var(--cp-blue)'} opacity={i===1?1:.7}><circle cx={x} cy="25" r="11"/><rect x={x-16} y="40" width="32" height="26" rx="12"/></g>)}
+      <path d="M45 79h120" stroke="var(--cp-blue)" opacity=".45" strokeWidth="2" strokeDasharray="5 4"/><circle cx="105" cy="79" r="11" fill="hsl(var(--card))" stroke="var(--cp-teal)" strokeWidth="1.5"/><path d="M100 79l4 4 6-8" stroke="var(--cp-teal)" strokeWidth="2"/>
+     </svg>
+     <div className="flex-1 min-w-0 text-center sm:text-left"><p className="font-semibold text-sm">{loadedRequests.length?'Nenhuma solicitação neste filtro.':'Nenhuma solicitação registrada.'}</p><p className="text-xs text-muted-foreground mt-1">{loadedRequests.length?'Altere os filtros para consultar outros pedidos.':'Solicite uma avaliação pelo prontuário do paciente a partir de um registro finalizado.'}</p></div>
+     {loadedRequests.length>0&&<Button type="button" size="sm" variant="outline" className="clinical-record-action" onClick={()=>{setQueueFilter('all');setQueueSearch('');}}>Limpar filtros</Button>}
+   </div>}
+   {confirmed && visibleQueue.map(({request:r,remaining,completed,mine,ready,done})=><button type="button" key={r.id} onClick={()=>{setSelectedId(r.id);setEvaluation('');setRecommendations('');setPlan('');}} className="clinical-premium w-full text-left p-3 space-y-2.5 hover:ring-1 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+    <div className="flex items-start gap-2.5"><span className="clinical-dock-icon clinical-tone-blue treatment-avatar" aria-hidden="true">{r.patient_name.trim().split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]).join('').toUpperCase()||'—'}</span><div className="flex-1 min-w-0"><p className="font-semibold text-sm sm:text-base break-words">{r.patient_name}</p><p className="clinical-record-type font-semibold text-xs break-words">{r.requested_name}</p><p className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleDateString('pt-BR')}</p></div><div className="flex flex-wrap justify-end gap-1 shrink-0 max-w-[45%]"><Badge variant="outline" className="text-xs whitespace-normal">{done?'Concluída':ready?'Aguardando conclusão':'Em andamento'}</Badge>{r.priority==='prioritaria'&&<Badge variant="outline" className="text-xs border-amber-300 text-amber-700 dark:text-amber-300">Prioritária</Badge>}</div></div>
+    <div className="clinical-inset rounded-lg border p-2.5 space-y-2">
+     <div className="flex items-center justify-between gap-2 text-xs"><span className="clinical-field-label font-semibold">Pareceres da equipe</span><strong className="tabular-nums">{completed} de {r.members.length}</strong></div>
+     <div role="progressbar" aria-label="Pareceres registrados" aria-valuemin={0} aria-valuemax={Math.max(1,r.members.length)} aria-valuenow={completed} className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[var(--cp-teal)]" style={{width:`${r.members.length?completed/r.members.length*100:0}%`}}/></div>
+     <div className="grid gap-1 sm:grid-cols-2">{r.members.map(m=>{const isPending=remaining.some(p=>p.id===m.id);return <div key={m.id} className="flex items-center gap-1.5 text-xs min-w-0"><span className={cn("shrink-0",isPending?"text-muted-foreground":"text-[var(--cp-teal)]")}>{isPending?<Clock3 className="h-3.5 w-3.5"/>:<CheckCircle2 className="h-3.5 w-3.5"/>}</span><span className="flex-1 min-w-0 break-words">{m.specialty||m.name}</span><span className="clinical-field-label shrink-0">{isPending?'Pendente':'Registrado'}</span></div>})}</div>
+    </div>
+    <div className="flex flex-wrap items-center justify-between gap-2"><span className={cn("text-xs",mine?"clinical-record-type font-semibold":"text-muted-foreground")}>{mine?'Seu parecer está pendente':done?'Plano de cuidado registrado':`${remaining.length} parecer(es) pendente(s)`}</span><span className="clinical-record-action clinical-action-main rounded-lg px-3 py-2 text-xs font-semibold inline-flex items-center gap-1.5">Abrir avaliação<ArrowRight className="h-4 w-4"/></span></div>
+   </button>)}
+   <p className="text-xs text-muted-foreground">Indicadores das até 100 solicitações recentes disponíveis ao seu perfil. {confirmed?`${visibleQueue.length} de ${loadedRequests.length} exibidas.`:''}</p>
+  </>}
 
   <Dialog open={creating} onOpenChange={open=>{if(!busy)setCreating(open);}}>
    <DialogContent className="flex max-h-[calc(100dvh-1rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-5xl sm:p-0">
