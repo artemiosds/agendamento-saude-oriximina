@@ -43,7 +43,7 @@ interface ProfSection {
   objetivos: string;
   intervencoes: string;
   evolucao: string;
-  metas_status: "totalmente" | "parcialmente" | "nao_atingidas";
+  metas_status: "" | "totalmente" | "parcialmente" | "nao_atingidas";
   metas_justificativa: string;
   tecnologia_assistiva: string;
   // Novos campos para evolução multiprofissional
@@ -324,6 +324,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
   const reportLoadTokenRef = React.useRef(0);
   const loadedModeRef = React.useRef<ModoRelatorio>("selector");
   const isReportLocked = status !== "rascunho";
+  const formReadOnly = isReportLocked || loading || !pacienteId;
 
   const resetReportTracking = () => {
     setReportId(null);
@@ -512,7 +513,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
         objetivos: "",
         intervencoes: val.lastPront?.procedimentos_texto || "",
         evolucao: "",
-        metas_status: "totalmente",
+        metas_status: "",
         metas_justificativa: "",
         tecnologia_assistiva: "",
         status_contribuicao: "nao_iniciada",
@@ -520,8 +521,8 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
         orientacoes_especificas: "",
         encaminhamentos_especificos: "",
         objetivos_especificos: "",
-        adesao: "Excelente",
-        intercorrencias: "Nenhuma"
+        adesao: "",
+        intercorrencias: ""
       });
     });
 
@@ -784,7 +785,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
     (modo === "individual" || reportOwnerId === user?.id || canManageOtherContribution);
 
   const canEditContribution = (section: ProfSection) =>
-    !isReportLocked &&
+    !formReadOnly &&
     section.status_contribuicao !== "assinada" &&
     (section.profissional_id === user?.id || canManageOtherContribution);
 
@@ -801,10 +802,12 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
 
   const handleSignContribution = (profId: string) => {
     const section = profSections.find(s => s.profissional_id === profId);
-    if (!section || section.profissional_id !== user?.id || isReportLocked) {
+    if (!section || section.profissional_id !== user?.id || formReadOnly) {
       toast.error("Somente o profissional responsável pode assinar sua própria contribuição.");
       return;
     }
+    const errors = validateContribution(section);
+    if (errors.length) { toast.error(errors[0]); return; }
     const nowIso = new Date().toISOString();
     setProfSections(prev =>
       prev.map(s => s.profissional_id === profId ? {
@@ -818,6 +821,13 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
   };
 
   /* ── VALIDATION ─── */
+  const validateContribution = (s: ProfSection): string[] => {
+    const errors: string[] = [];
+    if (!s.evolucao?.trim()) errors.push(`Informe a evolução clínica de ${s.profissional_nome}`);
+    if (!s.metas_status) errors.push(`Avalie as metas de ${s.profissional_nome}`);
+    if (s.metas_status && s.metas_status !== "totalmente" && !s.metas_justificativa?.trim()) errors.push(`Justificativa de metas obrigatória para ${s.profissional_nome}`);
+    return errors;
+  };
   const validateMulti = (): string[] => {
     const errors: string[] = [];
     if (!pacienteId) errors.push("Selecione um paciente");
@@ -825,6 +835,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
     if (!multiTipoAlta) errors.push("Selecione o tipo de alta");
     if (!nivelIndep) errors.push("Selecione o nível de independência");
     if (modalidades.length === 0) errors.push("Selecione pelo menos uma modalidade");
+    if (!multiResumoConsolidado.trim()) errors.push("Informe o resumo final consolidado");
     
     const hasCompletedContribution = profSections.some(
       s => s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada"
@@ -834,13 +845,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
     }
 
     profSections.forEach(s => {
-      if (
-        (s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada") &&
-        s.metas_status !== "totalmente" &&
-        !s.metas_justificativa
-      ) {
-        errors.push(`Justificativa de metas obrigatória para ${s.profissional_nome}`);
-      }
+      if (s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada") errors.push(...validateContribution(s));
     });
     return errors;
   };
@@ -1014,14 +1019,14 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
           <div class="info-grid" style="margin-bottom: 10px; padding: 8px;">
             <div><span class="info-label">Período</span><br/><span class="info-value">${fmt(s.periodo_inicio)} a ${fmt(s.periodo_fim)}</span></div>
             <div><span class="info-label">Sessões realizadas</span><br/><span class="info-value">${s.sessoes}</span></div>
-            <div><span class="info-label">Adesão</span><br/><span class="info-value">${s.adesao || "Excelente"}</span></div>
+            <div><span class="info-label">Adesão</span><br/><span class="info-value">${s.adesao || "—"}</span></div>
           </div>
           <div class="field"><span class="field-label">Objetivos Específicos</span><div class="field-value">${s.objetivos_especificos || s.objetivos || "—"}</div></div>
           <div class="field"><span class="field-label">Intervenções/Procedimentos</span><div class="field-value">${s.intervencoes || "—"}</div></div>
           <div class="field"><span class="field-label">Evolução Clínica e Funcional da Área</span><div class="field-value">${s.evolucao || "—"}</div></div>
           <div class="field"><span class="field-label">Status das Metas</span><div class="field-value">${
             s.metas_status === "totalmente" ? "Totalmente atingidas" :
-            s.metas_status === "parcialmente" ? "Parcialmente atingidas" : "Não atingidas"
+            s.metas_status === "parcialmente" ? "Parcialmente atingidas" : s.metas_status === "nao_atingidas" ? "Não atingidas" : "Aguardando avaliação profissional"
           }${s.metas_justificativa ? ` — ${s.metas_justificativa}` : ""}</div></div>
           ${s.tecnologia_assistiva ? `<div class="field"><span class="field-label">Tecnologia Assistiva Concedida</span><div class="field-value">${s.tecnologia_assistiva}</div></div>` : ""}
           <div class="signature" style="margin-top:20px; text-align: left;">
@@ -1526,6 +1531,10 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                     )}
                   </div>
                 )}
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">Modalidades de reabilitação *</Label>
+                  <div className="flex flex-wrap gap-3">{MODALIDADES.map(m => <label key={m} className="flex items-center gap-2 text-sm"><Checkbox checked={modalidades.includes(m)} disabled={formReadOnly} onCheckedChange={v => setModalidades(prev => v === true ? Array.from(new Set([...prev,m])) : prev.filter(x => x !== m))}/>{m}</label>)}</div>
+                </div>
               </CardContent>
             </Card>
 
@@ -1575,9 +1584,15 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                         <Textarea value={s.evolucao || ""} onChange={e => updateProfSection(s.profissional_id, "evolucao", e.target.value)} rows={2} disabled={!canEditContribution(s)} />
                       </div>
                     </div>
-                    <div className="flex items-center justify-between mt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="space-y-1"><Label className="text-xs">Avaliação das metas *</Label><Select disabled={!canEditContribution(s)} value={s.metas_status || ""} onValueChange={v=>updateProfSection(s.profissional_id,"metas_status",v)}><SelectTrigger><SelectValue placeholder="Avalie as metas" /></SelectTrigger><SelectContent><SelectItem value="totalmente">Totalmente atingidas</SelectItem><SelectItem value="parcialmente">Parcialmente atingidas</SelectItem><SelectItem value="nao_atingidas">Não atingidas</SelectItem></SelectContent></Select></div>
+                      {s.metas_status&&s.metas_status!=="totalmente"&&<div className="space-y-1"><Label className="text-xs">Justificativa das metas *</Label><Textarea disabled={!canEditContribution(s)} value={s.metas_justificativa} onChange={e=>updateProfSection(s.profissional_id,"metas_justificativa",e.target.value)} rows={2}/></div>}
+                      <div className="space-y-1"><Label className="text-xs">Adesão</Label><Select disabled={!canEditContribution(s)} value={s.adesao || ""} onValueChange={v=>updateProfSection(s.profissional_id,"adesao",v)}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{ADESAO_TRATAMENTO.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div>
+                      <div className="space-y-1"><Label className="text-xs">Intercorrências</Label><Textarea disabled={!canEditContribution(s)} value={s.intercorrencias || ""} onChange={e=>updateProfSection(s.profissional_id,"intercorrencias",e.target.value)} rows={2}/></div>
+                    </div>
+                    <div className="flex items-center justify-between mt-4 flex-wrap gap-2">
                       <div className="flex gap-4">
-                        <Select value={s.status_contribuicao} onValueChange={(v: any) => updateProfSection(s.profissional_id, "status_contribuicao", v)} disabled={!canEditContribution(s)}>
+                        <Select value={s.status_contribuicao} onValueChange={(v: any) => { if(v==="concluida"){const errors=validateContribution(s);if(errors.length){toast.error(errors[0]);return;}} updateProfSection(s.profissional_id, "status_contribuicao", v); }} disabled={!canEditContribution(s)}>
                           <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="nao_iniciada">Não Iniciada</SelectItem>
@@ -1658,6 +1673,12 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                       </div>
                     </div>
                     <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Motivo da Alta *</Label>
+                      <Select disabled={formReadOnly} value={motivoAlta} onValueChange={setMotivoAlta}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{MOTIVOS_ALTA.map(m=><SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent></Select>
+                      <Label className="text-xs">Detalhes do motivo</Label>
+                      <Textarea disabled={formReadOnly} value={motivoDetalhe} onChange={e=>setMultiMotivoDetalhe(e.target.value)} rows={2}/>
+                    </div>
+                    <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <Label className="text-xs font-semibold">Resumo Consolidado Final (Editável)</Label>
                         <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={generateMultiSummary}>
@@ -1688,6 +1709,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
                     <Separator className="my-2" />
                     <div className="text-[10px] bg-muted p-2 rounded-lg text-muted-foreground">
                       Status: <strong className="text-foreground">{validateMulti().length === 0 ? "Pronto para Emitir" : "Incompleto"}</strong>
+                      {validateMulti().map((err,i)=><p key={i} className="mt-1">{err}</p>)}
                     </div>
                   </CardContent>
                 </Card>
