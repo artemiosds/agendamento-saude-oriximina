@@ -174,6 +174,27 @@ const ModuleRoute: React.FC<{
 }> = ({ children, modulo, masterOnly = false }) => {
   const { user } = useAuth();
   const { can, loading } = usePermissions();
+  // Somente a alta conserva o formulário em memória durante revalidação da
+  // MESMA identidade/unidade/perfil. Oculta a tela até a decisão atual.
+  // Uma revogação efetiva ou troca de contexto continua desmontando a página.
+  const altaScope = modulo === 'relatorio_alta' && user?.id && user.ativo
+    ? JSON.stringify([user.id, user.unidadeId, user.role]) : null;
+  const altaAllowed = !!altaScope && (!masterOnly || user?.role?.toLowerCase().trim() === 'master') &&
+    (user?.role?.toLowerCase().trim() === 'master' || can(modulo, 'can_view'));
+  const lastAltaAllowed = React.useRef<string | null>(null);
+  React.useLayoutEffect(() => {
+    if (!loading) lastAltaAllowed.current = altaAllowed ? altaScope : null;
+    else if (lastAltaAllowed.current !== altaScope) lastAltaAllowed.current = null;
+  }, [loading, altaScope, altaAllowed]);
+
+  if (modulo === 'relatorio_alta') {
+    if (loading && (!altaScope || lastAltaAllowed.current !== altaScope)) return <PageLoader />;
+    if (!loading && !altaAllowed) return <AccessDenied />;
+    return <>
+      <div key={altaScope} hidden={loading} aria-hidden={loading || undefined} style={loading ? { display: 'none' } : undefined}>{children}</div>
+      {loading && <PageLoader />}
+    </>;
+  }
 
   // Aguarda permissões carregarem antes de decidir
   if (loading) return <PageLoader />;
