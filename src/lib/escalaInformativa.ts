@@ -71,3 +71,44 @@ export function distribuirRegistros(rows: RegistroEscala[], days: Date[]) {
   }
   return result;
 }
+
+
+/** Accounting only: the displayed intervals are never changed in the Agenda. */
+export function summarizeEscalaDay(entries: readonly {personId:string;hours:string;minutes:number}[]) {
+  const byPerson = new Map<string, {start:number;end:number;index:number}[]>();
+  const conflicts = new Set<number>();
+  let rawMinutes = 0, invalid = 0, uniqueMinutes = 0;
+  entries.forEach((entry,index) => {
+    if (entry.minutes === 0 && !entry.hours) return;
+    const intervals = entry.hours.split(',').map(part => {
+      const m = /^\s*(\d{2}:\d{2})\s*[–-]\s*(\d{2}:\d{2})\s*$/.exec(part);
+      if (!m) return null;
+      const valid = (t:string) => /^(?:[01]\d|2[0-3]):[0-5]\d$|^24:00$/.test(t);
+      if (!valid(m[1]) || !valid(m[2])) return null;
+      const start = minutesEscala(m[1]), end = minutesEscala(m[2]);
+      return end > start ? {start,end,index} : null;
+    });
+    if (!entry.personId || !Number.isFinite(entry.minutes) || entry.minutes < 0 ||
+        intervals.some(interval => interval === null) ||
+        intervals.reduce((sum, interval) => sum + (interval ? interval.end-interval.start : 0), 0) !== entry.minutes) {
+      invalid++; return;
+    }
+    rawMinutes += entry.minutes;
+    const list = byPerson.get(entry.personId) ?? [];
+    for (const interval of intervals) if (interval) list.push(interval);
+    byPerson.set(entry.personId, list);
+  });
+  for (const list of byPerson.values()) {
+    list.sort((a,b) => a.start-b.start || a.end-b.end);
+    let end = 0;
+    for (let i=0;i<list.length;i++) {
+      const current=list[i];
+      uniqueMinutes += Math.max(0,current.end-Math.max(end,current.start));
+      end=Math.max(end,current.end);
+      for(let j=i+1;j<list.length && list[j].start<current.end;j++) {
+        conflicts.add(current.index); conflicts.add(list[j].index);
+      }
+    }
+  }
+  return {uniqueMinutes,rawMinutes,overlapMinutes:rawMinutes-uniqueMinutes,conflicts,invalid};
+}
