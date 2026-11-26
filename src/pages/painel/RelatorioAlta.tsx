@@ -410,6 +410,7 @@ const RelatorioAlta: React.FC = () => {
 
   const [reportId, setReportId] = useState<string | null>(null);
   const [reportOwnerId, setReportOwnerId] = useState("");
+  const [reportOwnerName,setReportOwnerName] = useState("");
   const [ptsMetas, setPtsMetas] = useState<MetaPTS[]>([]);
   const [loading, setLoading] = useState(false);
   const activePatientRef = React.useRef("");
@@ -470,7 +471,7 @@ const RelatorioAlta: React.FC = () => {
     lastAutosaveAttempt.current=null;setAutosaveFailed(false);
     setConflict(false);
     setReportId(null);
-    setReportOwnerId("");
+    setReportOwnerId("");setReportOwnerName("");
     setStatus("rascunho");
     setVersion(1);
     setHistory([]);
@@ -746,6 +747,7 @@ const RelatorioAlta: React.FC = () => {
       if (existingDraft) {
         setReportId(existingDraft.id);
         setReportOwnerId(existingDraft.profissional_id || "");
+        setReportOwnerName(existingDraft.profissional_nome||"");
         setStatus(existingDraft.status as any || "rascunho");
         const data = parseAltaPayload(existingDraft.observacoes);
         revisionRef.current = { id: existingDraft.id, unitId:existingDraft.unidade_id, updated: existingDraft.atualizado_em ?? null, status: existingDraft.status ?? null, payload: data };
@@ -845,6 +847,7 @@ const RelatorioAlta: React.FC = () => {
       if (existingDraft) {
         setReportId(existingDraft.id);
         setReportOwnerId(existingDraft.profissional_id || "");
+        setReportOwnerName(existingDraft.profissional_nome||"");
         setStatus(existingDraft.status as any || "rascunho");
         const data = parseAltaPayload(existingDraft.observacoes);
         revisionRef.current = { id: existingDraft.id, unitId:existingDraft.unidade_id, updated: existingDraft.atualizado_em ?? null, status: existingDraft.status ?? null, payload: data };
@@ -1016,16 +1019,25 @@ const RelatorioAlta: React.FC = () => {
   const allowIndMetasNotApplicable = manualSource ? manualSource.pts==="sem_pts" : !sourceMeta?.ptsId && ptsMetas.length === 0;
   const displayIndSessoes = manualSource ? (manualCount(manualSource.sessoes) ?? "—") : indSessoes;
   const displayIndFaltas = manualSource ? (manualCount(manualSource.faltas) ?? "—") : indFaltas;
+  const validateAltaReason = (motivo:string,tipo:string,detalhe:string):string[] => {
+    if (!motivo||!tipo) return [];
+    if (!MOTIVOS_ALTA.some(m=>m.value===motivo)||!TIPOS_ALTA.some(t=>t.value===tipo)) return ["Revise o motivo e o tipo de alta registrados."];
+    const related:Record<string,string>={objetivos_atingidos:"terapeutica",infrequencia:"abandono",administrativa:"administrativa",transferencia:"transferencia",encaminhamento:"encaminhamento",obito:"obito"};
+    if ((motivo==="outro"||tipo==="outro"||(related[motivo]&&related[motivo]!==tipo)||(tipo==="obito"&&motivo!=="obito"))&&!detalhe.trim()) return ["Informe os detalhes para justificar o motivo e o tipo de alta selecionados."];
+    return [];
+  };
+  const localAltaToday = new Date().toLocaleDateString("sv-SE",{timeZone:"America/Fortaleza"});
   const validateMulti = (): string[] => {
     const errors: string[] = [];
     if (!pacienteId) errors.push("Selecione um paciente");
     if (!motivoAlta) errors.push("Selecione o motivo da alta");
     if (!multiTipoAlta) errors.push("Selecione o tipo de alta");
+    errors.push(...validateAltaReason(motivoAlta,multiTipoAlta,motivoDetalhe));
     if (!nivelIndep) errors.push("Selecione o nível de independência");
     if (modalidades.length === 0) errors.push("Selecione pelo menos uma modalidade");
     if (!multiResumoConsolidado.trim()) errors.push("Informe o resumo final consolidado");
     
-    if (!isValidAltaDate(dataAlta)) errors.push("Informe uma data de alta válida");
+    if (!isValidAltaDate(dataAlta)||dataAlta>localAltaToday) errors.push("Informe uma data de alta válida, sem data futura");
     if (!profSections.length) errors.push("Nenhuma contribuição profissional identificada");
     if (manualTeam&&(!manualTeam.motivo.trim()||!manualTeam.equipeConfirmada)) errors.push("Justifique a fonte manual e confirme a equipe completa.");
     const pending = profSections.filter(s => !isContributionComplete(s));
@@ -1043,11 +1055,12 @@ const RelatorioAlta: React.FC = () => {
     if (!pacienteId) errors.push("Selecione um paciente");
     if (!indMotivo) errors.push("Selecione o motivo da alta");
     if (!indTipoAlta) errors.push("Selecione o tipo de alta");
+    errors.push(...validateAltaReason(indMotivo,indTipoAlta,indMotivoDet));
     if (!indEvolucao.trim()) errors.push("A evolução clínica é obrigatória");
     if (!indOrientacoes.trim()) errors.push("Orientações de alta são obrigatórias");
     if (!indDiagClinico.trim()) errors.push("Diagnóstico clínico é obrigatório");
     if (!indResumoConsolidado.trim()) errors.push("O resumo final consolidado é obrigatório");
-    if (!isValidAltaDate(indDataAlta)) errors.push("Informe uma data de alta válida");
+    if (!isValidAltaDate(indDataAlta)||indDataAlta>localAltaToday) errors.push("Informe uma data de alta válida, sem data futura");
     if (!isValidAltaDate(indPeriodoInicio) || !isValidAltaDate(indPeriodoFim)) errors.push("Informe as datas válidas de início e fim do acompanhamento");
     else if (indPeriodoInicio > indPeriodoFim || (isValidAltaDate(indDataAlta) && indPeriodoFim > indDataAlta)) errors.push("O início deve ser anterior ou igual ao fim do acompanhamento, e o fim não pode ser posterior à alta");
     if (!indModalidade) errors.push("Selecione a modalidade de acompanhamento");
@@ -1352,10 +1365,12 @@ const RelatorioAlta: React.FC = () => {
   const buildIndPrintBody = (): string => {
     const p = paciente;
     if (!p) return "";
-    const func = funcionarios.find(f => f.id === user?.id);
-    const profNome = user?.nome || "";
-    const profissao = func?.profissao || user?.cargo || "";
-    const conselho = func ? `${func.tipoConselho} ${func.numeroConselho}/${func.ufConselho}` : "";
+    const identity=revisionRef.current?.payload.altaProfessionalIdentity;
+    const historical=identity && identity.profissional_id===reportOwnerId &&
+      typeof identity.nome==="string" && typeof identity.profissao==="string" && typeof identity.conselho==="string" ? identity : null;
+    const profNome = historical?.nome || reportOwnerName || "Não identificado no registro original";
+    const profissao = historical?.profissao || "Não registrada na versão original";
+    const conselho = historical?.conselho || "Não registrado na versão original";
 
     const motivoLabel = MOTIVOS_ALTA.find(m => m.value === indMotivo)?.label || indMotivo;
     const tipoAltaLabel = TIPOS_ALTA.find(t => t.value === indTipoAlta)?.label || indTipoAlta;
@@ -1576,7 +1591,8 @@ const RelatorioAlta: React.FC = () => {
     let updatedHistory = [...history, newHistoryEntry];
 
     const draftPayload = buildDraftPayload(type, signedSections);
-    let payload: Record<string,any> = { ...revisionRef.current?.payload, ...draftPayload, version: newVersion, history: updatedHistory, ...(!isDraft?{altaEvolutionV1:liveEvolution}:{}) };
+    const professionalIdentity = type==="individual"&&!isDraft ? {altaProfessionalIdentity:{profissional_id:user.id,nome:user.nome||"",profissao:user.profissao||user.cargo||"",conselho:[user.tipoConselho,user.numeroConselho,user.ufConselho].filter(Boolean).join(" "),registrado_em:actionDate}} : {};
+    let payload: Record<string,any> = { ...revisionRef.current?.payload, ...draftPayload, ...professionalIdentity, version: newVersion, history: updatedHistory, ...(!isDraft?{altaEvolutionV1:liveEvolution}:{}) };
     let mergedSections: ProfSection[] | null = null;
 
     const targetStatus = customStatus || (isDraft ? "rascunho" : "concluido");
@@ -1695,7 +1711,7 @@ const RelatorioAlta: React.FC = () => {
       if (mergedSections) toast.info("Contribuições independentes conciliadas sem substituir o trabalho da equipe.");
       if (!automatic) toast.success(signedSections ? "Contribuição registrada e rascunho salvo" : isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta atualizado");
       setStatus(targetStatus as any);
-      if (!targetReportId) setReportOwnerId(user.id);
+      if (!targetReportId) {setReportOwnerId(user.id);setReportOwnerName(user.nome||"");}
       setLastUpdatedBy(user.nome || "");
       setLastUpdatedAt(result.data.atualizado_em || actionDate);
       setVersion(newVersion);
@@ -1727,7 +1743,7 @@ const RelatorioAlta: React.FC = () => {
   // Never create a report automatically or persist PHI in browser storage.
   const autoDraftType = modo==="multiprofissional"?"multi":modo==="individual"?"individual":null;
   const autoDatesReady = !!autoDraftType && isValidAltaDate(autoDraftType==="multi"?dataAlta:indDataAlta) && (!sourceMeta || ((autoDraftType==="multi"?dataAlta:indDataAlta)===sourceMeta.through && (autoDraftType==="multi" || (indPeriodoInicio===sourceMeta.periodStart && indPeriodoFim===sourceMeta.periodEnd))));
-  const autoReady = !!reportId && !!autoDraftType && hasUnsavedChanges && !formReadOnly && !conflict && !awaitingSources && autoDatesReady && (!manualSource || !!manualSource.motivo.trim()) && !correctionTarget && !isReopening;
+  const autoReady = !!reportId && !!autoDraftType && hasUnsavedChanges && !formReadOnly && !conflict && !awaitingSources && autoDatesReady && (!manualTeam || (!!manualTeam.motivo.trim()&&manualTeam.equipeConfirmada&&profSections.length>0)) && (!manualSource || !!manualSource.motivo.trim()) && !correctionTarget && !isReopening;
   const autoSaveRef = React.useRef(handleSave);
   React.useLayoutEffect(()=>{autoSaveRef.current=handleSave;});
   useEffect(()=>{
