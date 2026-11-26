@@ -128,7 +128,7 @@ const altaPrintText = (s?: string) => escapeAlta(s);
 const fmt = (d: string) => {
   if (!d) return "—";
   if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return altaDateLabel(d);
-  try { return new Date(d).toLocaleDateString("pt-BR"); } catch { return "—"; }
+  try { const parsed=new Date(d);return Number.isFinite(parsed.getTime())?parsed.toLocaleDateString("pt-BR"):"—"; } catch { return "—"; }
 };
 
 const fmtDateTime = (d: string) => {
@@ -340,7 +340,7 @@ const RelatorioAlta: React.FC = () => {
   const isReportLocked = status !== "rascunho";
   const [loadFailed,setLoadFailed] = useState(false);
   const savingRef = React.useRef(false);
-  const revisionRef = React.useRef<{ id: string; updated: string | null; status: string | null; payload: Record<string, any> } | null>(null);
+  const revisionRef = React.useRef<{ id: string; unitId: string; updated: string | null; status: string | null; payload: Record<string, any> } | null>(null);
   const [conflict,setConflict] = useState(false);
   const [savedSnapshot,setSavedSnapshot] = useState<string | null>(null);
   const loadedSnapshotPending = React.useRef(false);
@@ -348,7 +348,9 @@ const RelatorioAlta: React.FC = () => {
   const [sourceScope,setSourceScope] = useState("");
   const [sourcePts,setSourcePts] = useState("");
   const [sourceMeta,setSourceMeta] = useState<AltaSourceMeta|null>(null);
-  const formReadOnly = isReportLocked || loading || loadFailed || !pacienteId;
+  const [loadedScope,setLoadedScope] = useState<{userId:string;unitId:string;patientId:string;mode:ModoRelatorio}|null>(null);
+  const scopeMatches=!!loadedScope&&loadedScope.userId===user?.id&&loadedScope.unitId===user?.unidadeId&&loadedScope.patientId===pacienteId&&loadedScope.mode===modo;
+  const formReadOnly = isReportLocked || loading || loadFailed || !pacienteId || !scopeMatches;
   const awaitingSources=!!sourceBundle&&!reportId&&!sourceMeta;
   const isAltaMode=modo==="individual"||modo==="multiprofissional";
   const evolutionThrough=modo==="multiprofissional"?dataAlta:indDataAlta;
@@ -376,6 +378,7 @@ const RelatorioAlta: React.FC = () => {
 
   const resetReportTracking = () => {
     revisionRef.current = null;
+    setLoadedScope(null);
     setSourceBundle(null);setSourceScope("");setSourcePts("");setSourceMeta(null);
     loadedSnapshotPending.current = false;
     setSavedSnapshot(null);
@@ -477,7 +480,7 @@ const RelatorioAlta: React.FC = () => {
   };
 
   const handlePacienteChange = (nextId: string) => {
-    if (nextId === pacienteId || savingRef.current) return;
+    if ((nextId === pacienteId && scopeMatches) || savingRef.current) return;
     if (hasUnsavedChanges && !window.confirm("Há alterações não salvas. Deseja descartá-las e trocar de paciente?")) return;
     setLoadFailed(false);
     reportLoadTokenRef.current += 1;
@@ -486,6 +489,7 @@ const RelatorioAlta: React.FC = () => {
     resetMultiForm();
     resetIndividualForm();
     setPacienteId(nextId);
+    if(nextId===pacienteId&&nextId){const token=++reportLoadTokenRef.current;setLoading(true);if(modo==="multiprofissional")void loadMultiData(nextId,token);else if(modo==="individual")void loadIndividualData(nextId,token);}
   };
 
   /* ── carga protegida por paciente/modo ─── */
@@ -636,24 +640,28 @@ const RelatorioAlta: React.FC = () => {
     if (!user?.id) return;
     setLoading(true);
     try {
+      if(!user.unidadeId)throw new Error("Selecione uma unidade para consultar ou elaborar o relatório de alta.");
       const { data: existingDraft, error: loadError } = await supabase
         .from("prontuarios")
         .select("*")
         .eq("paciente_id", pid)
+        .eq("unidade_id",user.unidadeId)
         .eq("tipo_registro", "alta_multiprofissional")
-        .order("atualizado_em", { ascending: false })
+        .order("atualizado_em", { ascending: false, nullsFirst:false })
+        .order("id", { ascending:false })
         .limit(1)
         .maybeSingle();
 
       if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
       if (loadError) throw loadError;
+      setLoadedScope({userId:user.id,unitId:user.unidadeId,patientId:pid,mode:modo});
 
       if (existingDraft) {
         setReportId(existingDraft.id);
         setReportOwnerId(existingDraft.profissional_id || "");
         setStatus(existingDraft.status as any || "rascunho");
         const data = parseAltaPayload(existingDraft.observacoes);
-        revisionRef.current = { id: existingDraft.id, updated: existingDraft.atualizado_em ?? null, status: existingDraft.status ?? null, payload: data };
+        revisionRef.current = { id: existingDraft.id, unitId:existingDraft.unidade_id, updated: existingDraft.atualizado_em ?? null, status: existingDraft.status ?? null, payload: data };
         setSourceMeta(data.altaSourceMeta && typeof data.altaSourceMeta === "object" ? data.altaSourceMeta : null);
         
         setModalidades(data.modalidades || []);
@@ -722,26 +730,30 @@ const RelatorioAlta: React.FC = () => {
     if (!user?.id) return;
     setLoading(true);
     try {
+      if(!user.unidadeId)throw new Error("Selecione uma unidade para consultar ou elaborar o relatório de alta.");
       // 1. Carrega o relatório mais recente, independentemente do status.
       const { data: existingDraft, error: loadError } = await supabase
         .from("prontuarios")
         .select("*")
         .eq("paciente_id", pid)
+        .eq("unidade_id",user.unidadeId)
         .eq("profissional_id", user.id)
         .eq("tipo_registro", "alta_individual")
-        .order("atualizado_em", { ascending: false })
+        .order("atualizado_em", { ascending: false, nullsFirst:false })
+        .order("id", { ascending:false })
         .limit(1)
         .maybeSingle();
 
       if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
       if (loadError) throw loadError;
+      setLoadedScope({userId:user.id,unitId:user.unidadeId,patientId:pid,mode:modo});
 
       if (existingDraft) {
         setReportId(existingDraft.id);
         setReportOwnerId(existingDraft.profissional_id || "");
         setStatus(existingDraft.status as any || "rascunho");
         const data = parseAltaPayload(existingDraft.observacoes);
-        revisionRef.current = { id: existingDraft.id, updated: existingDraft.atualizado_em ?? null, status: existingDraft.status ?? null, payload: data };
+        revisionRef.current = { id: existingDraft.id, unitId:existingDraft.unidade_id, updated: existingDraft.atualizado_em ?? null, status: existingDraft.status ?? null, payload: data };
         setSourceMeta(data.altaSourceMeta && typeof data.altaSourceMeta === "object" ? data.altaSourceMeta : null);
         // Load all data from draft
         setIndDiagCid(data.diagCid || "");
@@ -814,11 +826,11 @@ const RelatorioAlta: React.FC = () => {
   const userRoleNorm = String(user?.role || "").toLowerCase().trim();
   const canManageOtherContribution = ["master", "gestao", "gestão", "coordenador"].includes(userRoleNorm);
   const canReopenReport =
-    !!reportId &&
+    scopeMatches && !!reportId &&
     (modo === "individual" || reportOwnerId === user?.id || canManageOtherContribution);
 
   const canEditContribution = (section: ProfSection) =>
-    !formReadOnly &&
+    !formReadOnly && !awaitingSources &&
     section.status_contribuicao !== "assinada" &&
     (section.profissional_id === user?.id || canManageOtherContribution);
 
@@ -909,7 +921,7 @@ const RelatorioAlta: React.FC = () => {
   };
 
   const handleReopen = async () => {
-    if (loading || loadFailed || savingRef.current || conflict) return;
+    if (loading || loadFailed || savingRef.current || conflict || !scopeMatches) return;
     const reason = reopenReason.trim();
     if (!reason) { toast.error("Informe o motivo da reabertura"); return; }
     if (!reportId || !pacienteId || !user?.id) {
@@ -928,9 +940,10 @@ const RelatorioAlta: React.FC = () => {
       // acidentalmente na tela enquanto o documento estava finalizado.
       const { data: persisted, error: readError } = await supabase
         .from("prontuarios")
-        .select("id, paciente_id, profissional_id, tipo_registro, observacoes, status, atualizado_em")
+        .select("id, paciente_id, profissional_id, unidade_id, tipo_registro, observacoes, status, atualizado_em")
         .eq("id", reportId)
         .eq("paciente_id", pacienteId)
+        .eq("unidade_id",user.unidadeId)
         .maybeSingle();
       if (readError) throw readError;
       if (!persisted) throw new Error("Relatório não encontrado ou não pertence ao paciente selecionado.");
@@ -941,7 +954,7 @@ const RelatorioAlta: React.FC = () => {
       }
 
       const revision = revisionRef.current;
-      if (!revision || revision.id !== persisted.id || revision.updated !== (persisted.atualizado_em ?? null) || revision.status !== persisted.status || persisted.status === "rascunho") {
+      if (!revision || revision.id !== persisted.id || revision.unitId!==persisted.unidade_id || revision.updated !== (persisted.atualizado_em ?? null) || revision.status !== persisted.status || persisted.status === "rascunho") {
         setConflict(true);
         throw new Error("O relatório foi modificado por outra operação. Recarregue antes de reabrir.");
       }
@@ -976,6 +989,7 @@ const RelatorioAlta: React.FC = () => {
         })
         .eq("id", reportId)
         .eq("paciente_id", pacienteId)
+        .eq("unidade_id",user.unidadeId)
         .eq("tipo_registro", expectedType);
       reopenQuery = persisted.status === null ? reopenQuery.is("status", null) : reopenQuery.eq("status", persisted.status);
       reopenQuery = revision.updated === null ? reopenQuery.is("atualizado_em", null) : reopenQuery.eq("atualizado_em", revision.updated);
@@ -983,7 +997,7 @@ const RelatorioAlta: React.FC = () => {
       const { data: reopened, error: updateError } = await reopenQuery.select("id,atualizado_em,status").maybeSingle();
       if (updateError) throw updateError;
       if (!reopened) { setConflict(true); throw new Error("O relatório mudou durante a reabertura. Nenhum dado foi alterado."); }
-      revisionRef.current = { id: reopened.id, updated: reopened.atualizado_em ?? null, status: reopened.status ?? null, payload: updatedPayload };
+      revisionRef.current = { id: reopened.id, unitId: persisted.unidade_id, updated: reopened.atualizado_em ?? null, status: reopened.status ?? null, payload: updatedPayload };
       setLastUpdatedAt(reopened.atualizado_em || actionDate);
       setLastUpdatedBy(user.nome || "");
 
@@ -1227,7 +1241,7 @@ const RelatorioAlta: React.FC = () => {
   };
 
   const handlePrint = (type: "multi" | "individual") => {
-    if (!pacienteId || !reportId || !isReportLocked || loading || loadFailed || conflict) return;
+    if (!pacienteId || !reportId || !isReportLocked || loading || loadFailed || conflict || !scopeMatches || revisionRef.current?.unitId!==user?.unidadeId) return;
     if (!paciente || paciente.id!==pacienteId || revisionRef.current?.id!==reportId) {toast.error("Não foi possível conferir a identificação do relatório. Recarregue antes de imprimir.");return;}
     const body=type==="multi"?buildMultiPrintBody():buildIndPrintBody();
     const title=type==="multi"?"Relatório de Alta — Multiprofissional":"Relatório de Alta — Individual";
@@ -1317,8 +1331,8 @@ const RelatorioAlta: React.FC = () => {
   };
 
   const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any, signedSections?: ProfSection[]) => {
-    if (savingRef.current || loading || loadFailed || conflict) return;
-    if (!pacienteId || !user?.id) { toast.error("Selecione um paciente"); return; }
+    if (savingRef.current || loading || loadFailed || conflict || !scopeMatches) return;
+    if (!pacienteId || !user?.id || !user.unidadeId) { toast.error("Selecione um paciente"); return; }
     if (!reportId && (!sourceBundle || !sourceMeta)) { toast.error("Confirme as fontes clínicas antes de salvar o novo relatório."); return; }
     if (!reportId && sourceBundle && sourceMeta && (sourceMeta.unitId!==user.unidadeId || sourceBundle.patientId!==pacienteId || (type==="individual"&&sourceBundle.professionalId!==user.id))) { toast.error("O contexto da fonte mudou. Selecione novamente o paciente."); return; }
     if (sourceMeta && (type==="multi"?dataAlta:indDataAlta)!==sourceMeta.through) { toast.error("A data de alta foi alterada. Confira a data de referência das fontes antes de salvar."); return; }
@@ -1379,6 +1393,7 @@ const RelatorioAlta: React.FC = () => {
         .from("prontuarios")
         .select("id")
         .eq("paciente_id", pacienteId)
+        .eq("unidade_id",user.unidadeId)
         .eq("tipo_registro", record.tipo_registro)
         .order("atualizado_em", { ascending: false })
         .limit(1);
@@ -1397,7 +1412,7 @@ const RelatorioAlta: React.FC = () => {
 
     if (targetReportId) {
       const revision = revisionRef.current;
-      if (!revision || revision.id !== targetReportId || revision.status !== "rascunho") {
+      if (!revision || revision.id !== targetReportId || revision.unitId!==user.unidadeId || revision.status !== "rascunho") {
         setConflict(true);
         toast.error("A revisão do relatório não corresponde ao rascunho carregado.");
         return;
@@ -1408,6 +1423,7 @@ const RelatorioAlta: React.FC = () => {
         .update(changes)
         .eq("id", targetReportId)
         .eq("paciente_id", pacienteId)
+        .eq("unidade_id",user.unidadeId)
         .eq("tipo_registro", record.tipo_registro)
         .eq("status", "rascunho");
       if (type === "individual") updateQuery = updateQuery.eq("profissional_id", user.id);
@@ -1433,7 +1449,7 @@ const RelatorioAlta: React.FC = () => {
     if (result.error || !result.data?.id) {
       toast.error("Não foi possível confirmar o salvamento: " + (result.error?.message || "registro não retornado"));
     } else {
-      revisionRef.current = { id: result.data.id, updated: result.data.atualizado_em ?? null, status: result.data.status ?? null, payload };
+      revisionRef.current = { id: result.data.id, unitId:user.unidadeId, updated: result.data.atualizado_em ?? null, status: result.data.status ?? null, payload };
       if (signedSections) setProfSections(signedSections);
       setSavedSnapshot(snapshot(type, signedSections));
       toast.success(signedSections ? "Contribuição registrada e rascunho salvo" : isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta atualizado");
@@ -1465,6 +1481,10 @@ const RelatorioAlta: React.FC = () => {
     }
   };
 
+  const scopeInvalidated=!!pacienteId&&!!loadedScope&&!scopeMatches;
+  if(scopeInvalidated){
+    return <div className="clinical-premium p-4 space-y-3"><Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Contexto de acesso alterado</AlertTitle><AlertDescription>A unidade ou o profissional ativo mudou. O relatório anterior não será exibido, impresso nem gravado neste contexto.</AlertDescription></Alert><Button type="button" variant="outline" disabled={savingRef.current} onClick={()=>{if(hasUnsavedChanges&&!window.confirm("Existem alterações não salvas. Descartá-las e retornar à seleção?"))return;handlePacienteChange("");setModo("selector");}}>Retornar à seleção</Button></div>;
+  }
   const sourceDatesChanged = !!sourceMeta && ((modo==="multiprofissional"?dataAlta:indDataAlta)!==sourceMeta.through || (modo==="individual"&&(indPeriodoInicio!==sourceMeta.periodStart||indPeriodoFim!==sourceMeta.periodEnd)));
   const hasSignedContribution=profSections.some(s=>s.status_contribuicao==="assinada");
   const recountAltaSources=async()=>{
