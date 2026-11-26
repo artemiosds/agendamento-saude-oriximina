@@ -1285,17 +1285,20 @@ const FilaEspera: React.FC = () => {
 
   return (
     <div className="space-y-3 min-w-0">
-      <header className="clinical-hub-hero flex flex-col xl:flex-row xl:items-center justify-between gap-3">
-        <div className="flex-1 min-w-0">
+      <header className="clinical-hub-hero flex flex-wrap items-center gap-3">
+        <span className="clinical-patient-avatar flex items-center justify-center shrink-0" aria-hidden="true"><Users className="w-5 h-5" /></span>
+        <div className="flex-1 min-w-[9rem]">
           <p className="clinical-hub-eyebrow">Regulação e acesso assistencial</p>
-          <h1 className="clinical-hub-name text-xl sm:text-2xl font-bold font-display">Fila de Espera</h1>
-          <p className="clinical-patient-sub text-sm mt-0.5">Demanda, oferta de vagas e acompanhamento da fila.</p>
+          <h1 className="clinical-hub-name text-xl font-bold font-display">Fila de Espera</h1>
+          <p className="clinical-patient-sub text-xs mt-1">Demanda, oferta de vagas e acompanhamento da fila.</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap w-full xl:w-auto xl:justify-end">
           {canManage && (
             <>
               <Button
+                type="button"
                 variant="outline"
+                className="h-auto min-h-10 flex-1 xl:flex-none whitespace-normal border-white/40 bg-[#19465e] text-white hover:bg-[#245b70] hover:text-white shadow-none focus-visible:ring-white focus-visible:ring-offset-0"
                 onClick={() => {
                   setImportForm({
                     nome: "",
@@ -1327,7 +1330,9 @@ const FilaEspera: React.FC = () => {
                 Importar Lista Antiga
               </Button>
               <Button
+                type="button"
                 variant="outline"
+                className="h-auto min-h-10 flex-1 xl:flex-none whitespace-normal border-white/40 bg-[#19465e] text-white hover:bg-[#245b70] hover:text-white shadow-none focus-visible:ring-white focus-visible:ring-offset-0"
                 onClick={() => {
                   setManualSlot({ data: "", hora: "", profissionalId: "", unidadeId: "" });
                   setManualCallDialog(true);
@@ -1336,7 +1341,7 @@ const FilaEspera: React.FC = () => {
                 <ArrowRight className="w-4 h-4 mr-2" />
                 Ofertar próxima vaga
               </Button>
-              <Button onClick={openNew} className="gradient-primary text-primary-foreground">
+              <Button type="button" onClick={openNew} className="clinical-hub-new h-auto min-h-10 flex-1 xl:flex-none whitespace-normal font-semibold">
                 <UserPlus className="w-4 h-4 mr-2" />
                 Adicionar à Fila
               </Button>
@@ -1356,9 +1361,9 @@ const FilaEspera: React.FC = () => {
             onClick={() => setFilterStatus(item.status)}
             className={cn("clinical-premium text-left p-3 min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
               filterStatus === item.status && "ring-2 ring-primary/60")}>
-            <span className="block text-xs font-medium text-muted-foreground">{item.label}</span>
-            <span className="block text-2xl font-bold tabular-nums text-foreground">{item.count}</span>
-            <span className="block text-[10px] text-muted-foreground">Filtrar registros</span>
+            <span className="block text-xs font-semibold clinical-field-label">{item.label}</span>
+            <span className="block text-2xl font-bold tabular-nums text-[var(--cp-blue)]">{item.count}</span>
+            <span className="block text-xs clinical-field-label">Filtrar registros</span>
           </button>
         ))}
       </section>
@@ -1366,22 +1371,23 @@ const FilaEspera: React.FC = () => {
 
       <section aria-label="Filtros da fila" className="clinical-premium p-3 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">Filtros da fila {activeFilterCount > 0 && <span className="text-muted-foreground font-normal">({activeFilterCount} ativos)</span>}</h2>
+          <h2 className="text-sm font-bold">Filtros da fila {activeFilterCount > 0 && <span className="text-muted-foreground font-normal">({activeFilterCount} ativos)</span>}</h2>
           <Button type="button" variant="ghost" size="sm" onClick={clearFilters} disabled={activeFilterCount === 0}>Limpar filtros</Button>
         </div>
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Search className="absolute z-10 pointer-events-none left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--cp-muted)]" aria-hidden="true" />
         <Input
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Pesquisar paciente pelo nome..."
-          className="pl-9"
+          aria-label="Pesquisar paciente pelo nome"
+          className="pl-9 bg-background backdrop-blur-none placeholder:text-muted-foreground"
         />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 items-end gap-2">
-        <div className="space-y-1"><Label htmlFor="fila-unidade" className="text-xs text-muted-foreground">Unidade de saúde</Label>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)] items-end gap-3">
+        <div className="space-y-1 min-w-0"><Label htmlFor="fila-unidade" className="text-xs font-semibold clinical-field-label">Unidade de saúde</Label>
         <Select value={filterUnidade} onValueChange={setFilterUnidade}>
-          <SelectTrigger id="fila-unidade">
+          <SelectTrigger id="fila-unidade" className="min-w-0 text-left text-foreground [&>span]:text-left [&>svg]:shrink-0">
             <SelectValue placeholder="Unidade" />
           </SelectTrigger>
           <SelectContent>
@@ -1393,9 +1399,9 @@ const FilaEspera: React.FC = () => {
             ))}
           </SelectContent>
         </Select></div>
-        <div className="space-y-1"><Label htmlFor="fila-profissional" className="text-xs text-muted-foreground">Profissional</Label>
+        <div className="space-y-1 min-w-0"><Label htmlFor="fila-profissional" className="text-xs font-semibold clinical-field-label">Profissional</Label>
         <Select value={filterProf} onValueChange={(value) => { setFilterProf(value); if (value !== "all") setFilterEspecialidade("all"); }}>
-          <SelectTrigger id="fila-profissional">
+          <SelectTrigger id="fila-profissional" className="min-w-0 text-left text-foreground [&>span]:text-left [&>svg]:shrink-0">
             <SelectValue placeholder="Profissional" />
           </SelectTrigger>
           <SelectContent>
@@ -1408,13 +1414,13 @@ const FilaEspera: React.FC = () => {
             ))}
           </SelectContent>
         </Select></div>
-        <div className="space-y-1">
-          <Label htmlFor="fila-profissao-filter" className="text-xs text-muted-foreground">Profissão / CBO (qualquer profissional)</Label>
+        <div className="space-y-1 min-w-0">
+          <Label htmlFor="fila-profissao-filter" className="text-xs font-semibold clinical-field-label">Profissão / CBO (qualquer profissional)</Label>
           <Select value={filterEspecialidade} onValueChange={(value) => {
             setFilterEspecialidade(value);
             if (value !== "all") setFilterProf("all");
           }}>
-            <SelectTrigger id="fila-profissao-filter">
+            <SelectTrigger id="fila-profissao-filter" className="min-w-0 text-left text-foreground [&>span]:text-left [&>svg]:shrink-0">
               <SelectValue placeholder="Profissão / CBO" />
             </SelectTrigger>
             <SelectContent>
@@ -1426,9 +1432,9 @@ const FilaEspera: React.FC = () => {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1"><Label htmlFor="fila-status" className="text-xs text-muted-foreground">Situação</Label>
+        <div className="space-y-1 min-w-0"><Label htmlFor="fila-status" className="text-xs font-semibold clinical-field-label">Situação</Label>
         <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger id="fila-status">
+          <SelectTrigger id="fila-status" className="min-w-0 text-left text-foreground [&>span]:text-left [&>svg]:shrink-0">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -1447,9 +1453,9 @@ const FilaEspera: React.FC = () => {
             <SelectItem value="cancelado">Cancelado</SelectItem>
           </SelectContent>
         </Select></div>
-        <div className="space-y-1"><Label htmlFor="fila-ordenacao" className="text-xs text-muted-foreground">Ordenar por</Label>
+        <div className="space-y-1 min-w-0"><Label htmlFor="fila-ordenacao" className="text-xs font-semibold clinical-field-label">Ordenar por</Label>
         <Select value={sortField} onValueChange={(v) => setSortField(v as any)}>
-          <SelectTrigger id="fila-ordenacao">
+          <SelectTrigger id="fila-ordenacao" className="min-w-0 text-left text-foreground [&>span]:text-left [&>svg]:shrink-0">
             <SelectValue placeholder="Ordenar por" />
           </SelectTrigger>
           <SelectContent>
