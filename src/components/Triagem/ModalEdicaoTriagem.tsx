@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, X, Save } from "lucide-react";
+import { Loader2, Plus, X, Save, HeartPulse, Activity, ClipboardList, Pill, FileText } from "lucide-react";
 import { MANCHESTER_LEVELS } from "@/lib/manchesterProtocol";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -150,13 +150,16 @@ export const ModalEdicaoTriagem: React.FC<ModalEdicaoTriagemProps> = ({ open, on
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Editar Triagem — {record?.pacienteNome}</DialogTitle>
+      <DialogContent className="max-h-[90dvh] w-[96vw] max-w-3xl overflow-y-auto">
+        <DialogHeader className="clinical-hub-hero pr-8">
+          <p className="clinical-hub-eyebrow">Retificação de registro clínico</p>
+          <DialogTitle className="clinical-hub-name font-display break-words">{record?.pacienteNome || "Editar triagem"}</DialogTitle>
+          <p className="clinical-patient-sub text-xs">Triagem realizada por: {record?.profissionalNome && record.profissionalNome !== "—" ? record.profissionalNome : "Profissional não identificado"}</p>
         </DialogHeader>
 
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="space-y-4">
+          <h3 className="triage-section-title"><HeartPulse className="w-4 h-4" /> 1. Sinais vitais e biometria</h3>
+          <div className="triage-vital-grid grid grid-cols-2 gap-2 sm:grid-cols-3">
             <div>
               <Label>Peso (kg)</Label>
               <Input type="number" step="0.01" value={form.peso} onChange={(e) => setForm((p: any) => ({ ...p, peso: e.target.value }))} />
@@ -191,6 +194,7 @@ export const ModalEdicaoTriagem: React.FC<ModalEdicaoTriagemProps> = ({ open, on
             </div>
           </div>
 
+          <h3 className="triage-section-title"><Activity className="w-4 h-4" /> 2. Dor e classificação de risco</h3>
           <div>
             <Label className="text-sm font-semibold">Escala de Dor (0-10): {form.dor}</Label>
             <Slider value={[form.dor]} onValueChange={(v) => setForm((p: any) => ({ ...p, dor: v[0] }))} max={10} min={0} step={1} className="mt-2" />
@@ -217,6 +221,7 @@ export const ModalEdicaoTriagem: React.FC<ModalEdicaoTriagemProps> = ({ open, on
             </div>
           </div>
 
+          <h3 className="triage-section-title"><ClipboardList className="w-4 h-4" /> 3. Queixa e histórico clínico</h3>
           <div className="space-y-3">
             <div>
               <Label>Queixa Principal</Label>
@@ -228,6 +233,7 @@ export const ModalEdicaoTriagem: React.FC<ModalEdicaoTriagemProps> = ({ open, on
             </div>
           </div>
 
+          <h3 className="triage-section-title"><Activity className="w-4 h-4" /> 4. Avaliação complementar</h3>
           <div>
             <Label className="text-xs font-semibold mb-2 block">Sintomas (30 dias)</Label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
@@ -243,6 +249,7 @@ export const ModalEdicaoTriagem: React.FC<ModalEdicaoTriagemProps> = ({ open, on
             </div>
           </div>
 
+          <h3 className="triage-section-title"><Pill className="w-4 h-4" /> 5. Alergias e medicamentos</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label>Alergias</Label>
@@ -270,6 +277,7 @@ export const ModalEdicaoTriagem: React.FC<ModalEdicaoTriagemProps> = ({ open, on
             </div>
           </div>
 
+          <h3 className="triage-section-title"><FileText className="w-4 h-4" /> 6. Observações e campos personalizados</h3>
           {customConfig.fields.length > 0 && (
             <CustomFieldsRenderer
               fields={customConfig.fields}
@@ -284,9 +292,9 @@ export const ModalEdicaoTriagem: React.FC<ModalEdicaoTriagemProps> = ({ open, on
           </div>
         </div>
 
-        <DialogFooter className="mt-6">
+        <DialogFooter className="triage-action-footer sticky bottom-0 bg-background border-t py-3 gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
-          <Button className="bg-success text-white hover:bg-success/90" onClick={handleSave} disabled={saving}>
+          <Button className="bg-[#075f66] text-white hover:bg-[#064d53] hover:text-white" onClick={handleSave} disabled={saving}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Salvar Alterações
           </Button>
