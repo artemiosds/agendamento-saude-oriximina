@@ -1,4 +1,5 @@
 import DOMPurify from "dompurify";
+import { spaceClinicalSignatureLines, CLINICAL_SIGNATURE_SPACE_MM } from "@/lib/clinicalSignatureSpacing";
 import { buildDocumentShell, type DocumentConfig } from "@/lib/printLayout";
 import { createEmptyOciData, renderOciDocument, type OciTemplateMeta } from "@/lib/ociDocument";
 
@@ -98,8 +99,9 @@ function blankBody(t: BlankTemplate): string {
   doc.body.querySelectorAll("p").forEach(p=>{if(!p.textContent?.trim()&&!p.querySelector(".blank-field,.blank-line,.blank-check"))p.remove();});
   if(/\{\{[^{}]*\}\}/.test(doc.body.textContent||"")) throw new Error("Modelo contém variáveis não resolvidas.");
   const name=t.nome.toLocaleLowerCase("pt-BR");
+  spaceClinicalSignatureLines(doc.body,t.nome);
   const signature=name==="receituário médico padrão"||name==="encaminhamento clínico padrão"
-    ?'<div class="blank-signature"><div class="blank-field">&nbsp;</div><p>Assinatura e carimbo do profissional</p><p>Registro no conselho: ______________________</p></div>':"";
+    ?`<div class="blank-signature" style="margin-top:0;padding-top:${CLINICAL_SIGNATURE_SPACE_MM}mm;break-inside:avoid;page-break-inside:avoid"><div class="blank-field" style="height:0;min-height:0">&nbsp;</div><p>Assinatura e carimbo do profissional</p><p>Registro no conselho: ______________________</p></div>`:"";
   return '<div class="blank-form">'+doc.body.innerHTML+signature+'</div>';
 }
 
