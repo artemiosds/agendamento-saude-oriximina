@@ -1,4 +1,5 @@
 import { examesAgendados } from '@/lib/agendamentoSigtap';
+import { isDiagnosticAppointment, getEffectiveDiagnosticStatus, getDiagnosticStatusLabel } from '@/lib/diagnosticExams';
 import { RadarBalcaoTag } from "@/components/agenda/RadarBalcao";
 import CondicaoBadges from "@/components/CondicaoBadges";
 import React from "react";
@@ -136,6 +137,8 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
   onImprimirFicha,
   onImprimirComprovante,
 }) => {
+  const diagnosticRow = { tipo: ag.tipo, status: ag.status, custom_data: ag.customData };
+  const diagnosticStatus = isDiagnosticAppointment(diagnosticRow) ? getEffectiveDiagnosticStatus(diagnosticRow) : null;
   const badge = tipoInfo || { label: ag.tipo, class: "bg-muted text-muted-foreground", icon: "⚪" };
   const today = todayLocalStr();
   const ehHoje = isSameDay(new Date(`${ag.data}T12:00:00`), new Date());
@@ -332,6 +335,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
          >
            {displayStatusLabel || ag.status}
           </span>
+          {diagnosticStatus && <span className="text-xs px-2 py-1 rounded-full font-medium border border-primary/20 text-primary bg-primary/5" title="Situação técnica do exame; não substitui o status assistencial">Exame: {getDiagnosticStatusLabel(diagnosticStatus)}</span>}
           {ag.googleEventId && (
             <span
               className={cn(
