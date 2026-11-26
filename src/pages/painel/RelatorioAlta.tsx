@@ -201,6 +201,18 @@ function rectifyAltaContribution(sections: ProfSection[], professionalId: string
 
 // Merge only independent changes to the current professional's contribution.
 type AltaDraftSnapshot = {date:string;fields:Record<string,any>};
+type AltaRecoveryPatch = {date?:string;fields:Record<string,any>};
+type AltaRecoveryRow = {id:string;report_id:string|null;base_updated_at:string|null;base_hash:string;changes:AltaRecoveryPatch;atualizado_em:string};
+const altaRecoveryTable = () => (supabase as any).from("alta_recovery_drafts");
+const altaRecoveryHash = async (value:string) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value))),v=>v.toString(16).padStart(2,"0")).join("");
+const buildAltaRecoveryPatch = (base:AltaDraftSnapshot,next:AltaDraftSnapshot):AltaRecoveryPatch => ({
+  ...(base.date!==next.date?{date:next.date}:{}),
+  fields:Object.fromEntries(Object.entries(next.fields).filter(([key,value])=>!sameAltaValue(base.fields[key],value))),
+});
+const recoveryAlreadyApplied = (base:AltaDraftSnapshot,patch:AltaRecoveryPatch) => (!patch.date||patch.date===base.date) &&
+  Object.entries(patch.fields||{}).every(([key,value])=>sameAltaValue(base.fields[key],value));
+const recoveryCompatible = (row:AltaRecoveryRow,baseHash:string,reportId:string|null,revision:string|null) =>
+  row.base_hash===baseHash&&row.report_id===reportId&&(row.base_updated_at===revision||!!row.base_updated_at&&!!revision&&Date.parse(row.base_updated_at)===Date.parse(revision));
 const sameAltaValue = (a:unknown,b:unknown):boolean => {
   if (a === b) return true;
   if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
@@ -424,6 +436,12 @@ const RelatorioAlta: React.FC = () => {
   const [savedSnapshot,setSavedSnapshot] = useState<string | null>(null);
   const lastAutosaveAttempt = React.useRef<string|null>(null);
   const [autosaveFailed,setAutosaveFailed] = useState(false);
+  const [recoveryRows,setRecoveryRows] = useState<AltaRecoveryRow[]>([]);
+  const [recoveryState,setRecoveryState] = useState<"idle"|"saving"|"confirmed"|"error">("idle");
+  const [recoveryChecked,setRecoveryChecked] = useState(false);
+  const recoverySessionRef=React.useRef<{key:string;id:string}|null>(null);
+  const recoveryQueueRef=React.useRef<Promise<void>>(Promise.resolve());
+  const recoveryConfirmedRef=React.useRef<string|null>(null);
   const loadedSnapshotPending = React.useRef(false);
   const [sourceBundle,setSourceBundle] = useState<AltaSourceBundle|null>(null);
   const [sourceScope,setSourceScope] = useState("");
@@ -469,6 +487,7 @@ const RelatorioAlta: React.FC = () => {
     loadedSnapshotPending.current = false;
     setSavedSnapshot(null);
     lastAutosaveAttempt.current=null;setAutosaveFailed(false);
+    setRecoveryRows([]);setRecoveryState("idle");setRecoveryChecked(false);recoverySessionRef.current=null;recoveryConfirmedRef.current=null;
     setConflict(false);
     setReportId(null);
     setReportOwnerId("");setReportOwnerName("");
@@ -1756,6 +1775,175 @@ const RelatorioAlta: React.FC = () => {
     },2500);
     return ()=>window.clearTimeout(timer);
   },[autoReady,autoDraftType,currentSnapshot,reportId]);
+  // Private recovery checkpoints are independent of official persistence.
+  const recoveryScopeKey=scopeMatches&&user?.id&&user.unidadeId&&autoDraftType?JSON.stringify([user.id,user.unidadeId,pacienteId,autoDraftType]):"";
+  const recoveryScopeRef=React.useRef("");
+  const recoveryViewRef=React.useRef({snapshot:currentSnapshot,dirty:hasUnsavedChanges,blocked:formReadOnly||conflict||awaitingSources});
+  React.useLayoutEffect(()=>{recoveryScopeRef.current=recoveryScopeKey;recoveryViewRef.current={snapshot:currentSnapshot,dirty:hasUnsavedChanges,blocked:formReadOnly||conflict||awaitingSources};});
+  useEffect(()=>{
+    if(!recoveryScopeKey||!autoDraftType||!user?.id||!user.unidadeId||!savedSnapshot||loading||permissionsLoading||loadFailed||isReportLocked||recoveryChecked)return;
+    let live=true;
+    const key=recoveryScopeKey;
+    const base:AltaDraftSnapshot=JSON.parse(savedSnapshot);
+    void (async()=>{
+      try{
+        const res=await altaRecoveryTable().select("id,report_id,base_updated_at,base_hash,changes,atualizado_em")
+          .eq("profissional_id",user.id).eq("unidade_id",user.unidadeId).eq("paciente_id",pacienteId).eq("modo",autoDraftType)
+          .order("atualizado_em",{ascending:false}).limit(10);
+        if(!live||recoveryScopeRef.current!==key)return;
+        if(res.error)throw res.error;
+        setRecoveryRows((res.data||[]).filter((row:AltaRecoveryRow)=>row.changes&&row.changes.fields&&typeof row.changes.fields==="object"&&!recoveryAlreadyApplied(base,row.changes)));
+      }catch{if(live&&recoveryScopeRef.current===key)setRecoveryState("error");}
+      finally{if(live&&recoveryScopeRef.current===key)setRecoveryChecked(true);}
+    })();
+    return()=>{live=false;};
+  },[recoveryScopeKey,savedSnapshot,loading,permissionsLoading,loadFailed,isReportLocked,recoveryChecked]);
+  useEffect(()=>{
+    if(!recoveryScopeKey||!autoDraftType||!user?.id||!user.unidadeId||!savedSnapshot||!currentSnapshot||!hasUnsavedChanges||formReadOnly||awaitingSources||!recoveryChecked)return;
+    if(recoveryConfirmedRef.current===currentSnapshot)return;
+    const key=recoveryScopeKey, base=savedSnapshot, next=currentSnapshot;
+    const record=reportId, revision=revisionRef.current?.updated??null;
+    const sessionKey=JSON.stringify([key,record,revision,base]);
+    if(recoverySessionRef.current?.key!==sessionKey)recoverySessionRef.current={key:sessionKey,id:crypto.randomUUID()};
+    const id=recoverySessionRef.current.id;
+    const timer=window.setTimeout(()=>{
+      setRecoveryState("saving");
+      recoveryQueueRef.current=recoveryQueueRef.current.catch(()=>{}).then(async()=>{
+        if(recoveryScopeRef.current!==key)return;
+        try{
+          const hash=await altaRecoveryHash(base);
+          const patch=buildAltaRecoveryPatch(JSON.parse(base),JSON.parse(next));
+          if(recoveryScopeRef.current!==key)return;
+          const res=await altaRecoveryTable().upsert({id,profissional_id:user.id,unidade_id:user.unidadeId,paciente_id:pacienteId,modo:autoDraftType,report_id:record,base_updated_at:revision,base_hash:hash,changes:patch},{onConflict:"id"}).select("id").single();
+          if(res.error||res.data?.id!==id)throw new Error("checkpoint não confirmado");
+          if(recoveryScopeRef.current===key){recoveryConfirmedRef.current=next;setRecoveryState("confirmed");}
+        }catch{if(recoveryScopeRef.current===key)setRecoveryState("error");}
+      });
+    },750);
+    return()=>window.clearTimeout(timer);
+  },[recoveryScopeKey,savedSnapshot,currentSnapshot,hasUnsavedChanges,formReadOnly,awaitingSources,recoveryChecked,reportId]);
+  const restoreAltaRecovery = async (row:AltaRecoveryRow) => {
+    if(formReadOnly||conflict||hasUnsavedChanges||awaitingSources||!savedSnapshot||!recoveryScopeKey||savingRef.current)return;
+    const key=recoveryScopeKey, base=savedSnapshot;
+    try {
+    const hash=await altaRecoveryHash(base);
+    if(recoveryScopeRef.current!==key||savingRef.current||recoveryViewRef.current.dirty||recoveryViewRef.current.blocked||recoveryViewRef.current.snapshot!==base)return;
+    if(!recoveryCompatible(row,hash,reportId,revisionRef.current?.updated??null)){toast.error("A versão original mudou. Consulte os campos e revise manualmente.");return;}
+    const original:AltaDraftSnapshot=JSON.parse(base), patch=row.changes;
+    if(!patch||!patch.fields||typeof patch.fields!=="object"||Array.isArray(patch.fields))throw new Error("Cópia inválida.");
+    const data={...original.fields,...patch.fields};
+    if(Object.keys(patch.fields).some(k=>!Object.prototype.hasOwnProperty.call(original.fields,k))||!sameAltaValue(original.fields.altaSourceMeta,data.altaSourceMeta)||!sameAltaValue(original.fields.altaManualTeam,data.altaManualTeam)){
+      toast.error("As fontes ou a composição da equipe foram alteradas. Revise a cópia manualmente.");return;
+    }
+    if(modo==="multiprofissional"){
+      const previous:ProfSection[]=original.fields.profissionais||[], next:ProfSection[]=data.profissionais||[];
+      if(!Array.isArray(next)||next.length!==previous.length||next.some((s,i)=>s.profissional_id!==previous[i].profissional_id||(!sameAltaValue(s,previous[i])&&(!canEditContribution(previous[i])||s.status_contribuicao==="assinada"||!sameAltaValue(s.retificacoes,previous[i].retificacoes))))){toast.error("A equipe ou uma assinatura foi alterada. Revise a cópia manualmente.");return;}
+    }
+    for(const [field,value] of Object.entries(patch.fields)){
+      const prior=original.fields[field];
+      if(typeof prior==="string"&&typeof value!=="string"||typeof prior==="number"&&typeof value!=="number"||Array.isArray(prior)&&!Array.isArray(value))throw new Error("Campo de recuperação inválido.");
+    }
+    if(patch.date!==undefined&&typeof patch.date!=="string")throw new Error("Data de recuperação inválida.");
+    if(!window.confirm("Restaurar os campos para revisão? Nenhuma versão oficial será substituída automaticamente."))return;
+    if(modo==="multiprofissional"){
+        setModalidades(data.modalidades || []);
+        setCid10(data.cid10 || "");
+        setMultiCid10Secundario(data.multiCid10Secundario || "");
+        setMultiDiagClinico(data.multiDiagClinico || "");
+        setMultiDiagFuncional(data.multiDiagFuncional || "");
+        setMultiContextoBiopsicossocial(data.multiContextoBiopsicossocial || "");
+        setCifFuncoes(data.cifFuncoes || "");
+        setCifAtividades(data.cifAtividades || "");
+        setCifFatores(data.cifFatores || "");
+        setMultiBarreiras(data.multiBarreiras || "");
+        setMultiPotencialidades(data.multiPotencialidades || "");
+        setMultiFatoresContextuais(data.multiFatoresContextuais || "");
+        setMultiObjetivosGerais(data.multiObjetivosGerais || "");
+        setMultiPlanoExecutado(data.multiPlanoExecutado || "");
+        setProfSections(data.profissionais || []);
+        setManualTeam(readManualAltaTeam(data.altaManualTeam));
+        setMotivoAlta(data.motivoAlta || "");
+        setMultiTipoAlta(data.multiTipoAlta || "");
+        setMultiMotivoDetalhe(data.motivoDetalhe || "");
+        setCondicaoFuncional(data.condicaoFuncional || "");
+        setNivelIndep(data.nivelIndep || "");
+        setMultiComparacaoFuncional(data.multiComparacaoFuncional || "");
+        setMultiGanhosPrincipais(data.multiGanhosPrincipais || "");
+        setMultiLimitacoesPersistentes(data.multiLimitacoesPersistentes || "");
+        setMultiRiscoRegressao(data.multiRiscoRegressao || "");
+        setMultiFatoresAlerta(data.multiFatoresAlerta || "");
+        setOrientacoesUsuario(data.orientacoesUsuario || "");
+        setOrientacoesUbs(data.orientacoesUbs || "");
+        setMultiOrientacoesEscola(data.multiOrientacoesEscola || "");
+        setMultiPontosAtencao(data.multiPontosAtencao || "");
+        setEncaminhamentos(data.encaminhamentos || []);
+        setFreqAps(data.freqAps || "");
+        setMultiContinuarTerapia(data.multiContinuarTerapia || "");
+        setMultiPrazoRetorno(data.multiPrazoRetorno || "");
+        setMultiResponsavelTecnico(data.multiResponsavelTecnico || "");
+        setMultiResumoConsolidado(data.resumoConsolidado || "");
+
+      setDataAlta(patch.date??original.date);
+    }else{
+      setManualSource(readManualAltaSource(data.altaManualSource));
+        setIndDiagCid(data.diagCid || "");
+        setIndCif(data.cif || "");
+        setIndDiagClinico(data.diagClinico || "");
+        setIndDiagFuncional(data.diagFuncional || "");
+        setIndNivelComprometimento(data.nivelComprometimento || "");
+        setIndObsDiagnosticas(data.obsDiagnosticas || "");
+        setIndQueixaPrincipal(data.queixaPrincipal || "");
+        setIndMotivoEncaminhamento(data.motivoEncaminhamento || "");
+        setIndContextoFamiliar(data.contextoFamiliar || "");
+        setIndComorbidades(data.comorbidades || "");
+        setIndMedicacao(data.medicacao || "");
+        setIndObjetivos(data.objetivos || "");
+        setIndIntervencoes(data.intervencoes || "");
+        setIndEvolucao(data.evolucao || "");
+        setIndMetas(data.metas || "");
+        setIndMetasJust(data.metasJust || "");
+        setIndTA(data.ta || "");
+        setIndFrequenciaAtendimento(data.frequenciaAtendimento || "");
+        setIndAdesaoTratamento(data.adesaoTratamento || "");
+        setIndEvolucaoGlobal(data.evolucaoGlobal || "");
+        setIndIntercorrencias(data.intercorrencias || "");
+        setIndIntercorrenciasObs(data.intercorrenciasObs || "");
+        setIndRespostaTerapeutica(data.respostaTerapeutica || "");
+        setIndComparacaoInicioAlta(data.comparacaoInicioAlta || "");
+        setIndResumoConsolidado(data.resumoConsolidado || "");
+        setIndRiscoPosAlta(data.riscoPosAlta || "");
+        setIndComplexidade(data.complexidade || "");
+        setIndMotivo(data.motivo || "");
+        setIndTipoAlta(data.tipoAlta || "");
+        setIndMotivoDet(data.motivoDet || "");
+        setIndOrientacoes(data.orientacoes || "");
+        setIndEncaminhamento(data.encaminhamento || "");
+        setIndModalidade(data.modalidade || "");
+        setIndSessoes(data.sessoes || 0);
+        setIndFaltas(data.faltas || 0);
+        setIndPeriodoInicio(data.periodoInicio || "");
+        setIndPeriodoFim(data.periodoFim || "");
+        setIndContinuarTerapia(data.continuarTerapia || "");
+        setIndRiscoRegressao(data.riscoRegressao || "");
+        setIndPrazoReavaliacao(data.prazoReavaliacao || "");
+        setPtsMetas(Array.isArray(data.ptsMetas) ? data.ptsMetas : []);
+        
+
+      setIndDataAlta(patch.date??original.date);
+    }
+    setRecoveryRows(prev=>prev.filter(item=>item.id!==row.id));
+    toast.success("Campos recuperados para revisão. Salve o rascunho para confirmar.");
+    }catch(e){toast.error(e instanceof Error?e.message:"Não foi possível restaurar a cópia.");}
+  };
+  const recoveryPanel = scopeMatches&&!isReportLocked&&!loadFailed&&!permissionsLoading&&<div className="space-y-2">
+    {hasUnsavedChanges&&recoveryState!=="idle"&&<p role="status" className="text-xs text-muted-foreground">{recoveryState==="confirmed"&&recoveryConfirmedRef.current===currentSnapshot?"Cópia privada de recuperação confirmada. Ainda não é um documento salvo.":recoveryState==="error"?"Cópia de recuperação não confirmada. Mantenha a página aberta e salve manualmente.":"Protegendo as alterações em uma cópia privada…"}</p>}
+    {!!recoveryRows.length&&<Alert><History className="h-4 w-4"/><AlertTitle>Alterações recuperáveis</AlertTitle><AlertDescription>Há cópias privadas de preenchimentos anteriores. A restauração exige a mesma revisão; se a versão mudou, consulte os campos e confira manualmente.
+      {recoveryRows.map(row=><details key={row.id} className="mt-2 rounded border p-2"><summary className="cursor-pointer">Cópia de {fmtDateTime(row.atualizado_em)}</summary>
+        <div className="space-y-1 mt-2 max-h-64 overflow-auto text-xs">{row.changes.date&&<p>Data de alta: {row.changes.date}</p>}{Object.entries(row.changes.fields).map(([field,value])=><div key={field}><strong>{field}</strong><p className="whitespace-pre-wrap break-words">{typeof value==="string"?value:JSON.stringify(value,null,2)}</p></div>)}</div>
+        <div className="flex flex-wrap gap-2 mt-2"><Button type="button" size="sm" variant="outline" disabled={formReadOnly||conflict||hasUnsavedChanges||awaitingSources} onClick={()=>void restoreAltaRecovery(row)}>Restaurar para revisão</Button><Button type="button" size="sm" variant="ghost" disabled={loading} onClick={async()=>{if(!window.confirm("Descartar somente esta cópia privada?"))return;const result=await altaRecoveryTable().delete().eq("id",row.id).select("id");if(result.error||!result.data?.length){toast.error("Não foi possível descartar a cópia.");return;}setRecoveryRows(prev=>prev.filter(item=>item.id!==row.id));}}>Descartar cópia</Button></div>
+      </details>)}
+    </AlertDescription></Alert>}
+  </div>;
   const draftStatus = reportId && !isReportLocked && !loadFailed && scopeMatches && !conflict && !hasUnsavedChanges && !!savedSnapshot && !loading && !permissionsLoading;
   const scopeInvalidated=!!pacienteId&&!!loadedScope&&(loadedScope.userId!==user?.id||loadedScope.unitId!==user?.unidadeId);
   if(scopeInvalidated){
@@ -1982,6 +2170,7 @@ const RelatorioAlta: React.FC = () => {
           <DialogFooter><Button variant="outline" disabled={loading} onClick={()=>{setCorrectionTarget(null);setCorrectionReason("");}}>Cancelar</Button><Button disabled={formReadOnly||conflict||hasUnsavedChanges||!correctionReason.trim()} onClick={()=>void handleRectifyContribution()}>Confirmar retificação</Button></DialogFooter>
           </DialogContent>
         </Dialog>
+        {recoveryPanel}
         {sourcePanel}
         {evolutionPreview}
         {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>{autosaveFailed?"O salvamento automático falhou. Tente salvar manualmente antes de sair.":reportId&&autoReady?"Salvamento automático após uma pausa na edição. Não feche a página até a confirmação.":"Salve o rascunho manualmente antes de sair."} Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}{draftStatus&&<p role="status" className="text-xs text-muted-foreground flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-green-600"/> Rascunho confirmado no banco.</p>}
@@ -2291,7 +2480,8 @@ const RelatorioAlta: React.FC = () => {
       </div>
       
 
-      {sourcePanel}
+      {recoveryPanel}
+        {sourcePanel}
         {evolutionPreview}
         {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>{autosaveFailed?"O salvamento automático falhou. Tente salvar manualmente antes de sair.":reportId&&autoReady?"Salvamento automático após uma pausa na edição. Não feche a página até a confirmação.":"Salve o rascunho manualmente antes de sair."} Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}{draftStatus&&<p role="status" className="text-xs text-muted-foreground flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-green-600"/> Rascunho confirmado no banco.</p>}
         {conflict && <Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Conflito de gravação</AlertTitle><AlertDescription>O relatório foi alterado por outra operação ou seu acesso mudou. As alterações não salvas continuam nesta tela. Revise-as antes de recarregar; nenhuma sobrescrita foi efetuada. <Button type="button" variant="outline" size="sm" className="mt-2" disabled={loading} onClick={()=>{if(!window.confirm("Recarregar o registro do banco e descartar as alterações ainda não salvas?"))return;resetReportTracking();if(modo==="multiprofissional"){resetMultiForm();void loadMultiData(pacienteId,++reportLoadTokenRef.current);}else{resetIndividualForm();void loadIndividualData(pacienteId,++reportLoadTokenRef.current);}}}>Recarregar relatório</Button></AlertDescription></Alert>}
