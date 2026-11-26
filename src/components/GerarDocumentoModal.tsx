@@ -14,6 +14,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import DocumentLibrary, {DocumentPatientBanner,classifyDocument,modelCode} from '@/components/documents/DocumentLibrary';
+import BlankDocumentLibrary from '@/components/documents/BlankDocumentLibrary';
 import { toast } from 'sonner';
 import { FileText, Save, ShieldCheck, Plus, Trash2, Loader2, Paperclip, FileSignature, Search, Play, ArrowLeft, Printer } from 'lucide-react';
 import { openPrintDocument, loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS, buildDocumentShell, printViaIframe, type DocumentConfig } from '@/lib/printLayout';
@@ -51,6 +52,7 @@ interface Props {
   unidade?: string;
   dataAtendimento?: string;
   templateId?: string;
+  initialMode?: 'digital' | 'blank';
 }
 
 const ENCAMINHAMENTO_TIPOS = ['encaminhamento', 'guia de encaminhamento'];
@@ -131,7 +133,7 @@ const normalizeForAbntPrint = (html: string): string => {
 };
 
 
-const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, profissional, unidade, dataAtendimento, templateId }) => {
+const DigitalDocumentModal: React.FC<Props & { onBlank?: () => void }> = ({ open, onOpenChange, paciente, profissional, unidade, dataAtendimento, templateId, onBlank }) => {
   const { user } = useAuth();
   const { funcionarios } = useOperacional();
   const [docConfig, setDocConfig] = useState<DocumentConfig | null>(null);
@@ -1052,6 +1054,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
             <FileText className="w-5 h-5" /> Gerar Documento Clínico
           </DialogTitle>
           <DialogDescription>Selecione um modelo e preencha os campos</DialogDescription>
+          {!selected&&onBlank&&<nav aria-label="Modalidades de documentos" className="clinical-hub clinical-hub-tabs"><Button type="button" variant="ghost" className="clinical-hub-tab flex-1 gap-2" aria-pressed={true}><FileText className="h-4 w-4"/>Documentos digitais</Button><Button type="button" variant="ghost" className="clinical-hub-tab flex-1 gap-2" aria-pressed={false} onClick={onBlank}><Printer className="h-4 w-4"/>Formulários em branco</Button></nav>}
           {!selected&&<DocumentPatientBanner name={paciente?.nome}/>}
           {selected&&paciente?.nome&&<p className="text-sm text-muted-foreground">Paciente: {paciente.nome}</p>}
         </DialogHeader>
@@ -1314,5 +1317,13 @@ const FieldArea = React.forwardRef<HTMLTextAreaElement, FieldAreaProps>(({ label
 ));
 
 FieldArea.displayName = 'FieldArea';
+
+// The manual flow is mounted separately: never passes patient or professional data into the blank library.
+const GerarDocumentoModal: React.FC<Props> = (props) => {
+  const [mode,setMode]=useState<'digital'|'blank'>(props.initialMode || 'digital');
+  useEffect(()=>{if(!props.open)setMode(props.initialMode || 'digital');},[props.open,props.initialMode]);
+  if(mode==='blank') return <BlankDocumentLibrary open={props.open} onOpenChange={props.onOpenChange} onDigital={props.paciente?.id ? ()=>setMode('digital') : undefined}/>;
+  return <DigitalDocumentModal {...props} onBlank={!props.templateId ? ()=>setMode('blank') : undefined}/>;
+};
 
 export default GerarDocumentoModal;
