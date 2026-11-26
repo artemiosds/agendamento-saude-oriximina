@@ -1,4 +1,5 @@
 import { patientCpfError } from '@/lib/patientCpf';
+import { isDiagnosticAppointment } from '@/lib/diagnosticExams';
 import React, { useState, useEffect, useRef } from 'react';
 import { parsePortalAccess, mergePortalQueue, type PortalQueueEntry } from '@/lib/portalPatientSecurity';
 import { supabase } from '@/integrations/supabase/client';
@@ -563,7 +564,7 @@ const PortalPaciente: React.FC = () => {
     const agDate = new Date(a.data + 'T23:59:59');
     return agDate >= new Date() && !['cancelado', 'falta'].includes(a.status);
   });
-  const examesPaciente = agendamentos.filter(a => a.tipo === 'exame' && a.custom_data?.sala_tipo === 'aparelho_diagnostico');
+  const examesPaciente = agendamentos.filter(isDiagnosticAppointment);
   const pastAgendamentos = agendamentos.filter(a => {
     const agDate = new Date(a.data + 'T23:59:59');
     return agDate < new Date() || ['cancelado', 'concluido', 'falta'].includes(a.status);
