@@ -58,7 +58,16 @@ interface ProfSection {
   intercorrencias?: string;
   finalizado_em?: string;
   finalizado_por?: string;
+  retificacoes?: AltaContributionCorrection[];
 }
+
+type AltaContributionCorrection = {
+  motivo: string;
+  solicitado_em: string;
+  autor_id: string;
+  versao_relatorio: number;
+  anterior: Omit<ProfSection, "retificacoes">;
+};
 
 interface VersionRecord {
   version: number;
@@ -155,6 +164,21 @@ const parseAltaPayload = (raw?: string | null): any => {
   }
 };
 
+
+// Keep every prior signed contribution intact inside the persisted report.
+function rectifyAltaContribution(sections: ProfSection[], professionalId: string, reason: string, now: string, version: number): ProfSection[] | null {
+  if (!professionalId || !reason.trim() || !Array.isArray(sections) ||
+      sections.filter(s=>s.profissional_id===professionalId).length!==1) return null;
+  const section=sections.find(s=>s.profissional_id===professionalId);
+  if (!section || section.status_contribuicao!=="assinada" || !section.data_contribuicao ||
+      (section.retificacoes!==undefined && !Array.isArray(section.retificacoes))) return null;
+  const {retificacoes, ...priorSigned}=section;
+  const correction: AltaContributionCorrection={motivo:reason.trim(),solicitado_em:now,autor_id:professionalId,versao_relatorio:version,anterior:priorSigned};
+  return sections.map(s=>s.profissional_id===professionalId?{
+    ...s, status_contribuicao:"em_preenchimento", data_contribuicao:"",
+    finalizado_em:undefined,finalizado_por:undefined,retificacoes:[...(retificacoes||[]),correction],
+  }:s);
+}
 
 // Merge only independent changes to the current professional's contribution.
 type AltaDraftSnapshot = {date:string;fields:Record<string,any>};
@@ -254,6 +278,8 @@ const RelatorioAlta: React.FC = () => {
   const [history, setHistory] = useState<VersionRecord[]>([]);
   const [isReopening, setIsReopening] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
+  const [correctionTarget,setCorrectionTarget] = useState<string|null>(null);
+  const [correctionReason,setCorrectionReason] = useState("");
   const [lastUpdatedBy, setLastUpdatedBy] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
 
@@ -424,6 +450,7 @@ const RelatorioAlta: React.FC = () => {
     setLastUpdatedBy("");
     setLastUpdatedAt("");
     setReopenReason("");
+    setCorrectionTarget(null);setCorrectionReason("");
     setIsReopening(false);
   };
 
@@ -867,7 +894,7 @@ const RelatorioAlta: React.FC = () => {
   const canEditContribution = (section: ProfSection) =>
     !formReadOnly && !awaitingSources &&
     section.status_contribuicao !== "assinada" &&
-    (section.profissional_id === user?.id || canManageOtherContribution);
+    (section.profissional_id === user?.id || (canManageOtherContribution && !section.retificacoes?.length));
 
   const updateProfSection = (profId: string, field: keyof ProfSection, value: any) => {
     const section = profSections.find(s => s.profissional_id === profId);
@@ -910,7 +937,7 @@ const RelatorioAlta: React.FC = () => {
     const parsed = new Date(value + "T00:00:00Z");
     return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
   };
-  const isContributionComplete = (s: ProfSection) => s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada";
+  const isContributionComplete = (s: ProfSection) => s.status_contribuicao === "assinada" || (s.status_contribuicao === "concluida" && !s.retificacoes?.length);
   const allowIndMetasNotApplicable = !sourceMeta?.ptsId && ptsMetas.length === 0;
   const validateMulti = (): string[] => {
     const errors: string[] = [];
@@ -924,7 +951,7 @@ const RelatorioAlta: React.FC = () => {
     if (!isValidAltaDate(dataAlta)) errors.push("Informe uma data de alta válida");
     if (!profSections.length) errors.push("Nenhuma contribuição profissional identificada");
     const pending = profSections.filter(s => !isContributionComplete(s));
-    if (pending.length) errors.push(`${pending.length} contribuição(ões) pendente(s): ${pending.map(s => s.profissional_nome).join(", ")}. Todas devem ser concluídas ou assinadas.`);
+    if (pending.length) errors.push(`${pending.length} contribuição(ões) pendente(s): ${pending.map(s => s.profissional_nome).join(", ")}. Todas devem ser concluídas ou assinadas; retificações exigem nova assinatura do autor.`);
     if (profSections.some(s => (s.periodo_inicio && (!isValidAltaDate(s.periodo_inicio) || s.periodo_inicio > dataAlta)) || (s.periodo_fim && (!isValidAltaDate(s.periodo_fim) || s.periodo_fim > dataAlta)) || (s.periodo_inicio && s.periodo_fim && s.periodo_inicio > s.periodo_fim))) errors.push("Confira as datas das contribuições: o período não pode terminar após a alta nem estar invertido.");
 
     profSections.forEach(s => {
@@ -1076,6 +1103,49 @@ const RelatorioAlta: React.FC = () => {
     }
   };
 
+  const handleRectifyContribution = async () => {
+    if (modo!=="multiprofissional" || formReadOnly || conflict || savingRef.current || !reportId ||
+        !user?.id || correctionTarget!==user.id || !correctionReason.trim()) return;
+    if (hasUnsavedChanges) { toast.error("Salve as alterações pendentes antes de retificar."); return; }
+    const revision=revisionRef.current;
+    if (!revision || revision.id!==reportId || revision.unitId!==user.unidadeId || revision.status!=="rascunho") return;
+    savingRef.current=true;setLoading(true);
+    try {
+      const persisted=await supabase.from("prontuarios").select("id,observacoes,atualizado_em,status")
+        .eq("id",reportId).eq("paciente_id",pacienteId).eq("unidade_id",user.unidadeId)
+        .eq("tipo_registro","alta_multiprofissional").eq("status","rascunho").maybeSingle();
+      if(persisted.error)throw persisted.error;
+      if(!persisted.data || (persisted.data.atualizado_em??null)!==revision.updated) {
+        setConflict(true);throw new Error("O relatório mudou. Recarregue antes de retificar.");
+      }
+      const original=parseAltaPayload(persisted.data.observacoes);
+      if (!sameAltaValue(original,revision.payload)) { setConflict(true);throw new Error("A versão carregada não corresponde ao relatório salvo."); }
+      const now=new Date().toISOString();
+      const reason=correctionReason.trim();
+      const reportVersion=Number(original.version||version||1);
+      const nextSections=rectifyAltaContribution(original.profissionais,user.id,reason,now,reportVersion);
+      if(!nextSections)throw new Error("Somente uma contribuição própria, assinada e identificada, pode ser retificada.");
+      const nextHistory:VersionRecord[]=[...(Array.isArray(original.history)?original.history:[]),{version:reportVersion,data:now,user_nome:user.nome||"",action:"Retificação de contribuição assinada",reason}];
+      const nextPayload={...original,profissionais:nextSections,history:nextHistory};
+      let update=supabase.from("prontuarios").update({observacoes:JSON.stringify(nextPayload)})
+        .eq("id",reportId).eq("paciente_id",pacienteId).eq("unidade_id",user.unidadeId)
+        .eq("tipo_registro","alta_multiprofissional").eq("status","rascunho");
+      update=revision.updated===null?update.is("atualizado_em",null):update.eq("atualizado_em",revision.updated);
+      const result=await update.select("id,atualizado_em,status").maybeSingle();
+      if(result.error)throw result.error;
+      if(!result.data){setConflict(true);throw new Error("O relatório mudou durante a retificação. Nenhum dado foi sobrescrito.");}
+      // Use exactly the serialized payload as baseline, without undefined fields.
+      const confirmed=JSON.parse(JSON.stringify(nextPayload));
+      revisionRef.current={id:result.data.id,unitId:user.unidadeId,updated:result.data.atualizado_em??null,status:result.data.status??null,payload:confirmed};
+      setProfSections(confirmed.profissionais);setSavedSnapshot(snapshot("multi",confirmed.profissionais));
+      setHistory(nextHistory);setLastUpdatedAt(result.data.atualizado_em||now);setLastUpdatedBy(user.nome||"");
+      setCorrectionTarget(null);setCorrectionReason("");
+      toast.success("Contribuição reaberta para retificação. A assinatura anterior foi preservada no histórico.");
+      await auditService.log({acao:"retificar_contribuicao_alta",modulo:"prontuario",entidade:"prontuario",entidadeId:reportId,pacienteId,pacienteNome:paciente?.nome,profissionalId:user.id,profissionalNome:user.nome,detalhes:{motivo:reason,version:reportVersion}});
+    } catch(error:any){toast.error(error?.message||"Não foi possível retificar a contribuição.");}
+    finally{savingRef.current=false;setLoading(false);}
+  };
+
   /* ── PRINT ─── */
   const buildMultiPrintBody = (): string => {
     const p = paciente;
@@ -1146,6 +1216,7 @@ const RelatorioAlta: React.FC = () => {
             <div class="signature-line" style="margin-left: 0; width: 250px;"></div>
             <div class="name">${altaPrintText(s.profissional_nome)}</div>
             <div class="role">${altaPrintText(s.profissao)} — ${altaPrintText(s.conselho)}</div>
+            ${s.status_contribuicao==="assinada"?`<div class="role">Assinada em ${altaPrintText(fmtDateTime(s.data_contribuicao))}${s.retificacoes?.length?" · Contribuição retificada":""}</div>`:""}
           </div>
         </div>
       `;
@@ -1760,6 +1831,12 @@ const RelatorioAlta: React.FC = () => {
         </div>
       
 
+        <Dialog open={!!correctionTarget} onOpenChange={open=>{if(!open&&!savingRef.current){setCorrectionTarget(null);setCorrectionReason("");}}}>
+          <DialogContent><DialogHeader><DialogTitle>Retificar contribuição assinada</DialogTitle><DialogDescription>A versão assinada será preservada. Somente sua contribuição será reaberta e precisará de nova assinatura antes da consolidação.</DialogDescription></DialogHeader>
+          <Label>Motivo da retificação (obrigatório)</Label><Textarea value={correctionReason} onChange={e=>setCorrectionReason(e.target.value)} disabled={loading||permissionsLoading} rows={3}/>
+          <DialogFooter><Button variant="outline" disabled={loading} onClick={()=>{setCorrectionTarget(null);setCorrectionReason("");}}>Cancelar</Button><Button disabled={formReadOnly||conflict||hasUnsavedChanges||!correctionReason.trim()} onClick={()=>void handleRectifyContribution()}>Confirmar retificação</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>
         {sourcePanel}
         {evolutionPreview}
         {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>Salve o rascunho antes de sair. Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}
@@ -1903,7 +1980,7 @@ const RelatorioAlta: React.FC = () => {
                           <SelectContent>
                             <SelectItem value="nao_iniciada">Não Iniciada</SelectItem>
                             <SelectItem value="em_preenchimento">Em preenchimento</SelectItem>
-                            <SelectItem value="concluida">Concluída</SelectItem>
+                            <SelectItem value="concluida" disabled={!!s.retificacoes?.length}>Concluída</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -1913,10 +1990,12 @@ const RelatorioAlta: React.FC = () => {
                         </Button>
                       )}
                       {s.status_contribuicao === "assinada" && (
-                        <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3 text-green-600" /> Assinado em {fmtDateTime(s.data_contribuicao)}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1"><CheckCircle className="w-3 h-3 text-green-600" /> Assinado em {fmtDateTime(s.data_contribuicao)}</span>
+                          {s.profissional_id===user?.id && reportId && !isReportLocked && <Button type="button" size="sm" variant="outline" disabled={formReadOnly||conflict||hasUnsavedChanges} onClick={()=>{setCorrectionTarget(s.profissional_id);setCorrectionReason("");}}>Retificar contribuição</Button>}
                         </div>
                       )}
+                      {!!s.retificacoes?.length && <div className="w-full text-xs space-y-1"><p className="font-medium">{s.status_contribuicao==="assinada"?"Contribuição retificada e assinada":"Retificação em andamento — nova assinatura obrigatória"}</p><details><summary className="cursor-pointer">Histórico de retificações ({s.retificacoes.length})</summary>{s.retificacoes.map((item,i)=><div key={i} className="rounded-md border p-2 mt-1"><p>{fmtDateTime(item.solicitado_em)} · versão {item.versao_relatorio}</p><p>Motivo: {item.motivo}</p><p>Assinatura anterior: {fmtDateTime(item.anterior.data_contribuicao)} · {item.anterior.profissional_nome}</p><p className="whitespace-pre-wrap">Evolução anterior: {item.anterior.evolucao}</p></div>)}</details></div>}
                     </div>
                  </CardContent>
                  </details>
