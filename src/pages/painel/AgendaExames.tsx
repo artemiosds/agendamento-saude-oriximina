@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { useOperacional } from "@/contexts/OperacionalContext";
 import { auditService } from "@/services/auditService";
 import { generateSignature } from "@/lib/documentSignature";
@@ -19,6 +20,7 @@ import {
   getAvailableDiagnosticSlots,
   getDiagnosticRoomConfig,
   getDiagnosticStatusLabel,
+  getEffectiveDiagnosticStatus,
   isDiagnosticAppointment,
   type DiagnosticExamStatus,
   type DiagnosticRoomConfig,
@@ -56,7 +58,11 @@ const statusTone: Record<string, string> = {
 
 export default function AgendaExames() {
   const { user, isGlobalAdmin } = useAuth();
-  const { unidades, salas } = useOperacional();
+  const { unidades, salas, funcionarios } = useOperacional();
+  const { can } = usePermissions();
+  const [responsibleId, setResponsibleId] = useState("");
+  const [statusBusy, setStatusBusy] = useState(false);
+  const statusLock = useRef(false);
   const [selectedUnit, setSelectedUnit] = useState(user?.unidadeId || "");
   const [selectedRoom, setSelectedRoom] = useState("");
   const [selectedExamId, setSelectedExamId] = useState("");
@@ -86,6 +92,11 @@ export default function AgendaExames() {
     [isGlobalAdmin, unidades, user?.unidadeId],
   );
   const unitAllowed = !!selectedUnit && visibleUnits.some(u => u.id === selectedUnit);
+  const responsibleOptions = useMemo(() => funcionarios.filter(f => f.ativo && f.unidadeId === selectedUnit && ["profissional", "tecnico", "enfermagem"].includes(f.role)), [funcionarios, selectedUnit]);
+  const responsible = responsibleOptions.find(f => f.id === responsibleId);
+  const canBook = unitAllowed && can("agenda", "can_create");
+  const canArrive = unitAllowed && can("agenda", "can_execute");
+  const canPerform = unitAllowed && ["profissional", "tecnico", "enfermagem"].includes(user?.role || "") && can("agenda", "can_execute");
   const rooms = useMemo(() => salas.filter(s => s.unidadeId === selectedUnit && s.ativo), [salas, selectedUnit]);
   const metadata = unitAllowed && unitMetadata.unit === selectedUnit ? unitMetadata.data : null;
   const diagnosticRooms = useMemo(() => rooms.filter(r => !!getDiagnosticRoomConfig(metadata, r.id)), [rooms, metadata]);
@@ -167,7 +178,17 @@ export default function AgendaExames() {
     void loadRows();
     return () => { ++rowsRequest.current; };
   }, [loadRows]);
-  useEffect(() => { setSlot(""); setLaudoRow(null); }, [scopeKey]);
+  useEffect(() => { setSlot(""); setLaudoRow(null); setResponsibleId(""); }, [scopeKey]);
+  useEffect(() => {
+    if (!unitAllowed || !roomConfig || !date) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const channel = supabase.channel(`diagnostic-room-${selectedUnit}-${selectedRoom}-${date}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "agendamentos", filter: `sala_id=eq.${selectedRoom}` }, () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => { if (scopeRef.current === scopeKey) void loadRows(); }, 250);
+      }).subscribe();
+    return () => { clearTimeout(timer); void supabase.removeChannel(channel); };
+  }, [unitAllowed, roomConfig, date, selectedUnit, selectedRoom, scopeKey, loadRows]);
 
   useEffect(() => {
     let active = true;
@@ -195,7 +216,7 @@ export default function AgendaExames() {
 
   const createExam = async () => {
     if (bookingLock.current) return;
-    if (!unitAllowed || !roomConfig || !selectedExam || !patientId || !slot || !selectedUnit || !selectedRoom || !roomRows || loading || rowError || !slots.includes(slot)) {
+    if (!canBook || !responsible || !roomConfig || !selectedExam || !patientId || !slot || !selectedUnit || !selectedRoom || !roomRows || loading || rowError || !slots.includes(slot)) {
       toast.error("Selecione paciente, sala e horário.");
       return;
     }
@@ -230,7 +251,7 @@ export default function AgendaExames() {
     const { error } = await (supabase as any).from("agendamentos").insert({
       id, paciente_id: patient.id, paciente_nome: patient.nome,
       unidade_id: selectedUnit, sala_id: selectedRoom, setor_id: "",
-      profissional_id: user?.id || "", profissional_nome: user?.nome || "Equipe de Diagnóstico",
+      profissional_id: responsible.id, profissional_nome: responsible.nome,
       data: date, hora: slot, status: "confirmado", tipo: "exame",
       observacoes: selectedExam.exigePreparo ? selectedExam.instrucoesPreparo : "",
       origem: "recepcao", criado_por: user?.id || "", custom_data: custom,
@@ -256,8 +277,29 @@ export default function AgendaExames() {
   };
 
   const changeStatus = async (row: ExamRow, next: DiagnosticExamStatus) => {
-    const current = String(row.custom_data?.status_exame || "agendado");
-    if (!canTransitionDiagnosticExam(current, next)) { toast.error("Transição de status não permitida."); return; }
+    if (statusLock.current || !unitAllowed || !roomConfig || row.data !== date || row.unidade_id !== selectedUnit || row.sala_id !== selectedRoom || !user?.id) return;
+    if (next === "paciente_chegou" ? !canArrive : next === "exame_realizado_em_laudo" ? !canPerform : next === "laudo_liberado" ? !canWriteReport : true) {
+      toast.error("Sem permissão para esta etapa do exame.");
+      return;
+    }
+    if (row.data > dateToday()) { toast.error("Não é possível executar uma etapa antes da data agendada."); return; }
+    statusLock.current = true;
+    setStatusBusy(true);
+    const actionScope = scopeKey;
+    let committed = false;
+    try {
+    const { data: fresh, error: freshError } = await (supabase as any).from("agendamentos")
+      .select("id,paciente_id,paciente_nome,unidade_id,sala_id,profissional_id,profissional_nome,data,hora,status,tipo,custom_data,atualizado_em")
+      .eq("id", row.id).eq("unidade_id", selectedUnit).eq("sala_id", selectedRoom).eq("data", date).maybeSingle();
+    if (scopeRef.current !== actionScope) return;
+    if (freshError || !fresh || !isDiagnosticAppointment(fresh) || fresh.paciente_id !== row.paciente_id || fresh.hora !== row.hora || fresh.custom_data?.exame_id !== row.custom_data?.exame_id) {
+      toast.error("O exame mudou ou não está mais disponível. Atualize a fila.");
+      await loadRows();
+      return;
+    }
+    const current = getEffectiveDiagnosticStatus(fresh);
+    if (!canTransitionDiagnosticExam(current, next)) { toast.error("A situação do exame mudou. Consulte a fila."); await loadRows(); return; }
+    row = fresh as ExamRow;
     let signatureData: Awaited<ReturnType<typeof generateSignature>> | null = null;
     if (next === "laudo_liberado") {
       if (!laudoRow || laudoRow.id !== row.id || !laudo.conclusao.trim() || !laudo.crm.trim()) {
@@ -308,9 +350,14 @@ export default function AgendaExames() {
         },
       } : {}),
     };
-    const { error } = await (supabase as any).from("agendamentos").update({ custom_data: nextCustom }).eq("id", row.id)
-      .eq("unidade_id", selectedUnit).eq("sala_id", selectedRoom);
-    if (error) { toast.error("Não foi possível atualizar o exame."); return; }
+    if (scopeRef.current !== actionScope) return;
+    // Optimistic compare-and-set: reject changed rows rather than overwrite a newer report.
+    let update = (supabase as any).from("agendamentos").update({ custom_data: nextCustom }).eq("id", row.id)
+      .eq("unidade_id", selectedUnit).eq("sala_id", selectedRoom).eq("data", row.data).eq("hora", row.hora).eq("status", row.status);
+    update = fresh.atualizado_em == null ? update.is("atualizado_em", null) : update.eq("atualizado_em", fresh.atualizado_em);
+    const { data: saved, error } = await update.select("id").maybeSingle();
+    if (error || saved?.id !== row.id) { toast.error("Não foi possível confirmar a alteração. O exame pode ter sido atualizado por outro usuário."); await loadRows(); return; }
+    committed = true;
     void auditService.log({
       acao: next === "laudo_liberado" ? "laudo_exame_liberado" : "status_exame_alterado",
       modulo: "exames_diagnosticos", entidade: "agendamentos", entidadeId: row.id,
@@ -340,10 +387,17 @@ export default function AgendaExames() {
         });
         if (sent.error) toast.warning("Laudo liberado, mas a notificação WhatsApp não foi confirmada.");
       }
-      setLaudoRow(null); setLaudo({ descricao: "", conclusao: "", hipotese: "", crm: "" });
+      if (scopeRef.current === actionScope) { setLaudoRow(null); setLaudo({ descricao: "", conclusao: "", hipotese: "", crm: "" }); }
     }
     toast.success(next === "laudo_liberado" ? "Laudo liberado oficialmente." : "Status atualizado.");
-    await loadRows();
+    if (scopeRef.current === actionScope) await loadRows();
+    } catch {
+      toast.error(committed ? "Etapa gravada, mas a confirmação dos serviços adicionais falhou." : "Não foi possível confirmar a etapa do exame.");
+      if (scopeRef.current === actionScope) await loadRows();
+    } finally {
+      statusLock.current = false;
+      setStatusBusy(false);
+    }
   };
 
   const openLaudo = (row: ExamRow) => {
@@ -358,7 +412,7 @@ export default function AgendaExames() {
   };
 
   const canWorkUnit = isGlobalAdmin || !!user?.unidadeId && user.unidadeId === selectedUnit;
-  const canWriteReport = canWorkUnit && String(user?.role || "").toLowerCase() === "profissional";
+  const canWriteReport = canWorkUnit && can("agenda", "can_execute") && String(user?.role || "").toLowerCase() === "profissional";
 
   return (
     <div className="space-y-6">
@@ -392,20 +446,21 @@ export default function AgendaExames() {
             </div>
             {selectedExam?.exigePreparo && <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><strong>Orientações de preparo — {selectedExam.tipoExame}</strong><p className="mt-1 whitespace-pre-wrap">{selectedExam.instrucoesPreparo || "A unidade exige preparo, mas ainda não cadastrou as instruções. Confirme com a equipe antes do agendamento."}</p></div>}
             <p className="text-xs text-muted-foreground">Duração: {selectedExam?.duracaoSlot || "—"} min • Contraste: {selectedExam?.exigeContraste || "—"} • Resultado: {selectedExam?.prazoResultadoDias || 0} dia(s)</p>
-            <Button onClick={createExam} disabled={saving || loading || rowError || !roomRows || !patientId || !slot || !selectedExam || !slots.includes(slot)}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Agendar exame</Button>
+            <div><Label>Profissional responsável pelo exame *</Label><Select value={responsibleId} onValueChange={setResponsibleId} disabled={!canBook || saving}><SelectTrigger><SelectValue placeholder="Selecione o responsável" /></SelectTrigger><SelectContent>{responsibleOptions.map(f => <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>)}</SelectContent></Select></div>
+            <Button onClick={createExam} disabled={!canBook || !responsible || saving || loading || rowError || !roomRows || !patientId || !slot || !selectedExam || !slots.includes(slot)}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Agendar exame</Button>
           </CardContent>
         </Card>
 
         <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><Clock3 className="h-4 w-4" /> Fila do aparelho — {rows.length}</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {loading || (!roomRows && !rowError) ? <div className="py-6 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div> : rowError ? <div className="space-y-2 text-center text-sm text-destructive"><p>Não foi possível confirmar a ocupação da sala.</p><Button variant="outline" size="sm" onClick={() => void loadRows()}>Tentar novamente</Button></div> : rows.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">Nenhum exame agendado para esta data.</p> : rows.map(row => {
-              const status = String(row.custom_data?.status_exame || "agendado");
+              const status = getEffectiveDiagnosticStatus(row);
               return <div key={row.id} className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
                 <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><strong>{row.hora}</strong><Badge variant={statusTone[status] as any || "secondary"}>{getDiagnosticStatusLabel(status)}</Badge></div><p className="font-medium">{row.paciente_nome}</p><p className="text-xs text-muted-foreground">{row.custom_data?.exame_nome || "Exame diagnóstico"}</p></div>
                 <div className="flex flex-wrap gap-2">
-                  {status === "agendado" && <Button size="sm" variant="outline" onClick={() => void changeStatus(row, "paciente_chegou")}>Paciente chegou</Button>}
-                  {status === "paciente_chegou" && <Button size="sm" onClick={() => void changeStatus(row, "exame_realizado_em_laudo")}>Exame realizado</Button>}
-                  {status === "exame_realizado_em_laudo" && canWriteReport && <Button size="sm" onClick={() => openLaudo(row)}><FileText className="mr-1 h-4 w-4" />Laudar / liberar</Button>}
+                  {status === "agendado" && canArrive && <Button disabled={statusBusy || row.data > dateToday()} size="sm" variant="outline" onClick={() => void changeStatus(row, "paciente_chegou")}>Paciente chegou</Button>}
+                  {status === "paciente_chegou" && canPerform && <Button disabled={statusBusy || row.data > dateToday()} size="sm" onClick={() => void changeStatus(row, "exame_realizado_em_laudo")}>Exame realizado</Button>}
+                  {status === "exame_realizado_em_laudo" && canWriteReport && <Button disabled={statusBusy || row.data > dateToday()} size="sm" onClick={() => openLaudo(row)}><FileText className="mr-1 h-4 w-4" />Laudar / liberar</Button>}
                   {status === "laudo_liberado" && <Badge variant="outline"><CheckCircle2 className="mr-1 h-3 w-3" />Laudo liberado</Badge>}
                 </div>
               </div>;
@@ -419,7 +474,7 @@ export default function AgendaExames() {
             <div><Label>Conclusão *</Label><Textarea rows={3} value={laudo.conclusao} onChange={e => setLaudo(p => ({ ...p, conclusao: e.target.value }))} /></div>
             <div><Label>Hipótese / Impressão</Label><Textarea rows={2} value={laudo.hipotese} onChange={e => setLaudo(p => ({ ...p, hipotese: e.target.value }))} /></div>
             <div><Label>CRM do laudista *</Label><Input value={laudo.crm} onChange={e => setLaudo(p => ({ ...p, crm: e.target.value }))} placeholder="CRM/UF e número" /></div>
-            <div className="flex flex-wrap gap-2"><Button onClick={() => void changeStatus(laudoRow, "laudo_liberado")}>Liberar Laudo Oficial</Button><Button variant="outline" onClick={() => setLaudoRow(null)}>Cancelar</Button></div>
+            <div className="flex flex-wrap gap-2"><Button disabled={statusBusy || !canWriteReport} onClick={() => void changeStatus(laudoRow, "laudo_liberado")}>Liberar Laudo Oficial</Button><Button variant="outline" onClick={() => setLaudoRow(null)}>Cancelar</Button></div>
             <p className="text-xs text-muted-foreground">A liberação grava o profissional, CRM, data/hora e histórico de status na trilha auditável do agendamento.</p>
           </CardContent>
         </Card>}
