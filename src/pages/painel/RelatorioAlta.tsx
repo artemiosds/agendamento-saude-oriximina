@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { altaDateLabel, altaEvolutionMessage, altaOfficialBody, altaSeries, collectAltaEvolution, readAltaEvolution, escapeAlta, type AltaEvolutionSnapshot, type AltaMetricSection } from "@/lib/altaEvolution";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { usePacientes } from "@/contexts/PacientesContext";
 import { useOperacional } from "@/contexts/OperacionalContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -155,6 +156,36 @@ const parseAltaPayload = (raw?: string | null): any => {
 };
 
 
+// Merge only independent changes to the current professional's contribution.
+type AltaDraftSnapshot = {date:string;fields:Record<string,any>};
+const sameAltaValue = (a:unknown,b:unknown):boolean => {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v,i)=>sameAltaValue(v,b[i]));
+  const x=a as Record<string,unknown>, y=b as Record<string,unknown>;
+  const keys=Object.keys(x);
+  return keys.length===Object.keys(y).length && keys.every(k=>Object.prototype.hasOwnProperty.call(y,k)&&sameAltaValue(x[k],y[k]));
+};
+function mergeIndependentAltaContribution(base:Record<string,any>, local:AltaDraftSnapshot, baseline:AltaDraftSnapshot, remote:Record<string,any>, remoteDate:string, professionalId:string):ProfSection[]|null {
+  if (!professionalId || local.date!==baseline.date || remoteDate!==baseline.date) return null;
+  const {profissionais:localSections,...localShared}=local.fields;
+  const {profissionais:baselineSections,...baselineShared}=baseline.fields;
+  const {profissionais:baseSections,history:baseHistory,...baseShared}=base;
+  const {profissionais:remoteSections,history:remoteHistory,...remoteShared}=remote;
+  if (!sameAltaValue(localShared,baselineShared)||!sameAltaValue(baseShared,remoteShared)) return null;
+  if (!Array.isArray(baseSections)||!Array.isArray(remoteSections)||!Array.isArray(localSections)||!Array.isArray(baselineSections)) return null;
+  if (!sameAltaValue(baseSections,baselineSections)) return null;
+  const ids=(rows:ProfSection[])=>rows.map(s=>s.profissional_id);
+  const originalIds=ids(baseSections);
+  if (new Set(originalIds).size!==originalIds.length || !sameAltaValue(originalIds,ids(localSections)) || !sameAltaValue(originalIds,ids(remoteSections))) return null;
+  const index=originalIds.indexOf(professionalId);
+  if (index<0 || baseSections[index].status_contribuicao==="assinada" || !sameAltaValue(baseSections[index],remoteSections[index])) return null;
+  if (sameAltaValue(baseSections[index],localSections[index]) || localSections.some((s:ProfSection,i:number)=>i!==index&&!sameAltaValue(s,baseSections[i]))) return null;
+  const priorHistory=Array.isArray(baseHistory)?baseHistory:[];
+  if (!Array.isArray(remoteHistory)||remoteHistory.length<priorHistory.length||!sameAltaValue(priorHistory,remoteHistory.slice(0,priorHistory.length))) return null;
+  return remoteSections.map((s:ProfSection,i:number)=>i===index?localSections[index]:s);
+}
+
 // Visual navigation only. The clinical form retains its original values and handlers.
 type AltaStep = { value: string; label: string; icon: typeof User };
 const INDIVIDUAL_STEPS: AltaStep[] = [
@@ -204,6 +235,7 @@ function AltaMetric({ icon: Icon, label, value, tone = "blue" }: { icon: typeof 
 
 const RelatorioAlta: React.FC = () => {
   const { user } = useAuth();
+  const { loading: permissionsLoading } = usePermissions();
   const { pacientes } = usePacientes();
   const { funcionarios } = useOperacional();
   const [modo, setModo] = useState<ModoRelatorio>("selector");
@@ -351,7 +383,7 @@ const RelatorioAlta: React.FC = () => {
   const [sourceMeta,setSourceMeta] = useState<AltaSourceMeta|null>(null);
   const [loadedScope,setLoadedScope] = useState<{userId:string;unitId:string;patientId:string;mode:ModoRelatorio}|null>(null);
   const scopeMatches=!!loadedScope&&loadedScope.userId===user?.id&&loadedScope.unitId===user?.unidadeId&&loadedScope.patientId===pacienteId&&loadedScope.mode===modo;
-  const formReadOnly = isReportLocked || loading || loadFailed || !pacienteId || !scopeMatches;
+  const formReadOnly = isReportLocked || loading || permissionsLoading || loadFailed || !pacienteId || !scopeMatches;
   const awaitingSources=!!sourceBundle&&!reportId&&!sourceMeta;
   const isAltaMode=modo==="individual"||modo==="multiprofissional";
   const evolutionThrough=modo==="multiprofissional"?dataAlta:indDataAlta;
@@ -936,7 +968,7 @@ const RelatorioAlta: React.FC = () => {
   };
 
   const handleReopen = async () => {
-    if (loading || loadFailed || savingRef.current || conflict || !scopeMatches) return;
+    if (loading || permissionsLoading || loadFailed || savingRef.current || conflict || !scopeMatches) return;
     const reason = reopenReason.trim();
     if (!reason) { toast.error("Informe o motivo da reabertura"); return; }
     if (!reportId || !pacienteId || !user?.id) {
@@ -1256,7 +1288,7 @@ const RelatorioAlta: React.FC = () => {
   };
 
   const handlePrint = (type: "multi" | "individual") => {
-    if (!pacienteId || !reportId || !isReportLocked || loading || loadFailed || conflict || !scopeMatches || revisionRef.current?.unitId!==user?.unidadeId) return;
+    if (!pacienteId || !reportId || !isReportLocked || loading || permissionsLoading || loadFailed || conflict || !scopeMatches || revisionRef.current?.unitId!==user?.unidadeId) return;
     if (!paciente || paciente.id!==pacienteId || revisionRef.current?.id!==reportId) {toast.error("Não foi possível conferir a identificação do relatório. Recarregue antes de imprimir.");return;}
     const body=type==="multi"?buildMultiPrintBody():buildIndPrintBody();
     const title=type==="multi"?"Relatório de Alta — Multiprofissional":"Relatório de Alta — Individual";
@@ -1349,7 +1381,7 @@ const RelatorioAlta: React.FC = () => {
   };
 
   const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any, signedSections?: ProfSection[]) => {
-    if (savingRef.current || loading || loadFailed || conflict || !scopeMatches) return;
+    if (savingRef.current || loading || permissionsLoading || loadFailed || conflict || !scopeMatches) return;
     if (!pacienteId || !user?.id || !user.unidadeId) { toast.error("Selecione um paciente e uma unidade"); return; }
     if (!reportId && (!sourceBundle || !sourceMeta)) { toast.error("Confirme as fontes clínicas antes de salvar o novo relatório."); return; }
     if (!reportId && sourceBundle && sourceMeta && (sourceMeta.unitId!==user.unidadeId || sourceBundle.patientId!==pacienteId || (type==="individual"&&sourceBundle.professionalId!==user.id))) { toast.error("O contexto da fonte mudou. Selecione novamente o paciente."); return; }
@@ -1380,10 +1412,11 @@ const RelatorioAlta: React.FC = () => {
       action: signedSections ? "Assinar Contribuição" : customStatus === "emitido" ? "Emissão Final" : isDraft ? "Salvar Rascunho" : "Atualização",
     };
 
-    const updatedHistory = [...history, newHistoryEntry];
+    let updatedHistory = [...history, newHistoryEntry];
 
     const draftPayload = buildDraftPayload(type, signedSections);
-    const payload = { ...revisionRef.current?.payload, ...draftPayload, version: newVersion, history: updatedHistory, ...(!isDraft?{altaEvolutionV1:liveEvolution}:{}) };
+    let payload: Record<string,any> = { ...revisionRef.current?.payload, ...draftPayload, version: newVersion, history: updatedHistory, ...(!isDraft?{altaEvolutionV1:liveEvolution}:{}) };
+    let mergedSections: ProfSection[] | null = null;
 
     const targetStatus = customStatus || (isDraft ? "rascunho" : "concluido");
 
@@ -1450,6 +1483,31 @@ const RelatorioAlta: React.FC = () => {
       updateQuery = revision.updated === null ? updateQuery.is("atualizado_em", null) : updateQuery.eq("atualizado_em", revision.updated);
       result = await updateQuery.select("id,atualizado_em,status").maybeSingle();
 
+      if (!result.error && !result.data && type==="multi" && isDraft && !customStatus && savedSnapshot) {
+        // One bounded retry: never merges finalization, shared fields, dates,
+        // changed team or competing edits to the same author.
+        const latest=await supabase.from("prontuarios")
+          .select("id,profissional_id,observacoes,atualizado_em,status,data_atendimento")
+          .eq("id",targetReportId).eq("paciente_id",pacienteId).eq("unidade_id",user.unidadeId)
+          .eq("tipo_registro",record.tipo_registro).eq("status","rascunho").maybeSingle();
+        if (!latest.error && latest.data && latest.data.profissional_id===reportOwnerId &&
+            (latest.data.atualizado_em??null)!==revision.updated) {
+          const remote=parseAltaPayload(latest.data.observacoes);
+          const local:AltaDraftSnapshot=JSON.parse(snapshot(type,signedSections));
+          const baseline:AltaDraftSnapshot=JSON.parse(savedSnapshot);
+          const combined=mergeIndependentAltaContribution(revision.payload,local,baseline,remote,latest.data.data_atendimento||"",user.id);
+          if (combined) {
+            const nextHistory=[...remote.history,newHistoryEntry];
+            const nextPayload={...remote,profissionais:combined,history:nextHistory};
+            let retry=supabase.from("prontuarios").update({observacoes:JSON.stringify(nextPayload)})
+              .eq("id",targetReportId).eq("paciente_id",pacienteId).eq("unidade_id",user.unidadeId)
+              .eq("tipo_registro",record.tipo_registro).eq("status","rascunho");
+            retry=latest.data.atualizado_em===null?retry.is("atualizado_em",null):retry.eq("atualizado_em",latest.data.atualizado_em);
+            result=await retry.select("id,atualizado_em,status").maybeSingle();
+            if (!result.error && result.data) { mergedSections=combined;payload=nextPayload;updatedHistory=nextHistory; }
+          }
+        }
+      }
       if (!result.error && !result.data) {
         setConflict(true);
         toast.error("O relatório mudou ou o acesso foi revogado. Nenhum dado foi sobrescrito; suas alterações continuam na tela.");
@@ -1469,8 +1527,9 @@ const RelatorioAlta: React.FC = () => {
       toast.error("Não foi possível confirmar o salvamento: " + (result.error?.message || "registro não retornado"));
     } else {
       revisionRef.current = { id: result.data.id, unitId:user.unidadeId, updated: result.data.atualizado_em ?? null, status: result.data.status ?? null, payload };
-      if (signedSections) setProfSections(signedSections);
-      setSavedSnapshot(snapshot(type, signedSections));
+      if (mergedSections || signedSections) setProfSections(mergedSections || signedSections!);
+      setSavedSnapshot(snapshot(type, mergedSections || signedSections));
+      if (mergedSections) toast.info("Contribuições independentes conciliadas sem substituir o trabalho da equipe.");
       toast.success(signedSections ? "Contribuição registrada e rascunho salvo" : isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta atualizado");
       setStatus(targetStatus as any);
       if (!targetReportId) setReportOwnerId(user.id);
