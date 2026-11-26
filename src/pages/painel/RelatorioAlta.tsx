@@ -153,6 +153,8 @@ const INTERCORRENCIAS_OPCOES = [
 ];
 
 const altaPrintText = (s?: string) => escapeAlta(s);
+const altaContinuityLabel=(value:string)=>({sim_mesma:"Na mesma área",sim_outra:"Em outra área",nao:"Continuidade terapêutica não indicada",vigilancia:"Vigilância em saúde"} as Record<string,string>)[value]||value||"—";
+const altaRiskLabel=(value:string)=>({baixo:"Baixo",moderado:"Moderado",alto:"Alto",nao_aplica:"Não se aplica"} as Record<string,string>)[value]||value||"—";
 
 const fmt = (d: string) => {
   if (!d) return "—";
@@ -290,7 +292,8 @@ function AltaMetric({ icon: Icon, label, value, tone = "blue" }: { icon: typeof 
 
 const RelatorioAlta: React.FC = () => {
   const { user } = useAuth();
-  const { loading: permissionsLoading } = usePermissions();
+  const { loading: permissionsLoading, can } = usePermissions();
+  const altaHasAction = (action:"can_view"|"can_create"|"can_edit"|"can_execute") => !permissionsLoading && !!user?.ativo && (String(user.role||"").toLowerCase().trim()==="master" || can("relatorio_alta",action));
   const { pacientes } = usePacientes();
   const { funcionarios } = useOperacional();
   const [modo, setModo] = useState<ModoRelatorio>("selector");
@@ -412,8 +415,8 @@ const RelatorioAlta: React.FC = () => {
   const [indEncaminhamento, setIndEncaminhamento] = useState("");
   const [indModalidade, setIndModalidade] = useState("");
   const [indDataAlta, setIndDataAlta] = useState(new Date().toISOString().split("T")[0]);
-  const [indSessoes, setIndSessoes] = useState(0);
-  const [indFaltas, setIndFaltas] = useState(0);
+  const [indSessoes, setIndSessoes] = useState<number|null>(null);
+  const [indFaltas, setIndFaltas] = useState<number|null>(null);
   const [indContinuarTerapia, setIndContinuarTerapia] = useState("");
   const [indRiscoRegressao, setIndRiscoRegressao] = useState("");
   const [indPrazoReavaliacao, setIndPrazoReavaliacao] = useState("");
@@ -454,7 +457,11 @@ const RelatorioAlta: React.FC = () => {
   const [manualStaffChoice,setManualStaffChoice] = useState("");
   const [loadedScope,setLoadedScope] = useState<{userId:string;unitId:string;patientId:string;mode:ModoRelatorio}|null>(null);
   const scopeMatches=!!loadedScope&&loadedScope.userId===user?.id&&loadedScope.unitId===user?.unidadeId&&loadedScope.patientId===pacienteId&&loadedScope.mode===modo;
-  const formReadOnly = isReportLocked || loading || permissionsLoading || loadFailed || !pacienteId || !scopeMatches;
+  const formReadOnly = isReportLocked || loading || permissionsLoading || loadFailed || !pacienteId || !scopeMatches || !altaHasAction("can_view") || !altaHasAction(reportId?"can_edit":"can_create");
+  const printAccessRef=React.useRef({allowed:false,key:""});
+  const printContextKey=JSON.stringify([user?.id,user?.unidadeId,pacienteId,modo,reportId]);
+  React.useLayoutEffect(()=>{printAccessRef.current={allowed:scopeMatches&&isReportLocked&&altaHasAction("can_view")&&!loadFailed&&!conflict,key:printContextKey};});
+  const printInFlightRef=React.useRef(false);
   const awaitingSources=!!sourceBundle&&!reportId&&!sourceMeta;
   const isAltaMode=modo==="individual"||modo==="multiprofissional";
   const evolutionThrough=modo==="multiprofissional"?dataAlta:indDataAlta;
@@ -576,8 +583,8 @@ const RelatorioAlta: React.FC = () => {
     setIndEncaminhamento("");
     setIndModalidade("");
     setIndDataAlta(new Date().toISOString().split("T")[0]);
-    setIndSessoes(0);
-    setIndFaltas(0);
+    setIndSessoes(null);
+    setIndFaltas(null);
     setIndPeriodoInicio("");
     setIndPeriodoFim("");
     setIndContinuarTerapia("");
@@ -907,8 +914,8 @@ const RelatorioAlta: React.FC = () => {
         setIndEncaminhamento(data.encaminhamento || "");
         setIndModalidade(data.modalidade || "");
         setIndDataAlta(existingDraft.data_atendimento || new Date().toISOString().split("T")[0]);
-        setIndSessoes(data.sessoes || 0);
-        setIndFaltas(data.faltas || 0);
+        setIndSessoes(typeof data.sessoes==="number"&&Number.isSafeInteger(data.sessoes)&&data.sessoes>=0?data.sessoes:null);
+        setIndFaltas(typeof data.faltas==="number"&&Number.isSafeInteger(data.faltas)&&data.faltas>=0?data.faltas:null);
         setIndPeriodoInicio(data.periodoInicio || "");
         setIndPeriodoFim(data.periodoFim || "");
         setIndContinuarTerapia(data.continuarTerapia || "");
@@ -954,7 +961,7 @@ const RelatorioAlta: React.FC = () => {
   // A consolidação segue a autorização já usada para reabrir o documento.
   const canFinalizeMulti = scopeMatches && (!reportId || reportOwnerId === user?.id || canManageOtherContribution);
   const canReopenReport =
-    scopeMatches && !!reportId &&
+    scopeMatches && !!reportId && altaHasAction("can_view") && altaHasAction("can_edit") &&
     (modo === "individual" || reportOwnerId === user?.id || canManageOtherContribution);
 
   const canEditContribution = (section: ProfSection) =>
@@ -1019,7 +1026,7 @@ const RelatorioAlta: React.FC = () => {
   const validateContribution = (s: ProfSection): string[] => {
     const errors: string[] = [];
     if (!s.evolucao?.trim()) errors.push(`Informe a evolução clínica de ${s.profissional_nome}`);
-    if (!s.metas_status) errors.push(`Avalie as metas de ${s.profissional_nome}`);
+    if (!["totalmente","parcialmente","nao_atingidas","nao_se_aplica"].includes(s.metas_status)) errors.push(`Avalie as metas de ${s.profissional_nome}`);
     if (s.metas_status==="nao_se_aplica" && !(manualTeam?s.pts_manual==="sem_pts":!!sourceMeta&&!sourceMeta.ptsId)) errors.push(`Confirme a ausência de PTS para ${s.profissional_nome}`);
     if (manualTeam) {
       if (!isValidAltaDate(s.periodo_inicio)||!isValidAltaDate(s.periodo_fim)||s.periodo_inicio>s.periodo_fim||s.periodo_fim>dataAlta) errors.push(`Informe o período válido de ${s.profissional_nome}`);
@@ -1036,8 +1043,8 @@ const RelatorioAlta: React.FC = () => {
   };
   const isContributionComplete = (s: ProfSection) => s.status_contribuicao === "assinada" || (s.status_contribuicao === "concluida" && !s.retificacoes?.length && !manualTeam);
   const allowIndMetasNotApplicable = manualSource ? manualSource.pts==="sem_pts" : !sourceMeta?.ptsId && ptsMetas.length === 0;
-  const displayIndSessoes = manualSource ? (manualCount(manualSource.sessoes) ?? "—") : indSessoes;
-  const displayIndFaltas = manualSource ? (manualCount(manualSource.faltas) ?? "—") : indFaltas;
+  const displayIndSessoes = manualSource ? (manualCount(manualSource.sessoes) ?? "—") : (indSessoes??"—");
+  const displayIndFaltas = manualSource ? (manualCount(manualSource.faltas) ?? "—") : (indFaltas??"—");
   const validateAltaReason = (motivo:string,tipo:string,detalhe:string):string[] => {
     if (!motivo||!tipo) return [];
     if (!MOTIVOS_ALTA.some(m=>m.value===motivo)||!TIPOS_ALTA.some(t=>t.value===tipo)) return ["Revise o motivo e o tipo de alta registrados."];
@@ -1052,8 +1059,8 @@ const RelatorioAlta: React.FC = () => {
     if (!motivoAlta) errors.push("Selecione o motivo da alta");
     if (!multiTipoAlta) errors.push("Selecione o tipo de alta");
     errors.push(...validateAltaReason(motivoAlta,multiTipoAlta,motivoDetalhe));
-    if (!nivelIndep) errors.push("Selecione o nível de independência");
-    if (modalidades.length === 0) errors.push("Selecione pelo menos uma modalidade");
+    if (!NIVEIS_INDEPENDENCIA.includes(nivelIndep)) errors.push("Selecione o nível de independência");
+    if (modalidades.length === 0 || modalidades.some(m=>!MODALIDADES.includes(m))) errors.push("Selecione pelo menos uma modalidade válida");
     if (!multiResumoConsolidado.trim()) errors.push("Informe o resumo final consolidado");
     
     if (!isValidAltaDate(dataAlta)||dataAlta>localAltaToday) errors.push("Informe uma data de alta válida, sem data futura");
@@ -1082,13 +1089,14 @@ const RelatorioAlta: React.FC = () => {
     if (!isValidAltaDate(indDataAlta)||indDataAlta>localAltaToday) errors.push("Informe uma data de alta válida, sem data futura");
     if (!isValidAltaDate(indPeriodoInicio) || !isValidAltaDate(indPeriodoFim)) errors.push("Informe as datas válidas de início e fim do acompanhamento");
     else if (indPeriodoInicio > indPeriodoFim || (isValidAltaDate(indDataAlta) && indPeriodoFim > indDataAlta)) errors.push("O início deve ser anterior ou igual ao fim do acompanhamento, e o fim não pode ser posterior à alta");
-    if (!indModalidade) errors.push("Selecione a modalidade de acompanhamento");
+    if (!MODALIDADES.includes(indModalidade)) errors.push("Selecione a modalidade de acompanhamento válida");
     if (manualSource) {
       if (!manualSource.motivo.trim()) errors.push("Informe a justificativa e a referência utilizada no preenchimento manual");
       if (manualCount(manualSource.sessoes)===null || manualCount(manualSource.faltas)===null) errors.push("Informe as contagens de sessões e faltas conferidas manualmente");
       if (manualSource.pts==="nao_conferido") errors.push("Confirme a situação do PTS antes de finalizar");
     }
-    if (!indMetas) errors.push("Informe a avaliação profissional das metas do PTS");
+    if (!["totalmente","parcialmente","nao_atingidas","nao_se_aplica"].includes(indMetas)) errors.push("Informe a avaliação profissional das metas do PTS");
+    if(indIntercorrencias==="Outro"&&!indIntercorrenciasObs.trim()) errors.push("Descreva a outra intercorrência informada.");
     if (indMetas === "nao_se_aplica" && !allowIndMetasNotApplicable) errors.push("Há PTS ou metas vinculadas: selecione a avaliação correspondente");
     if (indMetas && indMetas !== "totalmente" && !indMetasJust.trim()) errors.push("Justificativa de metas obrigatória");
     return errors;
@@ -1099,7 +1107,7 @@ const RelatorioAlta: React.FC = () => {
     if (!indMetas) { toast.error("Avalie as metas antes de gerar o resumo."); return; }
     const summary = [
       indPeriodoInicio && indPeriodoFim && `Período informado: ${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}.`,
-      manualSource ? (manualCount(manualSource.sessoes)===null ? "Contagem de sessões ainda não conferida." : `Sessões realizadas informadas manualmente: ${displayIndSessoes}.`) : `Sessões realizadas registradas: ${indSessoes}.`,
+      manualSource ? (manualCount(manualSource.sessoes)===null ? "Contagem de sessões ainda não conferida." : `Sessões realizadas informadas manualmente: ${displayIndSessoes}.`) : indSessoes===null?"Contagem de sessões não registrada.":`Sessões realizadas registradas: ${indSessoes}.`,
       indMetas === "nao_se_aplica" ? "Avaliação das metas do PTS: não se aplica, conforme avaliação profissional." : `Durante o tratamento, os objetivos terapêuticos foram ${indMetas === "totalmente" ? "plenamente" : indMetas === "parcialmente" ? "parcialmente" : "não"} atingidos.`,
       indEvolucaoGlobal && `A evolução global foi considerada ${indEvolucaoGlobal.toLowerCase()}.`,
       indDiagFuncional && `Diagnóstico funcional informado: ${indDiagFuncional}.`,
@@ -1316,6 +1324,7 @@ const RelatorioAlta: React.FC = () => {
             <div><span class="info-label">Período</span><br/><span class="info-value">${fmt(s.periodo_inicio)} a ${fmt(s.periodo_fim)}</span></div>
             <div><span class="info-label">Sessões realizadas</span><br/><span class="info-value">${s.sessoes??"—"}</span></div>
             <div><span class="info-label">Adesão</span><br/><span class="info-value">${altaPrintText(s.adesao || "—")}</span></div>
+            ${manualTeam?`<div><span class="info-label">PTS conferido pelo profissional</span><br/><span class="info-value">${s.pts_manual==="sem_pts"?"Sem PTS":s.pts_manual==="com_pts"?"Com PTS":"Não conferido"}</span></div>`:""}
           </div>
           <div class="field"><span class="field-label">Objetivos Específicos</span><div class="field-value">${altaPrintText(s.objetivos_especificos || s.objetivos || "—")}</div></div>
           <div class="field"><span class="field-label">Intervenções/Procedimentos</span><div class="field-value">${altaPrintText(s.intervencoes) || "—"}</div></div>
@@ -1361,7 +1370,7 @@ const RelatorioAlta: React.FC = () => {
         <div class="field"><span class="field-label">Orientações ao Usuário / Família</span><div class="field-value">${altaPrintText(orientacoesUsuario) || "—"}</div></div>
         ${multiOrientacoesEscola ? `<div class="field"><span class="field-label">Orientações à escola</span><div class="field-value">${altaPrintText(multiOrientacoesEscola)}</div></div>` : ""}
         ${multiPontosAtencao ? `<div class="field"><span class="field-label">Pontos de atenção</span><div class="field-value">${altaPrintText(multiPontosAtencao)}</div></div>` : ""}
-        ${multiContinuarTerapia ? `<div class="field"><span class="field-label">Continuidade do cuidado</span><div class="field-value">${altaPrintText(multiContinuarTerapia)}</div></div>` : ""}
+        ${multiContinuarTerapia ? `<div class="field"><span class="field-label">Continuidade do cuidado</span><div class="field-value">${altaPrintText(altaContinuityLabel(multiContinuarTerapia))}</div></div>` : ""}
         <div class="field"><span class="field-label">Orientações para UBS/ESF</span><div class="field-value">${altaPrintText(orientacoesUbs || "—")}</div></div>
         <div class="field"><span class="field-label">Encaminhamentos Realizados</span><div class="field-value">${altaPrintText(encaminhamentos.join(", ") || "—")}</div></div>
         <div class="info-grid">
@@ -1449,20 +1458,21 @@ const RelatorioAlta: React.FC = () => {
           indMetas === "parcialmente" ? "Parcialmente atingidas" :
           indMetas === "nao_atingidas" ? "Não atingidas" : indMetas === "nao_se_aplica" ? "Não se aplica" : "Aguardando avaliação profissional"
         }${indMetasJust ? ` — ${altaPrintText(indMetasJust)}` : ""}</div></div>
+        ${ptsMetas.length?`<div class="field"><span class="field-label">Metas vinculadas ao PTS (situação registrada)</span><div class="field-value">${ptsMetas.map(meta=>altaPrintText(meta.titulo)+" — "+altaPrintText(meta.status||"Não informado")).join("<br/>")}</div></div>`:""}
         <div class="field"><span class="field-label">Resposta Terapêutica</span><div class="field-value">${altaPrintText(indRespostaTerapeutica || "—")}</div></div>
         <div class="field"><span class="field-label">Comparação Início/Alta</span><div class="field-value">${altaPrintText(indComparacaoInicioAlta || "—")}</div></div>
         ${indTA ? `<div class="field"><span class="field-label">Tecnologia Assistiva</span><div class="field-value">${altaPrintText(indTA)}</div></div>` : ""}
-        ${indIntercorrencias ? `<div class="field"><span class="field-label">Intercorrências</span><div class="field-value">${altaPrintText(indIntercorrencias)}${indIntercorrenciasObs ? ` — ${altaPrintText(indIntercorrenciasObs)}` : ""}</div></div>` : ""}
+        ${indIntercorrencias||indIntercorrenciasObs ? `<div class="field"><span class="field-label">Intercorrências</span><div class="field-value">${altaPrintText(indIntercorrencias || "Não classificada")}${indIntercorrenciasObs ? ` — ${altaPrintText(indIntercorrenciasObs)}` : ""}</div></div>` : ""}
       </div>
 
       <div class="section" style="page-break-inside: avoid;">
         <div class="section-title">Conclusão e Alta</div>
         <div class="field"><span class="field-label">Tipo de Alta</span><div class="field-value">${altaPrintText(tipoAltaLabel)}</div></div>
         <div class="field"><span class="field-label">Motivo da Alta</span><div class="field-value">${altaPrintText(motivoLabel)}${indMotivoDet ? ` — ${altaPrintText(indMotivoDet)}` : ""}</div></div>
-        <div class="field"><span class="field-label">Risco de Regressão</span><div class="field-value">${altaPrintText(indRiscoRegressao || "—")}</div></div>
+        <div class="field"><span class="field-label">Risco de Regressão</span><div class="field-value">${altaPrintText(altaRiskLabel(indRiscoRegressao))}</div></div>
         ${indRiscoPosAlta ? `<div class="field"><span class="field-label">Risco pós-alta</span><div class="field-value">${altaPrintText(indRiscoPosAlta)}</div></div>` : ""}
         ${indComplexidade ? `<div class="field"><span class="field-label">Complexidade do caso</span><div class="field-value">${altaPrintText(indComplexidade)}</div></div>` : ""}
-        <div class="field"><span class="field-label">Necessidade de Continuidade Terapêutica</span><div class="field-value">${altaPrintText(indContinuarTerapia || "—")}</div></div>
+        <div class="field"><span class="field-label">Necessidade de Continuidade Terapêutica</span><div class="field-value">${altaPrintText(altaContinuityLabel(indContinuarTerapia))}</div></div>
         <div class="field"><span class="field-label">Orientações Específicas</span><div class="field-value">${altaPrintText(indOrientacoes || "—")}</div></div>
         <div class="field"><span class="field-label">Encaminhamentos</span><div class="field-value">${altaPrintText(indEncaminhamento || "—")}</div></div>
         <div class="field"><span class="field-label">Prazo sugerido para reavaliação</span><div class="field-value">${altaPrintText(indPrazoReavaliacao || "—")}</div></div>
@@ -1477,13 +1487,28 @@ const RelatorioAlta: React.FC = () => {
     `;
   };
 
-  const handlePrint = (type: "multi" | "individual") => {
-    if (!pacienteId || !reportId || !isReportLocked || loading || permissionsLoading || loadFailed || conflict || !scopeMatches || revisionRef.current?.unitId!==user?.unidadeId) return;
-    if (!paciente || paciente.id!==pacienteId || revisionRef.current?.id!==reportId) {toast.error("Não foi possível conferir a identificação do relatório. Recarregue antes de imprimir.");return;}
-    const body=type==="multi"?buildMultiPrintBody():buildIndPrintBody();
-    const title=type==="multi"?"Relatório de Alta — Multiprofissional":"Relatório de Alta — Individual";
-    const meta={Paciente:escapeAlta(paciente.nome),"Data de Alta":escapeAlta(fmt(type==="multi"?dataAlta:indDataAlta)),Versão:escapeAlta(version)};
-    void openPrintDocument(title,altaOfficialBody(body,readAltaEvolution(revisionRef.current?.payload.altaEvolutionV1),version),meta);
+  const handlePrint = async (type: "multi" | "individual") => {
+    if (printInFlightRef.current||!pacienteId||!reportId||!isReportLocked||loading||permissionsLoading||loadFailed||conflict||!scopeMatches||!altaHasAction("can_view")||revisionRef.current?.unitId!==user?.unidadeId)return;
+    if(!paciente||paciente.id!==pacienteId||revisionRef.current?.id!==reportId){toast.error("Não foi possível conferir a identificação do relatório.");return;}
+    const expected=revisionRef.current, key=printContextKey;
+    printInFlightRef.current=true;
+    try{
+      let query=supabase.from("prontuarios").select("id,atualizado_em,status,observacoes,data_atendimento,profissional_id")
+        .eq("id",reportId).eq("paciente_id",pacienteId).eq("unidade_id",user.unidadeId)
+        .eq("tipo_registro",type==="multi"?"alta_multiprofissional":"alta_individual");
+      if(type==="individual")query=query.eq("profissional_id",user.id);
+      const {data,error}=await query.maybeSingle();
+      if(error||!data)throw new Error("Não foi possível confirmar o relatório no banco.");
+      if(!printAccessRef.current.allowed||printAccessRef.current.key!==key||revisionRef.current!==expected)return;
+      if(data.status!==expected.status||data.status==="rascunho"||(data.atualizado_em??null)!==expected.updated||!sameAltaValue(parseAltaPayload(data.observacoes),expected.payload)){
+        setConflict(true);throw new Error("O relatório foi modificado. Recarregue a versão confirmada antes de imprimir.");
+      }
+      const body=type==="multi"?buildMultiPrintBody():buildIndPrintBody();
+      const title=type==="multi"?"Relatório de Alta — Multiprofissional":"Relatório de Alta — Individual";
+      const meta={Paciente:escapeAlta(paciente.nome),"Data de Alta":escapeAlta(fmt(type==="multi"?dataAlta:indDataAlta)),Versão:escapeAlta(version)};
+      await openPrintDocument(title,altaOfficialBody(body,readAltaEvolution(expected.payload.altaEvolutionV1),version),meta);
+    }catch(error:any){toast.error(error?.message||"Não foi possível preparar a impressão.");}
+    finally{printInFlightRef.current=false;}
   };
 
   const buildDraftPayload = (type: "multi" | "individual", signedSections?: ProfSection[]) => type === "multi" ? {
@@ -1574,6 +1599,7 @@ const RelatorioAlta: React.FC = () => {
 
   const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any, signedSections?: ProfSection[], automatic = false) => {
     if (savingRef.current || loading || permissionsLoading || loadFailed || conflict || !scopeMatches) return;
+    if(!altaHasAction("can_view")||!altaHasAction(reportId?"can_edit":"can_create")||(!isDraft&&!altaHasAction("can_execute"))){toast.error("Seu perfil não possui permissão para esta operação.");return;}
     if (automatic && (!isDraft || !reportId || isReportLocked)) return;
     if (!pacienteId || !user?.id || !user.unidadeId) { toast.error("Selecione um paciente e uma unidade"); return; }
     if (!reportId && (!sourceBundle || !sourceMeta) && !(type==="individual"&&manualSource) && !(type==="multi"&&manualTeam)) { toast.error("Confirme as fontes clínicas antes de salvar o novo relatório."); return; }
@@ -1919,8 +1945,8 @@ const RelatorioAlta: React.FC = () => {
         setIndOrientacoes(data.orientacoes || "");
         setIndEncaminhamento(data.encaminhamento || "");
         setIndModalidade(data.modalidade || "");
-        setIndSessoes(data.sessoes || 0);
-        setIndFaltas(data.faltas || 0);
+        setIndSessoes(typeof data.sessoes==="number"&&Number.isSafeInteger(data.sessoes)&&data.sessoes>=0?data.sessoes:null);
+        setIndFaltas(typeof data.faltas==="number"&&Number.isSafeInteger(data.faltas)&&data.faltas>=0?data.faltas:null);
         setIndPeriodoInicio(data.periodoInicio || "");
         setIndPeriodoFim(data.periodoFim || "");
         setIndContinuarTerapia(data.continuarTerapia || "");
@@ -2425,7 +2451,7 @@ const RelatorioAlta: React.FC = () => {
                     </div>
         <div className="flex flex-col gap-2 pt-3 border-t">
           <Button className="w-full justify-start" variant="outline" onClick={() => handleSave("multi", true)} disabled={formReadOnly || conflict || awaitingSources}><Save className="w-4 h-4 mr-1"/>Salvar Rascunho</Button>
-          <Button className="w-full justify-start clinical-record-action clinical-action-main" onClick={() => handleSave("multi", false)} disabled={formReadOnly || conflict || awaitingSources || !canFinalizeMulti || validateMulti().length > 0}>Finalizar Consolidação</Button>
+          <Button className="w-full justify-start clinical-record-action clinical-action-main" onClick={() => handleSave("multi", false)} disabled={formReadOnly || conflict || awaitingSources || !canFinalizeMulti || !altaHasAction("can_execute") || validateMulti().length > 0}>Finalizar Consolidação</Button>
           <Button className="w-full justify-start" variant="outline" onClick={() => handlePrint("multi")} disabled={!pacienteId || !reportId || !isReportLocked || loading || loadFailed || conflict}><Printer className="w-4 h-4 mr-1"/>Imprimir / Salvar PDF</Button>
         </div>
                   </CardContent>
@@ -2820,7 +2846,7 @@ const RelatorioAlta: React.FC = () => {
                         <SelectContent>
                           <SelectItem value="sim_mesma">Sim, na mesma área</SelectItem>
                           <SelectItem value="sim_outra">Sim, em outra área</SelectItem>
-                          <SelectItem value="nao">Não, alta definitiva</SelectItem>
+                          <SelectItem value="nao">Não indicada neste relatório</SelectItem>
                           <SelectItem value="vigilancia">Sim, vigilância em saúde</SelectItem>
                         </SelectContent>
                       </Select>
