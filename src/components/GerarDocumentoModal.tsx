@@ -15,6 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import DocumentLibrary, {DocumentPatientBanner,classifyDocument,modelCode} from '@/components/documents/DocumentLibrary';
 import BlankDocumentLibrary from '@/components/documents/BlankDocumentLibrary';
+import { usesClinicalSignatureSpacing, layoutClinicalSignatures, clinicalSignatureFooterStyle } from '@/lib/clinicalSignatureSpacing';
 import { toast } from 'sonner';
 import { FileText, Save, ShieldCheck, Plus, Trash2, Loader2, Paperclip, FileSignature, Search, Play, ArrowLeft, Printer } from 'lucide-react';
 import { openPrintDocument, loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS, buildDocumentShell, printViaIframe, type DocumentConfig } from '@/lib/printLayout';
@@ -470,6 +471,7 @@ const DigitalDocumentModal: React.FC<Props & { onBlank?: () => void }> = ({ open
     selectedMeta.structured_type === 'OCI' ||
     (selected.nome || '').trim().toUpperCase().startsWith('OCI ')
   );
+  const hasClinicalSignatureLayout = !isOciStructured && usesClinicalSignatureSpacing(selected?.nome);
   const isEncaminhamento = selected && ENCAMINHAMENTO_TIPOS.includes((selected.tipo || '').toLowerCase());
   const tipoLower = selected ? `${selected.tipo || ''} ${selected.nome || ''}`.toLowerCase() : '';
 
@@ -606,12 +608,13 @@ const DigitalDocumentModal: React.FC<Props & { onBlank?: () => void }> = ({ open
     // Content may already be rich HTML from TipTap or plain text
     const raw = conteudoFinal.includes('<') ? conteudoFinal : conteudoFinal.replace(/\n/g, '<br/>');
     const html = normalizeForAbntPrint(stripConditionalBlocks(raw, paciente?.data_nascimento || pacienteExtra?.data_nascimento));
+    const layout = hasClinicalSignatureLayout ? layoutClinicalSignatures(html, selected?.nome) : { html, grouped: 0 };
     const carimboHtml = formatCarimboBlock(carimbo);
     return `
       <div class="content-block doc-abnt">
-        <div class="abnt-text">${html}</div>
+        <div class="abnt-text">${layout.html}</div>
       </div>
-      <div class="doc-sign-footer">
+      <div class="doc-sign-footer"${hasClinicalSignatureLayout ? clinicalSignatureFooterStyle(selected?.nome, layout.grouped) : ''}>
         <div class="sign-block">${signatureHtml}</div>
         <div class="carimbo-block">${carimboHtml}</div>
       </div>
@@ -1192,10 +1195,12 @@ const DigitalDocumentModal: React.FC<Props & { onBlank?: () => void }> = ({ open
                         __html: isOciStructured && ociData
                           ? renderOciDocument(ociData, docConfig, selectedMeta)
                           : buildInstitutionalCSS(docConfig) + '<div class="doc-page">' + docHeader(selected.nome || selected.tipo, docConfig) +
-                            '<div class="doc-content content-block doc-abnt"><div class="abnt-text">' +
+                            (hasClinicalSignatureLayout
+                              ? '<div class="doc-content">' + buildHtmlBody('<div class="e-signature-box" style="text-align:center">Bloco de assinatura eletrônica será inserido ao assinar</div>') + '</div>' + docFooter(docConfig) + '</div>'
+                              : '<div class="doc-content content-block doc-abnt"><div class="abnt-text">' +
                             normalizeForAbntPrint(stripConditionalBlocks(conteudoFinal.replace(/\n/g, '<br/>'), paciente?.data_nascimento || pacienteExtra?.data_nascimento)) +
                             '</div>' +
-                            '</div>' + docFooter(docConfig) + '</div>'
+                            '</div>' + docFooter(docConfig) + '</div>')
                       }}
                     />
                   )}
@@ -1204,7 +1209,7 @@ const DigitalDocumentModal: React.FC<Props & { onBlank?: () => void }> = ({ open
                   )}
 
                   {/* Carimbo preview para documentos livres. No OCI o carimbo já faz parte do formulário oficial. */}
-                  {!isOciStructured && carimbo && (
+                  {!isOciStructured && !hasClinicalSignatureLayout && carimbo && (
                     <div className="mt-6 text-right">
                       {carimbo.tipo === 'digital' ? (
                         <div className="inline-block border border-foreground rounded-md px-4 py-2 text-center text-xs">
@@ -1219,7 +1224,7 @@ const DigitalDocumentModal: React.FC<Props & { onBlank?: () => void }> = ({ open
                   )}
 
                   {/* Signature preview placeholder */}
-                  {!isOciStructured && <div className="mt-4 border border-dashed border-muted-foreground/30 rounded p-3 text-center text-xs text-muted-foreground">
+                  {!isOciStructured && !hasClinicalSignatureLayout && <div className="mt-4 border border-dashed border-muted-foreground/30 rounded p-3 text-center text-xs text-muted-foreground">
                     <ShieldCheck className="w-4 h-4 mx-auto mb-1" />
                     Bloco de assinatura eletrônica será inserido ao assinar
                   </div>}
