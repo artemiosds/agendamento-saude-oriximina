@@ -331,9 +331,13 @@ const RelatorioAlta: React.FC = () => {
   const isReportLocked = status !== "rascunho";
   const [loadFailed,setLoadFailed] = useState(false);
   const savingRef = React.useRef(false);
+  const revisionRef = React.useRef<{ id: string; updated: string | null; status: string | null; payload: Record<string, any> } | null>(null);
+  const [conflict,setConflict] = useState(false);
   const formReadOnly = isReportLocked || loading || loadFailed || !pacienteId;
 
   const resetReportTracking = () => {
+    revisionRef.current = null;
+    setConflict(false);
     setReportId(null);
     setReportOwnerId("");
     setStatus("rascunho");
@@ -585,6 +589,8 @@ const RelatorioAlta: React.FC = () => {
         setReportOwnerId(existingDraft.profissional_id || "");
         setStatus(existingDraft.status as any || "rascunho");
         const data = parseAltaPayload(existingDraft.observacoes);
+        revisionRef.current = { id: existingDraft.id, updated: existingDraft.atualizado_em ?? null, status: existingDraft.status ?? null, payload: data };
+        revisionRef.current = { id: existingDraft.id, updated: existingDraft.atualizado_em ?? null, status: existingDraft.status ?? null, payload: data };
         
         setModalidades(data.modalidades || []);
         setCid10(data.cid10 || "");
@@ -710,6 +716,7 @@ const RelatorioAlta: React.FC = () => {
         setIndContinuarTerapia(data.continuarTerapia || "");
         setIndRiscoRegressao(data.riscoRegressao || "");
         setIndPrazoReavaliacao(data.prazoReavaliacao || "");
+        setPtsMetas(Array.isArray(data.ptsMetas) ? data.ptsMetas : []);
         
         setVersion(data.version || 1);
         setHistory(data.history || []);
@@ -813,24 +820,21 @@ const RelatorioAlta: React.FC = () => {
     );
   };
 
-  const handleSignContribution = (profId: string) => {
+  const handleSignContribution = async (profId: string) => {
     const section = profSections.find(s => s.profissional_id === profId);
-    if (!section || section.profissional_id !== user?.id || formReadOnly) {
+    if (!section || section.profissional_id !== user?.id || section.status_contribuicao === "assinada" || formReadOnly || savingRef.current || conflict) {
       toast.error("Somente o profissional responsável pode assinar sua própria contribuição.");
       return;
     }
     const errors = validateContribution(section);
     if (errors.length) { toast.error(errors[0]); return; }
     const nowIso = new Date().toISOString();
-    setProfSections(prev =>
-      prev.map(s => s.profissional_id === profId ? {
-        ...s,
-        status_contribuicao: "assinada",
-        data_contribuicao: nowIso,
-        finalizado_em: nowIso,
-        finalizado_por: user?.nome || "",
-      } : s)
-    );
+    if (!window.confirm("Confirmar sua contribuição e salvar o rascunho atual? Após salvar, esta contribuição ficará bloqueada para edição.")) return;
+    const signed: ProfSection[] = profSections.map(s => s.profissional_id === profId ? {
+      ...s, status_contribuicao: "assinada", data_contribuicao: nowIso,
+      finalizado_em: nowIso, finalizado_por: user?.nome || "",
+    } : s);
+    await handleSave("multi", true, undefined, signed);
   };
 
   /* ── VALIDATION ─── */
@@ -891,7 +895,7 @@ const RelatorioAlta: React.FC = () => {
   };
 
   const handleReopen = async () => {
-    if (loading || loadFailed || savingRef.current) return;
+    if (loading || loadFailed || savingRef.current || conflict) return;
     const reason = reopenReason.trim();
     if (!reason) { toast.error("Informe o motivo da reabertura"); return; }
     if (!reportId || !pacienteId || !user?.id) {
@@ -903,13 +907,14 @@ const RelatorioAlta: React.FC = () => {
       return;
     }
 
+    savingRef.current = true;
     setLoading(true);
     try {
       // Relê o registro persistido para não incorporar alterações feitas
       // acidentalmente na tela enquanto o documento estava finalizado.
       const { data: persisted, error: readError } = await supabase
         .from("prontuarios")
-        .select("id, paciente_id, profissional_id, tipo_registro, observacoes, status")
+        .select("id, paciente_id, profissional_id, tipo_registro, observacoes, status, atualizado_em")
         .eq("id", reportId)
         .eq("paciente_id", pacienteId)
         .maybeSingle();
@@ -921,6 +926,13 @@ const RelatorioAlta: React.FC = () => {
         throw new Error("O tipo do relatório carregado não corresponde ao fluxo atual.");
       }
 
+      const revision = revisionRef.current;
+      if (!revision || revision.id !== persisted.id || revision.updated !== (persisted.atualizado_em ?? null) || revision.status !== persisted.status || persisted.status === "rascunho") {
+        setConflict(true);
+        throw new Error("O relatório foi modificado por outra operação. Recarregue antes de reabrir.");
+      }
+      if (modo === "individual" && persisted.profissional_id !== user.id) throw new Error("Profissional não corresponde ao relatório.");
+      if (modo === "multiprofissional" && persisted.profissional_id !== user.id && !canManageOtherContribution) throw new Error("Sem autorização para reabrir este relatório.");
       const persistedPayload = parseAltaPayload(persisted.observacoes);
       const currentVersion = Number(persistedPayload.version || version || 1);
       const newVersion = currentVersion + 1;
@@ -939,7 +951,7 @@ const RelatorioAlta: React.FC = () => {
         history: updatedHistory,
       };
 
-      const { data: reopened, error: updateError } = await supabase
+      let reopenQuery = supabase
         .from("prontuarios")
         .update({
           status: "rascunho",
@@ -950,10 +962,16 @@ const RelatorioAlta: React.FC = () => {
         })
         .eq("id", reportId)
         .eq("paciente_id", pacienteId)
-        .select("id")
-        .maybeSingle();
+        .eq("tipo_registro", expectedType);
+      reopenQuery = persisted.status === null ? reopenQuery.is("status", null) : reopenQuery.eq("status", persisted.status);
+      reopenQuery = revision.updated === null ? reopenQuery.is("atualizado_em", null) : reopenQuery.eq("atualizado_em", revision.updated);
+      if (modo === "individual") reopenQuery = reopenQuery.eq("profissional_id", user.id);
+      const { data: reopened, error: updateError } = await reopenQuery.select("id,atualizado_em,status").maybeSingle();
       if (updateError) throw updateError;
-      if (!reopened) throw new Error("Nenhum relatório foi reaberto. O vínculo do registro foi preservado.");
+      if (!reopened) { setConflict(true); throw new Error("O relatório mudou durante a reabertura. Nenhum dado foi alterado."); }
+      revisionRef.current = { id: reopened.id, updated: reopened.atualizado_em ?? null, status: reopened.status ?? null, payload: updatedPayload };
+      setLastUpdatedAt(reopened.atualizado_em || actionDate);
+      setLastUpdatedBy(user.nome || "");
 
       setStatus("rascunho");
       setVersion(newVersion);
@@ -978,6 +996,7 @@ const RelatorioAlta: React.FC = () => {
       console.error("[RelatorioAlta] erro ao reabrir:", error);
       toast.error(error?.message || "Não foi possível reabrir o relatório.");
     } finally {
+      savingRef.current = false;
       setLoading(false);
     }
   };
@@ -1194,7 +1213,7 @@ const RelatorioAlta: React.FC = () => {
   };
 
   const handlePrint = (type: "multi" | "individual") => {
-    if (!pacienteId || !reportId || !isReportLocked || loading || loadFailed) return;
+    if (!pacienteId || !reportId || !isReportLocked || loading || loadFailed || conflict) return;
     if (type === "multi") {
       openPrintDocument("Relatório de Alta — Multiprofissional", withEvolution(buildMultiPrintBody()), {
         Paciente: paciente?.nome || "", "Data Alta": fmt(dataAlta)
@@ -1209,8 +1228,8 @@ const RelatorioAlta: React.FC = () => {
     }
   };
 
-  const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any) => {
-    if (savingRef.current || loading || loadFailed) return;
+  const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any, signedSections?: ProfSection[]) => {
+    if (savingRef.current || loading || loadFailed || conflict) return;
     if (!pacienteId || !user?.id) { toast.error("Selecione um paciente"); return; }
 
     if (isReportLocked && customStatus !== "rascunho") {
@@ -1232,17 +1251,18 @@ const RelatorioAlta: React.FC = () => {
       version: newVersion,
       data: actionDate,
       user_nome: user.nome || "Sistema",
-      action: customStatus === "emitido" ? "Emissão Final" : isDraft ? "Salvar Rascunho" : "Atualização",
+      action: signedSections ? "Assinar Contribuição" : customStatus === "emitido" ? "Emissão Final" : isDraft ? "Salvar Rascunho" : "Atualização",
     };
 
     const updatedHistory = [...history, newHistoryEntry];
 
     const payload = type === "multi" ? {
+      ...revisionRef.current?.payload,
       modalidades, cid10, multiCid10Secundario, multiDiagClinico, multiDiagFuncional,
       multiContextoBiopsicossocial, cifFuncoes, cifAtividades, cifFatores,
       multiBarreiras, multiPotencialidades, multiFatoresContextuais,
       multiObjetivosGerais, multiPlanoExecutado,
-      profissionais: profSections, motivoAlta, multiTipoAlta, motivoDetalhe,
+      profissionais: signedSections || profSections, motivoAlta, multiTipoAlta, motivoDetalhe,
       condicaoFuncional, nivelIndep, multiComparacaoFuncional, multiGanhosPrincipais,
       multiLimitacoesPersistentes, multiRiscoRegressao, multiFatoresAlerta,
       orientacoesUsuario, orientacoesUbs, multiOrientacoesEscola, multiPontosAtencao,
@@ -1250,6 +1270,7 @@ const RelatorioAlta: React.FC = () => {
       multiResponsavelTecnico, resumoConsolidado: multiResumoConsolidado,
       version: newVersion, history: updatedHistory
     } : {
+      ...revisionRef.current?.payload,
       diagCid: indDiagCid, cif: indCif, diagClinico: indDiagClinico,
       diagFuncional: indDiagFuncional, nivelComprometimento: indNivelComprometimento,
       obsDiagnosticas: indObsDiagnosticas, queixaPrincipal: indQueixaPrincipal,
@@ -1293,9 +1314,8 @@ const RelatorioAlta: React.FC = () => {
     let result: any;
     let targetReportId = reportId;
 
-    // Proteção contra duplicidade e contra atualização cruzada de pacientes.
-    // Se o estado local perdeu o id por qualquer motivo, reaproveita o relatório
-    // mais recente do mesmo paciente/tipo (e do mesmo profissional no individual).
+    // A criação mantém a consulta de existência. Sem índice único no banco,
+    // essa consulta não garante unicidade em duas inserções simultâneas.
     if (!targetReportId) {
       let existingQuery = supabase
         .from("prontuarios")
@@ -1311,12 +1331,19 @@ const RelatorioAlta: React.FC = () => {
         return;
       }
       if (existingBeforeSave?.id) {
-        toast.error("Já existe um relatório. Selecione novamente o paciente antes de salvar para evitar sobrescrever dados.");
+        setConflict(true);
+        toast.error("Outro relatório já foi criado. Seus dados permanecem na tela; revise o registro existente antes de tentar novamente.");
         return;
       }
     }
 
     if (targetReportId) {
+      const revision = revisionRef.current;
+      if (!revision || revision.id !== targetReportId || revision.status !== "rascunho") {
+        setConflict(true);
+        toast.error("A revisão do relatório não corresponde ao rascunho carregado.");
+        return;
+      }
       const { profissional_id, profissional_nome, unidade_id, ...changes } = record;
       let updateQuery = supabase
         .from("prontuarios")
@@ -1326,36 +1353,41 @@ const RelatorioAlta: React.FC = () => {
         .eq("tipo_registro", record.tipo_registro)
         .eq("status", "rascunho");
       if (type === "individual") updateQuery = updateQuery.eq("profissional_id", user.id);
-      result = await updateQuery.select("id").maybeSingle();
+      // Compare-and-swap: a condição é avaliada no mesmo UPDATE pelo PostgreSQL.
+      updateQuery = revision.updated === null ? updateQuery.is("atualizado_em", null) : updateQuery.eq("atualizado_em", revision.updated);
+      result = await updateQuery.select("id,atualizado_em,status").maybeSingle();
 
       if (!result.error && !result.data) {
-        toast.error("O relatório não foi atualizado porque o vínculo com paciente/profissional não confere. Nenhum dado foi sobrescrito.");
+        setConflict(true);
+        toast.error("O relatório mudou ou o acesso foi revogado. Nenhum dado foi sobrescrito; suas alterações continuam na tela.");
         return;
       }
       if (!result.error && result.data?.id) {
         setReportId(result.data.id);
       }
     } else {
-      result = await supabase.from("prontuarios").insert(record).select("id").single();
+      result = await supabase.from("prontuarios").insert(record).select("id,atualizado_em,status").single();
       if (!result.error && result.data) {
         setReportId(result.data.id);
       }
     }
 
-    if (result.error) {
-      toast.error("Erro ao salvar: " + result.error.message);
+    if (result.error || !result.data?.id) {
+      toast.error("Não foi possível confirmar o salvamento: " + (result.error?.message || "registro não retornado"));
     } else {
-      toast.success(isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta atualizado");
+      revisionRef.current = { id: result.data.id, updated: result.data.atualizado_em ?? null, status: result.data.status ?? null, payload };
+      if (signedSections) setProfSections(signedSections);
+      toast.success(signedSections ? "Contribuição registrada e rascunho salvo" : isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta atualizado");
       setStatus(targetStatus as any);
       if (!targetReportId) setReportOwnerId(user.id);
       setLastUpdatedBy(user.nome || "");
-      setLastUpdatedAt(actionDate);
+      setLastUpdatedAt(result.data.atualizado_em || actionDate);
       setVersion(newVersion);
       setHistory(updatedHistory);
       
       // Auditoria
       await auditService.log({
-        acao: isDraft ? "salvar_rascunho_alta" : "finalizar_relatorio_alta",
+        acao: signedSections ? "assinar_contribuicao_alta" : isDraft ? "salvar_rascunho_alta" : "finalizar_relatorio_alta",
         modulo: "prontuario",
         entidade: "prontuario",
         entidadeId: (result.data as any)?.id || reportId || "",
@@ -1507,6 +1539,7 @@ const RelatorioAlta: React.FC = () => {
         </div>
 
         {evolutionPreview}
+        {conflict && <Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Conflito de gravação</AlertTitle><AlertDescription>O relatório foi alterado por outra operação ou seu acesso mudou. As alterações não salvas continuam nesta tela. Revise-as antes de recarregar; nenhuma sobrescrita foi efetuada. <Button type="button" variant="outline" size="sm" className="mt-2" disabled={loading} onClick={()=>{if(!window.confirm("Recarregar o registro do banco e descartar as alterações ainda não salvas?"))return;resetReportTracking();if(modo==="multiprofissional"){resetMultiForm();void loadMultiData(pacienteId,++reportLoadTokenRef.current);}else{resetIndividualForm();void loadIndividualData(pacienteId,++reportLoadTokenRef.current);}}}>Recarregar relatório</Button></AlertDescription></Alert>}
         {loadFailed && <Alert variant="destructive"><AlertCircle className="h-4 w-4"/><AlertTitle>Não foi possível carregar o relatório</AlertTitle><AlertDescription>Para evitar perda de dados, a edição e a impressão estão bloqueadas. Limpe a seleção e selecione o paciente novamente.</AlertDescription></Alert>}
         {isReportLocked && (
           <Alert className="border-amber-300 bg-amber-50">
@@ -1655,7 +1688,7 @@ const RelatorioAlta: React.FC = () => {
                         </Select>
                       </div>
                       {s.profissional_id === user?.id && s.status_contribuicao !== "assinada" && !isReportLocked && (
-                        <Button size="sm" onClick={() => handleSignContribution(s.profissional_id)}>
+                        <Button size="sm" onClick={() => handleSignContribution(s.profissional_id)} disabled={loading || conflict}>
                           <ShieldCheck className="w-4 h-4 mr-2" /> Assinar Contribuição
                         </Button>
                       )}
@@ -1791,8 +1824,9 @@ const RelatorioAlta: React.FC = () => {
 
         {/* Footer Actions */}
         <div className="flex flex-wrap gap-3 pt-6 border-t">
-          <Button onClick={() => handleSave("multi", false)} disabled={formReadOnly}>Finalizar Consolidação</Button>
-          <Button variant="outline" onClick={() => handlePrint("multi")} disabled={!pacienteId || !reportId || !isReportLocked || loading || loadFailed}><Printer className="w-4 h-4 mr-1"/>Imprimir / Salvar PDF</Button>
+          <Button variant="outline" onClick={() => handleSave("multi", true)} disabled={formReadOnly || conflict}><Save className="w-4 h-4 mr-1"/>Salvar Rascunho</Button>
+          <Button onClick={() => handleSave("multi", false)} disabled={formReadOnly || conflict}>Finalizar Consolidação</Button>
+          <Button variant="outline" onClick={() => handlePrint("multi")} disabled={!pacienteId || !reportId || !isReportLocked || loading || loadFailed || conflict}><Printer className="w-4 h-4 mr-1"/>Imprimir / Salvar PDF</Button>
         </div>
       </div>
     );
@@ -1834,6 +1868,7 @@ const RelatorioAlta: React.FC = () => {
       </div>
 
       {evolutionPreview}
+        {conflict && <Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Conflito de gravação</AlertTitle><AlertDescription>O relatório foi alterado por outra operação ou seu acesso mudou. As alterações não salvas continuam nesta tela. Revise-as antes de recarregar; nenhuma sobrescrita foi efetuada. <Button type="button" variant="outline" size="sm" className="mt-2" disabled={loading} onClick={()=>{if(!window.confirm("Recarregar o registro do banco e descartar as alterações ainda não salvas?"))return;resetReportTracking();if(modo==="multiprofissional"){resetMultiForm();void loadMultiData(pacienteId,++reportLoadTokenRef.current);}else{resetIndividualForm();void loadIndividualData(pacienteId,++reportLoadTokenRef.current);}}}>Recarregar relatório</Button></AlertDescription></Alert>}
         {loadFailed && <Alert variant="destructive"><AlertCircle className="h-4 w-4"/><AlertTitle>Não foi possível carregar o relatório</AlertTitle><AlertDescription>Para evitar perda de dados, a edição e a impressão estão bloqueadas. Limpe a seleção e selecione o paciente novamente.</AlertDescription></Alert>}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Main Form Content */}
@@ -2233,7 +2268,7 @@ const RelatorioAlta: React.FC = () => {
                   variant="outline" 
                   className="w-full justify-start h-9" 
                   onClick={() => handleSave("individual", true)}
-                  disabled={formReadOnly}
+                  disabled={formReadOnly || conflict}
                 >
                   <Clock className="w-4 h-4 mr-2 text-muted-foreground" />
                   Salvar Rascunho
@@ -2242,7 +2277,7 @@ const RelatorioAlta: React.FC = () => {
                 <Button 
                   className="w-full justify-start h-9 bg-primary" 
                   onClick={() => handleSave("individual", false)}
-                  disabled={formReadOnly}
+                  disabled={formReadOnly || conflict}
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   Finalizar Relatório
@@ -2256,7 +2291,7 @@ const RelatorioAlta: React.FC = () => {
                   variant="ghost" 
                   className="w-full justify-start h-9 text-xs" 
                   onClick={() => handlePrint("individual")}
-                  disabled={!pacienteId || status === "rascunho" || loading || loadFailed}
+                  disabled={!pacienteId || status === "rascunho" || loading || loadFailed || conflict}
                 >
                   <Printer className="w-4 h-4 mr-2" />
                   Imprimir Documento
@@ -2265,7 +2300,7 @@ const RelatorioAlta: React.FC = () => {
                   variant="ghost" 
                   className="w-full justify-start h-9 text-xs" 
                   onClick={() => handlePrint("individual")}
-                  disabled={!pacienteId || status === "rascunho" || loading || loadFailed}
+                  disabled={!pacienteId || status === "rascunho" || loading || loadFailed || conflict}
                 >
                   <FileDown className="w-4 h-4 mr-2" />
                   Gerar PDF Oficial
