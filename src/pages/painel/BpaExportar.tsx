@@ -15,6 +15,7 @@ import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, X, FileSpr
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { loadDocumentConfig, buildDocumentShell, printViaIframe } from "@/lib/printLayout";
 import { bpaService } from "@/services/bpaService";
 import { getDiagnosticBpaSigtap } from "@/lib/diagnosticExams";
@@ -723,8 +724,16 @@ const nacionalidadeBpa = (pac: any): { codigo: string | null; motivo?: string } 
   return { codigo: null, motivo: res.motivoErro };
 };
 
+const ConsultaSigtapIntegrada = React.lazy(() => import("./ConsultaSigtap"));
+
 const BpaExportar: React.FC = () => {
   const { user } = useAuth();
+  const { can, loading: permissionsLoading } = usePermissions();
+  // Mesmo guard do módulo prontuário utilizado pela rota independente.
+  const podeConsultarSigtap = Boolean(user && !permissionsLoading && (user.role?.toLowerCase().trim() === "master" || can("prontuario", "can_view")));
+  const [abaAtiva, setAbaAtiva] = useState<"bpa" | "sigtap">("bpa");
+  const [sigtapVisitado, setSigtapVisitado] = useState(false);
+  const sigtapAtivo = podeConsultarSigtap && abaAtiva === "sigtap";
   const podeVerTodosProfissionais = user?.role === "master" || user?.role === "gestao";
   const correcaoAbertaRef = useRef<{
     aberta: boolean;
@@ -3992,7 +4001,15 @@ ${rejectedHtml}`;
         <span className="clinical-patient-avatar flex items-center justify-center shrink-0"><FileSpreadsheet className="h-5 w-5" aria-hidden="true" /></span>
         <div className="flex-1 min-w-[9rem]"><p className="clinical-hub-eyebrow">Gestão de produção ambulatorial</p><h1 className="clinical-hub-name text-xl font-bold font-display">Exportar BPA-I Real</h1><p className="clinical-patient-sub text-xs mt-1">Processamento, conferência e exportação de atendimentos realizados</p></div>
       </header>
+      {podeConsultarSigtap && (
+        <nav aria-label="Seções de produção ambulatorial" className="clinical-hub clinical-hub-tabs">
+          <Button type="button" variant="ghost" className="clinical-hub-tab flex-1 gap-2" aria-pressed={!sigtapAtivo} aria-controls="bpa-exportacao-painel" onClick={() => setAbaAtiva("bpa")}><FileSpreadsheet className="h-4 w-4 shrink-0" /> Exportação BPA-I</Button>
+          <Button type="button" variant="ghost" className="clinical-hub-tab flex-1 gap-2" aria-pressed={sigtapAtivo} aria-controls="bpa-sigtap-painel" disabled={loading || resolverModal.open} onClick={() => { setSigtapVisitado(true); setAbaAtiva("sigtap"); }}><ClipboardList className="h-4 w-4 shrink-0" /> Consulta SIGTAP</Button>
+        </nav>
+      )}
 
+      {/* Mantém a árvore e o estado da exportação ao alternar de seção. */}
+      <div id="bpa-exportacao-painel" hidden={sigtapAtivo} className="space-y-3 min-w-0">
       <Card className="clinical-premium">
         <CardHeader className="p-3 pb-2"><div className="flex items-center gap-2"><span className="clinical-dock-icon clinical-tone-blue"><CalendarDays className="h-4 w-4" /></span><div><CardTitle className="text-sm">Seleção da produção</CardTitle><p className="text-xs text-muted-foreground">Competência, unidade e profissional</p></div></div></CardHeader>
         <CardContent className="p-3 pt-0 space-y-3">
@@ -5284,6 +5301,16 @@ ${rejectedHtml}`;
           void handleGerar();
         }}
       />
+      </div>
+      {podeConsultarSigtap && (
+        <div id="bpa-sigtap-painel" hidden={!sigtapAtivo}>
+          {sigtapVisitado && (
+            <React.Suspense fallback={<div className="clinical-premium p-4 flex items-center gap-2 text-sm text-muted-foreground" role="status"><Loader2 className="h-4 w-4 animate-spin" /> Carregando Consulta SIGTAP…</div>}>
+              <ConsultaSigtapIntegrada embedded />
+            </React.Suspense>
+          )}
+        </div>
+      )}
     </div>
   );
 };
