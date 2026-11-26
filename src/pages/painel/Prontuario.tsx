@@ -4080,6 +4080,7 @@ const ProntuarioPage: React.FC = () => {
       )}
       {queryPacienteId&&hubSection==="documents"&&(
         <section id="clinical-hub-documents" aria-label="Documentos emitidos" className="min-w-0">
+          {(canEdit || user?.role === "master")&&<div className="clinical-premium p-3 mb-2 flex flex-wrap items-center gap-2"><span className="clinical-dock-icon clinical-tone-blue"><Printer className="h-4 w-4"/></span><div className="flex-1 min-w-[9rem]"><p className="font-semibold text-sm">Biblioteca de Documentos</p><p className="text-xs text-muted-foreground">Impressão de formulários sem dados pessoais</p></div><Button type="button" variant="outline" className="clinical-record-action gap-2" onClick={()=>setBlankLibraryOpen(true)}><Printer className="h-4 w-4"/>Formulários em branco</Button></div>}
           <Card className="clinical-premium"><CardContent className="p-3 sm:p-4 overflow-x-auto">
             <SecondaryPanelBoundary key={queryPacienteId}><React.Suspense fallback={<p className="text-sm text-muted-foreground p-3">Carregando documentos…</p>}><DocumentosHistorico key={queryPacienteId} pacienteId={queryPacienteId} pacienteNome={queryPacienteNome||"Paciente"}/></React.Suspense></SecondaryPanelBoundary>
           </CardContent></Card>
