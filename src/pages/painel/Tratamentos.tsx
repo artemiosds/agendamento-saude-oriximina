@@ -4,6 +4,7 @@ import { treatmentDateChangeReason } from "@/lib/treatmentDateChangeReason";
 import { TreatmentAgendaAlignmentButton } from "@/components/tratamentos/TreatmentAgendaAlignmentButton";
 import { TreatmentCyclePendingPanel } from "@/components/tratamentos/TreatmentCyclePendingPanel";
 import TreatmentCapacityOverview, { type TreatmentSimulationDraft } from "@/components/tratamentos/TreatmentCapacityOverview";
+import { canShowLinkedSoap, resolveLinkedSoap, readSoap, type RecordSoapSource } from "@/lib/linkedTreatmentSoap";
 import { getDefaultSessionsByProfession, suggestSessionsForProfessional } from "@/lib/treatmentSessionDefaults";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { isSessionFalta } from "@/lib/sessionFalta";
@@ -229,6 +230,10 @@ const TratamentosUnidade: React.FC = () => {
   const [extensions, setExtensions] = useState<TreatmentExtension[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCycle, setSelectedCycle] = useState<TreatmentCycle | null>(null);
+  const [detailView,setDetailView]=useState({id:"",tab:"sessions",filter:"all"});
+  const detailTab=detailView.id===selectedCycle?.id?detailView.tab:"sessions";
+  const sessionFilter=detailView.id===selectedCycle?.id?detailView.filter:"all";
+  const [linkedSoapView,setLinkedSoapView]=useState<{scope:string;values:Record<string,ReturnType<typeof resolveLinkedSoap>>;error:boolean}>({scope:"",values:{},error:false});
   // Map: "patientId|profId|date" -> { id, hora, status }
   const [agendamentoMap, setAgendamentoMap] = useState<Record<string, TreatmentAppointmentSnapshot[]>>({});
   const [appointmentByIdMap, setAppointmentByIdMap] = useState<Record<string, TreatmentAppointmentSnapshot>>({});
@@ -644,6 +649,28 @@ const TratamentosUnidade: React.FC = () => {
         }
       }
       if (!isCurrentRequest()) return;
+      // Read-only recovery of missing SOAP from a uniquely linked clinical record.
+      // Never replace stored clinical notes or infer a link by date alone.
+      const soapValues:Record<string,ReturnType<typeof resolveLinkedSoap>>={};
+      let soapError=false;
+      try {
+        const candidates=sessionsData.filter(canShowLinkedSoap);
+        const ids=[...new Set(candidates.map(x=>x.appointment_id!))];
+        for(let i=0;i<ids.length;i+=50){
+          const batch=ids.slice(i,i+50);
+          const [records,claims]=await Promise.all([
+            (supabase as any).from("prontuarios").select("id,agendamento_id,paciente_id,profissional_id,unidade_id,data_atendimento,soap_subjetivo,soap_objetivo,soap_avaliacao,soap_plano").in("agendamento_id",batch).eq("paciente_id",cycle.patient_id).eq("profissional_id",cycle.professional_id).eq("unidade_id",cycle.unit_id).limit(1000),
+            supabase.from("treatment_sessions").select("id,appointment_id").in("appointment_id",batch).limit(1000),
+          ]);
+          if(records.error||claims.error||(records.data||[]).length>=1000||(claims.data||[]).length>=1000)throw Error("Não foi possível verificar SOAP vinculado");
+          for(const session of candidates.filter(x=>batch.includes(x.appointment_id!))){
+            const match=resolveLinkedSoap(session,cycle.unit_id,(records.data||[]) as RecordSoapSource[],(claims.data||[]).filter(x=>x.appointment_id===session.appointment_id).length);
+            if(match)soapValues[session.id]=match;
+          }
+        }
+      } catch {soapError=true;}
+      if(!isCurrentRequest())return;
+      setLinkedSoapView({scope:requestScope,values:soapError?{}:soapValues,error:soapError});
       // Publish sessions only after all appointment/claim lookups have succeeded.
       setSessions(prev => [...prev.filter(s => s.cycle_id !== cycle.id), ...sessionsData]);
       setExtensions(prev => [...prev.filter(x => x.cycle_id !== cycle.id), ...((eData.data || []) as TreatmentExtension[])]);
@@ -699,13 +726,14 @@ const TratamentosUnidade: React.FC = () => {
   }, [loadData, loadSessionsForCycle, selectedCycle]);
 
   useRealtimeSubscription({
-    tables: ['agendamentos', 'treatment_sessions', 'treatment_cycles'],
+    tables: ['agendamentos', 'treatment_sessions', 'treatment_cycles', 'prontuarios'],
     onchange: silentRefresh,
     affectsDetail: (table, row, old) => {
       if (!selectedCycle) return false;
       const id = row.id ?? old.id;
       if (!id) return true;
       if (table === 'treatment_cycles') return id === selectedCycle.id;
+      if(table==='prontuarios')return [row,old].some(record=>record.paciente_id===selectedCycle.patient_id&&record.profissional_id===selectedCycle.professional_id&&record.unidade_id===selectedCycle.unit_id);
       const ownSessions = sessions.filter(session => session.cycle_id === selectedCycle.id);
       if (table === 'treatment_sessions') {
         return row.cycle_id === selectedCycle.id || old.cycle_id === selectedCycle.id ||
@@ -2143,27 +2171,11 @@ const TratamentosUnidade: React.FC = () => {
           </div>
         );
       }
-      if (parsed.tipo === "soap") {
-        return (
-          <div className="text-xs space-y-0.5 mt-1">
-            <p>
-              <span className="font-semibold text-blue-600">S:</span>{" "}
-              <span className="text-muted-foreground">{parsed.subjetivo}</span>
-            </p>
-            <p>
-              <span className="font-semibold text-green-600">O:</span>{" "}
-              <span className="text-muted-foreground">{parsed.objetivo}</span>
-            </p>
-            <p>
-              <span className="font-semibold text-orange-600">A:</span>{" "}
-              <span className="text-muted-foreground">{parsed.avaliacao}</span>
-            </p>
-            <p>
-              <span className="font-semibold text-purple-600">P:</span>{" "}
-              <span className="text-muted-foreground">{parsed.plano}</span>
-            </p>
-          </div>
-        );
+      if(parsed.tipo==="soap"){
+        const soap=readSoap(notes);
+        const fields=soap?([["S","Subjetivo",soap.subjetivo],["O","Objetivo",soap.objetivo],["A","Avaliação",soap.avaliacao],["P","Plano",soap.plano]] as const).filter(x=>x[2].trim()):[];
+        if(!fields.length)return <p className="text-xs text-muted-foreground mt-1">Sem conteúdo SOAP registrado.</p>;
+        return <details className="clinical-inset rounded-lg border p-2 mt-1"><summary className="cursor-pointer text-xs font-semibold">Evolução SOAP · {fields.length} campo(s)</summary><div className="space-y-2 mt-2">{fields.map(([letter,label,value])=><div key={letter} className="flex gap-2 text-xs"><span className="font-bold text-primary shrink-0">{letter}</span><div className="min-w-0"><p className="font-semibold">{label}</p><p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{value}</p></div></div>)}</div></details>;
       }
     } catch {
       /* not JSON, render as text */
@@ -2199,9 +2211,12 @@ const TratamentosUnidade: React.FC = () => {
         : 0;
     const pendingCount = cycleSessions.filter((s) => getSessionIntegrity(s, selectedCycle).kind === "pendente").length;
     const scheduledCount = cycleSessions.filter((s) => getSessionIntegrity(s, selectedCycle).kind === "agendada").length;
+    const verified=loadedSessionsCycleId===selectedCycle.id&&linkLookup.cycleId===selectedCycle.id&&linkLookup.status==="ready";
+    const currentSoap=linkedSoapView.scope===sessionsScopeRef.current?linkedSoapView:null;
+    const frequencyLabel=FREQUENCY_OPTIONS_NEW.find(f=>f.value===selectedCycle.frequency)?.label||selectedCycle.frequency.replace(/_/g," ");
 
     return (
-      <div className="space-y-4 animate-fade-in overflow-y-auto max-h-[calc(100vh-80px)] pr-1">
+      <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-80px)] pr-1">
         <div className="flex items-center gap-3 flex-wrap">
           <Button variant="ghost" size="sm" onClick={() => setSelectedCycle(null)}>
             <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
@@ -2240,22 +2255,15 @@ const TratamentosUnidade: React.FC = () => {
         )}
 
 
-        <Card className="shadow-card border-0">
-          <CardContent className="p-5 space-y-3">
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-foreground">{selectedCycle.treatment_type}</h2>
-                <p className="text-sm text-muted-foreground">{selectedCycle.specialty}</p>
-              </div>
+        <Card className="clinical-premium">
+          <CardContent className="p-3 space-y-3">
+            <div className="clinical-hub-hero flex flex-wrap items-center gap-3"><span className="clinical-patient-avatar flex items-center justify-center font-bold">{(pac?.nome||selectedCycle.paciente_nome||"Paciente").trim().split(/\s+/).slice(0,2).map(x=>x[0]).join("").toUpperCase()}</span><div className="flex-1 min-w-0"><p className="clinical-hub-eyebrow">Acompanhamento terapêutico</p><h2 className="clinical-hub-name font-bold text-lg break-words">{pac?.nome||selectedCycle.paciente_nome||"Paciente não encontrado"}</h2><p className="clinical-patient-sub text-xs">{selectedCycle.treatment_type} · {selectedCycle.specialty}</p></div>
+
               <Badge className={cn("border", awaitingManualDischarge ? "bg-warning/15 text-warning border-warning/30" : statusColors[selectedCycle.status])}>
                 {awaitingManualDischarge ? "Alta pendente" : statusLabels[selectedCycle.status]}
               </Badge>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-              <div>
-                <span className="text-muted-foreground text-xs">Paciente</span>
-                <p className="font-medium">{pac?.nome || selectedCycle.paciente_nome || "Paciente não encontrado"}</p>
-              </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm clinical-inset rounded-lg border p-3">
               <div>
                 <span className="text-muted-foreground text-xs">Profissional</span>
                 <p className="font-medium">{prof?.nome || "—"}</p>
@@ -2266,7 +2274,7 @@ const TratamentosUnidade: React.FC = () => {
               </div>
               <div>
                 <span className="text-muted-foreground text-xs">Frequência</span>
-                <p className="font-medium capitalize">{selectedCycle.frequency}</p>
+                <p className="font-medium">{frequencyLabel}</p>
               </div>
               <div>
                 <span className="text-muted-foreground text-xs">Início</span>
@@ -2338,6 +2346,7 @@ const TratamentosUnidade: React.FC = () => {
               </div>
             )}
 
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 clinical-inset border rounded-lg p-3">{[["Realizadas",selectedCycle.sessions_done+"/"+selectedCycle.total_sessions],["Agendadas",verified?scheduledCount:"—"],["Pendentes",verified?pendingCount:"—"],["Faltas",verified?(faltaStats?.total||0):"—"]].map(([label,value])=><div key={label}><p className="clinical-field-label text-[10px] uppercase font-semibold">{label}</p><p className="text-lg font-bold tabular-nums">{value}</p></div>)}</div>
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Progresso</span>
@@ -2345,7 +2354,7 @@ const TratamentosUnidade: React.FC = () => {
                   {selectedCycle.sessions_done}/{selectedCycle.total_sessions} sessões ({progressPct}%)
                 </span>
               </div>
-              <Progress value={progressPct} className="h-3" />
+              <div role="progressbar" aria-label="Progresso terapêutico" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.max(0,Math.min(100,progressPct))} className="treatment-progress"><div style={{width:Math.max(0,Math.min(100,progressPct))+"%"}}/></div>
             </div>
 
             <div className="flex gap-2 flex-wrap pt-2">
@@ -2391,6 +2400,8 @@ const TratamentosUnidade: React.FC = () => {
           </CardContent>
         </Card>
 
+        <nav aria-label="Seções do ciclo" className="clinical-hub clinical-hub-tabs">{[["sessions","Sessões"],["pts","PTS"],["extensions","Extensões"]].map(([tab,label])=><Button key={tab} type="button" variant="ghost" className="clinical-hub-tab" aria-pressed={detailTab===tab} onClick={()=>setDetailView({id:selectedCycle.id,tab,filter:sessionFilter})}>{label}</Button>)}</nav>
+        <section hidden={detailTab!=="pts"} aria-label="Projeto Terapêutico Singular">
         {selectedCycle.pts_id && linkedPtsLoading ? (
           <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" /> Carregando PTS vinculado...
@@ -2514,11 +2525,12 @@ const TratamentosUnidade: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-        ) : null}
-
-        <Card className="shadow-card border-0">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-3">
+        ) : <p className="text-sm text-muted-foreground p-3">Nenhum PTS vinculado.</p>}
+        </section>
+        <section hidden={detailTab!=="sessions"} aria-label="Sessões do tratamento">
+        <Card className="clinical-premium">
+          <CardContent className="p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div><h3 className="font-semibold text-foreground">Sessões</h3>
                 <p className="text-sm text-muted-foreground">{loadedSessionsCycleId === selectedCycle.id ? `${cycleSessions.length} de ${selectedCycle.total_sessions} sessões registradas` : 'Carregando sessões…'}</p></div>
               {canControlSessions && cycleIsClinicallyActive && (
@@ -2545,7 +2557,9 @@ const TratamentosUnidade: React.FC = () => {
                 </p>
               </div>
             )}
-            <div className="max-h-[500px] overflow-y-auto border rounded-lg">
+            <div className="flex flex-wrap gap-1.5 mb-3">{[["all","Todas"],["done","Realizadas"],["scheduled","Agendadas"],["pending","Pendentes"],["absence","Faltas"]].map(([filter,label])=><Button key={filter} type="button" size="sm" variant={sessionFilter===filter?"secondary":"outline"} aria-pressed={sessionFilter===filter} onClick={()=>setDetailView({id:selectedCycle.id,tab:"sessions",filter})}>{label}</Button>)}</div>
+            {currentSoap?.error&&<p role="status" className="text-xs text-muted-foreground mb-2">Não foi possível consultar o SOAP vinculado. Os registros originais continuam disponíveis.</p>}
+            <div className="rounded-lg">
               <div className="space-y-2">
                 {(() => {
                   // Exibição cronológica: ordena pela data; a numeração gravada (histórica) é preservada.
@@ -2569,19 +2583,21 @@ const TratamentosUnidade: React.FC = () => {
                   const isPastScheduled = pastScheduledSessionIds.has(s.id);
                   const isScheduledToday = s.status === "agendada" && s.scheduled_date === today;
                   const canRegularizeThis = isPastScheduled && cycleIsActive && canRegisterSessions && s.professional_id === selectedCycle.professional_id;
+                  if(!isInconsistent&&sessionFilter!=="all"&&!(sessionFilter==="done"&&isRealizada)&&!(sessionFilter==="scheduled"&&isAgendada)&&!(sessionFilter==="pending"&&isPendente)&&!(sessionFilter==="absence"&&isSessionFalta(s.status)))return null;
+                  const linked=currentSoap?.values[s.id];
 
                   return (
                     <div
                       key={s.id}
                       className={cn(
-                        "flex flex-col gap-1 p-3 rounded-lg",
+                        "flex flex-col gap-2 p-3 rounded-xl border border-border",
                         effectiveIsPendente ? "bg-warning/5 border border-warning/20"
                           : isAgendada ? "bg-info/5 border border-info/20"
                           : "bg-muted/30",
                       )}
                     >
                       <div className="flex flex-wrap items-center gap-3">
-                        <span className="text-sm font-mono font-bold text-primary w-12 text-center shrink-0 flex flex-col leading-tight">
+                        <span className="clinical-dock-icon clinical-tone-blue text-xs font-bold !w-12 !h-10 text-center shrink-0 flex flex-col leading-tight">
                           <span>{s.session_number}/{selectedCycle.total_sessions}</span>
                           
                         </span>
@@ -2759,7 +2775,7 @@ const TratamentosUnidade: React.FC = () => {
                           </Button>
                         </div>
                       )}
-                      {s.clinical_notes && renderSessionNotes(s.clinical_notes)}
+                      {linked?<div className="space-y-1"><p className="text-xs text-primary font-medium">SOAP do prontuário vinculado · somente consulta</p>{renderSessionNotes(JSON.stringify({tipo:"soap",...linked.soap}))}</div>:s.clinical_notes?renderSessionNotes(s.clinical_notes):isRealizada?<p className="text-xs text-muted-foreground">Sem conteúdo SOAP na sessão.</p>:null}
                     </div>
                   );
                 })}
@@ -2768,8 +2784,10 @@ const TratamentosUnidade: React.FC = () => {
           </CardContent>
         </Card>
 
-        {cycleExtensions.length > 0 && (
-          <Card className="shadow-card border-0">
+        </section>
+        <section hidden={detailTab!=="extensions"} aria-label="Histórico de extensões">
+        {cycleExtensions.length > 0 ? (
+          <Card className="clinical-premium">
             <CardContent className="p-5">
               <h3 className="font-semibold text-foreground mb-3">Histórico de Extensões</h3>
               <div className="space-y-2">
@@ -2790,7 +2808,8 @@ const TratamentosUnidade: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-        )}
+        ):<p className="text-sm text-muted-foreground p-3">Nenhuma extensão registrada.</p>}
+        </section>
 
         {/* Etapa 1: Seleção da sessão a ser registrada (escopo individual por profissional) */}
         <Dialog open={selectSessionOpen} onOpenChange={setSelectSessionOpen}>
