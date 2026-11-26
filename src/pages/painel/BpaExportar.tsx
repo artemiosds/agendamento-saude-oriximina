@@ -4386,14 +4386,13 @@ ${rejectedHtml}`;
             </Alert>
           )}
           {results.headerDetails && (
-            <Card className="clinical-premium">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-blue-600" />
-                  Diagnóstico Técnico do Cabeçalho (Registro 01)
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <details className="clinical-premium group">
+              <summary className="flex items-center gap-2 p-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                <span className="clinical-dock-icon clinical-tone-teal"><CheckCircle2 className="h-4 w-4" /></span>
+                <span className="flex-1 min-w-0"><strong className="block text-sm">Diagnóstico Técnico do Cabeçalho (Registro 01)</strong><span className="block text-xs text-muted-foreground">Estrutura, controle e codificação do arquivo</span></span>
+                <ChevronDown className="h-4 w-4 shrink-0 group-open:rotate-180" />
+              </summary>
+              <div className="space-y-3 px-3 pb-3">
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase text-muted-foreground">Tipo</span>
@@ -4456,8 +4455,8 @@ ${rejectedHtml}`;
                     <span>Encoding: ISO-8859-1 (Sem BOM)</span>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </details>
           )}
 
           <section aria-label="Indicadores da produção" className="space-y-2">
@@ -4639,8 +4638,8 @@ ${rejectedHtml}`;
               </CardHeader>
               <CardContent>
                 <div className="rounded-lg border overflow-x-auto">
-                  <Table>
-                    <TableHeader className="clinical-inset">
+                  <Table className="block md:table" role="table">
+                    <TableHeader className="sr-only md:not-sr-only md:table-header-group clinical-inset" role="rowgroup">
                       <TableRow>
                         <TableHead>Paciente</TableHead>
                         <TableHead>Data Atendimento</TableHead>
@@ -4650,10 +4649,10 @@ ${rejectedHtml}`;
                         <TableHead className="text-right">Ação</TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
+                    <TableBody className="block space-y-2 p-2 md:table-row-group md:space-y-0 md:p-0" role="rowgroup">
                       {results.details[selectedCategory as keyof typeof results.details].map((item, idx) => (
-                        <TableRow key={`${item.id}-${idx}`}>
-                          <TableCell>
+                        <TableRow key={`${item.id}-${idx}`} role="row" className="block rounded-lg border bg-card p-2 md:table-row md:rounded-none md:border-0 md:border-b md:p-0">
+                          <TableCell role="cell" className="block h-auto min-w-0 whitespace-normal break-words py-1.5 px-2 md:table-cell md:p-4"><span className="block text-[10px] uppercase font-semibold text-muted-foreground mb-1 md:hidden">Paciente</span>
                             <div className="font-medium">{item.paciente_nome}</div>
                             <div className="text-xs text-muted-foreground">
                               {item.paciente_cpf ? `CPF: ${item.paciente_cpf}` : "Sem CPF"} |{" "}
@@ -4662,15 +4661,15 @@ ${rejectedHtml}`;
                                 : "Sem Nasc."}
                             </div>
                           </TableCell>
-                          <TableCell>{formatarDataBR(item.data_atendimento)}</TableCell>
-                          <TableCell>
+                          <TableCell role="cell" className="block h-auto min-w-0 whitespace-normal break-words py-1.5 px-2 md:table-cell md:p-4"><span className="block text-[10px] uppercase font-semibold text-muted-foreground mb-1 md:hidden">Data do atendimento</span>{formatarDataBR(item.data_atendimento)}</TableCell>
+                          <TableCell role="cell" className="block h-auto min-w-0 whitespace-normal break-words py-1.5 px-2 md:table-cell md:p-4"><span className="block text-[10px] uppercase font-semibold text-muted-foreground mb-1 md:hidden">Profissional</span>
                             <div className="flex flex-col">
                               <span>{item.profissional_nome}</span>
                               <span className="text-xs text-muted-foreground">CBO: {item.cbo || "---"}</span>
                             </div>
                           </TableCell>
-                          <TableCell>{item.unidade_nome}</TableCell>
-                          <TableCell>
+                          <TableCell role="cell" className="block h-auto min-w-0 whitespace-normal break-words py-1.5 px-2 md:table-cell md:p-4"><span className="block text-[10px] uppercase font-semibold text-muted-foreground mb-1 md:hidden">Unidade</span>{item.unidade_nome}</TableCell>
+                          <TableCell role="cell" className="block h-auto min-w-0 whitespace-normal break-words py-1.5 px-2 md:table-cell md:p-4"><span className="block text-[10px] uppercase font-semibold text-muted-foreground mb-1 md:hidden">Pendência / valor</span>
                             <div className="flex flex-col">
                               <span className="text-xs font-semibold uppercase">{item.pendencia}</span>
                               <span className="text-xs text-muted-foreground">{item.valor_atual}</span>
@@ -4679,7 +4678,7 @@ ${rejectedHtml}`;
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell role="cell" className="text-right block h-auto min-w-0 whitespace-normal break-words py-1.5 px-2 md:table-cell md:p-4"><span className="block text-[10px] uppercase font-semibold text-muted-foreground mb-1 md:hidden">Ações</span>
                             <div className="flex justify-end gap-2 flex-wrap">
                               {(selectedCategory === "missingSigtap" || selectedCategory === "all" || selectedCategory === "critical") &&
                                 item.paciente_id &&
@@ -4687,7 +4686,7 @@ ${rejectedHtml}`;
                                 <Button
                                   variant="default"
                                   size="sm"
-                                  className="h-8"
+                                  className="clinical-record-action min-h-8 h-auto whitespace-normal"
                                   title="Corrigir SIGTAP/CID ou adicionar Procedimento Aditivo por competência"
                                   onClick={() =>
                                     setResolverModal({
@@ -4749,7 +4748,7 @@ ${rejectedHtml}`;
                                       <Button
                                         variant="default"
                                         size="sm"
-                                        className="h-8"
+                                        className="clinical-record-action min-h-8 h-auto whitespace-normal"
                                         title="Abrir cadastro do paciente para corrigir o dado pendente"
                                         onClick={() =>
                                           abrirPaginaParaCorrecao(`/painel/pacientes?id=${item.paciente_id}`)
@@ -4762,7 +4761,7 @@ ${rejectedHtml}`;
                                       <Button
                                         variant="default"
                                         size="sm"
-                                        className="h-8"
+                                        className="clinical-record-action min-h-8 h-auto whitespace-normal"
                                         title="Abrir cadastro do profissional para corrigir o CBO"
                                         onClick={() =>
                                           abrirPaginaParaCorrecao(`/painel/funcionarios?id=${item.profissional_id}`)
@@ -4779,7 +4778,7 @@ ${rejectedHtml}`;
                                 <Button
                                   variant="outline"
                                   size="icon"
-                                  className="h-8 w-8"
+                                  className="clinical-record-action h-8 w-8"
                                   title="Ver Paciente"
                                   onClick={() => abrirPaginaParaCorrecao(`/painel/pacientes?id=${item.paciente_id}`)}
                                 >
@@ -4790,7 +4789,7 @@ ${rejectedHtml}`;
                                 <Button
                                   variant="outline"
                                   size="icon"
-                                  className="h-8 w-8"
+                                  className="clinical-record-action h-8 w-8"
                                   title="Ver Profissional"
                                   onClick={() =>
                                     abrirPaginaParaCorrecao(`/painel/funcionarios?id=${item.profissional_id}`)
