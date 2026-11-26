@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -253,16 +252,16 @@ const Faltosos: React.FC = () => {
   }
 
   const cards = [
-    { key: "BLOQUEADO" as const, label: "Bloqueados", value: overview.BLOQUEADO, icon: Lock, tone: "bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-200" },
-    { key: "FALTOSO" as const, label: "Faltosos", value: overview.FALTOSO, icon: AlertTriangle, tone: "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200" },
-    { key: "REGULAR" as const, label: "Regulares", value: overview.REGULAR, icon: CheckCircle2, tone: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200" },
-    { key: "EXCECAO" as const, label: "Isentos TFD/OJ", value: overview.EXCECAO, icon: ShieldCheck, tone: "bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-200" },
+    { key: "BLOQUEADO" as const, label: "Bloqueados", value: overview.BLOQUEADO, icon: Lock, tone: "clinical-tone-slate" },
+    { key: "FALTOSO" as const, label: "Faltosos", value: overview.FALTOSO, icon: AlertTriangle, tone: "clinical-tone-violet" },
+    { key: "REGULAR" as const, label: "Regulares", value: overview.REGULAR, icon: CheckCircle2, tone: "clinical-tone-teal" },
+    { key: "EXCECAO" as const, label: "Isentos TFD/OJ", value: overview.EXCECAO, icon: ShieldCheck, tone: "clinical-tone-blue" },
   ];
   const dataReady = !loading && !loadError;
 
   return (
-    <div className="space-y-3">
-      <div className="clinical-hub-hero flex flex-wrap items-center gap-3">
+    <div className="space-y-3 min-w-0">
+      <header className="clinical-hub-hero flex flex-wrap items-center gap-3">
         <span className="clinical-patient-avatar flex items-center justify-center shrink-0"><ShieldCheck className="h-5 w-5" /></span>
         <div className="flex-1 min-w-[9rem]">
           <p className="clinical-hub-eyebrow">Gestão de acesso assistencial</p>
@@ -270,7 +269,7 @@ const Faltosos: React.FC = () => {
           <p className="clinical-patient-sub text-xs mt-1">Faltas injustificadas por vínculo paciente + profissional</p>
         </div>
         <Button type="button" className="clinical-hub-new" disabled={loading || salvando} onClick={() => void fetchData()}><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /> Atualizar</Button>
-      </div>
+      </header>
 
       <section aria-label="Indicadores dos vínculos carregados" className="space-y-1.5">
         <div className="flex items-center justify-between gap-2 px-1 text-xs text-muted-foreground"><span>Vínculos carregados · antes dos filtros de busca</span><span>{dataReady ? linhas.length.toLocaleString("pt-BR") : "—"}</span></div>
@@ -278,8 +277,8 @@ const Faltosos: React.FC = () => {
           {cards.map(({ key, label, value, icon: Icon, tone }) => {
             const active = key === "EXCECAO" ? mostrarExcecao : !mostrarExcecao && status === key;
             return <button key={key} type="button" aria-pressed={active} disabled={!dataReady} onClick={() => chooseStatus(key)} className={cn("clinical-premium p-2.5 flex items-center gap-2.5 min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-70", active && "clinical-record-expanded ring-1 ring-primary/30")}>
-              <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", tone)}><Icon className="h-4 w-4" /></span>
-              <span className="min-w-0 flex-1"><span className="block text-xs clinical-field-label break-words">{label}</span><strong className="block text-xl leading-tight tabular-nums">{dataReady ? value.toLocaleString("pt-BR") : "—"}</strong></span>
+              <span className={cn("clinical-dock-icon", tone)}><Icon className="h-4 w-4" /></span>
+              <span className="min-w-0 flex-1"><span className="block text-xs font-semibold clinical-field-label break-words">{label}</span><strong className="block text-xl font-bold leading-tight tabular-nums text-[var(--cp-blue)]">{dataReady ? value.toLocaleString("pt-BR") : "—"}</strong></span>
               <ChevronRight className="hidden sm:block h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             </button>;
           })}
@@ -288,9 +287,9 @@ const Faltosos: React.FC = () => {
 
       <section className="clinical-premium p-3 space-y-3" aria-label="Filtros de faltas">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[12rem]"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Buscar paciente ou profissional" value={busca} onChange={e => setBusca(e.target.value)} className="pl-9" placeholder="Buscar paciente ou profissional..." /></div>
-          <Button type="button" variant="outline" aria-expanded={moreFilters} onClick={() => setMoreFilters(v => !v)}><SlidersHorizontal className="w-4 h-4" /> Mais filtros <ChevronDown className={cn("w-4 h-4", moreFilters && "rotate-180")} /></Button>
-          <Button type="button" variant="outline" onClick={clearFilters}>Limpar</Button>
+          <div className="relative flex-1 min-w-[10rem]"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Buscar paciente ou profissional" value={busca} onChange={e => setBusca(e.target.value)} className="pl-9 h-9" placeholder="Buscar paciente ou profissional..." /></div>
+          <Button type="button" size="sm" variant="outline" className="clinical-record-action" aria-expanded={moreFilters} onClick={() => setMoreFilters(v => !v)}><SlidersHorizontal className="w-4 h-4" /> Mais filtros <ChevronDown className={cn("w-4 h-4", moreFilters && "rotate-180")} /></Button>
+          <Button type="button" size="sm" variant="outline" className="clinical-record-action" onClick={clearFilters}>Limpar filtros</Button>
         </div>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1 min-w-0"><Label className="text-xs">Status</Label>
@@ -310,7 +309,7 @@ const Faltosos: React.FC = () => {
         {mostrarExcecao && <p className="text-xs clinical-record-type flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> Exibindo somente pacientes com exceção TFD ou ordem judicial.</p>}
       </section>
 
-      <Card className="clinical-premium">
+      <Card className="clinical-premium overflow-hidden">
         <CardContent className="p-0">
           <div className="flex flex-wrap items-center gap-2 p-3 border-b">
             <span className="clinical-dock-icon clinical-tone-blue"><Users className="h-4 w-4" /></span>
@@ -321,29 +320,28 @@ const Faltosos: React.FC = () => {
             : loadError ? <div className="p-6 text-center space-y-2"><AlertTriangle className="h-7 w-7 mx-auto text-destructive" /><p className="text-sm">Não foi possível confirmar os dados de faltas.</p><Button size="sm" variant="outline" onClick={() => void fetchData()}>Tentar novamente</Button></div>
             : filtradas.length === 0 ? <div className="p-6 text-center space-y-2"><span className="clinical-dock-icon clinical-tone-teal mx-auto"><Search className="h-4 w-4" /></span><p className="text-sm font-medium">Nenhum registro encontrado.</p><p className="text-xs text-muted-foreground">{mostrarExcecao ? "Nenhum paciente com TFD ou ordem judicial encontrado nos filtros atuais. As exceções são definidas no cadastro do paciente." : "Altere a busca ou os filtros para consultar outros vínculos."}</p><Button size="sm" variant="outline" onClick={clearFilters}>Limpar filtros</Button></div>
             : <>
-              <div className="hidden lg:block">
-                <Table>
-                  <TableHeader><TableRow><TableHead>Paciente</TableHead><TableHead>Profissional</TableHead><TableHead className="text-center">Faltas</TableHead><TableHead>Última falta</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-                  <TableBody>{pageRows.map(r => {
-                    const excecao = getExcecaoLabel(r);
-                    return <TableRow key={r.id}>
-                      <TableCell className="py-2.5"><div className="flex items-center gap-2"><span className="clinical-dock-icon clinical-tone-blue treatment-avatar shrink-0" aria-hidden="true">{r.paciente_nome.trim().split(/\s+/).slice(0,2).map(s => s[0]).join("").toUpperCase()}</span><div className="min-w-0"><p className="font-medium text-sm break-words">{r.paciente_nome}</p>{excecao && <p className="clinical-record-type text-xs flex items-center gap-1"><ShieldCheck className="h-3 w-3" />{excecao}</p>}</div></div></TableCell>
-                      <TableCell className="py-2.5 text-xs text-muted-foreground"><div className="flex items-center gap-1"><User className="h-3.5 w-3.5 shrink-0" />{r.profissional_nome}</div></TableCell>
-                      <TableCell className="py-2.5 text-center font-bold tabular-nums">{r.total_faltas}</TableCell>
-                      <TableCell className="py-2.5 text-xs whitespace-nowrap tabular-nums">{formatDate(r.ultima_falta)}</TableCell>
-                      <TableCell className="py-2.5">{renderStatus(r)}</TableCell>
-                      <TableCell className="py-2.5 text-right">{canUnblock && r.total_faltas > 0 ? <Button size="sm" variant="outline" className="clinical-record-action clinical-action-main" onClick={() => abrirModal(r)}><Unlock className="h-4 w-4" /> Regularizar</Button> : "—"}</TableCell>
-                    </TableRow>;
-                  })}</TableBody>
-                </Table>
-              </div>
-              <div className="lg:hidden p-2 space-y-2">
+              <div className="space-y-2 p-2 sm:p-3">
                 {pageRows.map(r => {
                   const excecao = getExcecaoLabel(r);
-                  return <div key={r.id} className="clinical-inset rounded-lg border p-2.5 space-y-2">
-                    <div className="flex items-start gap-2"><span className="clinical-dock-icon clinical-tone-blue treatment-avatar" aria-hidden="true">{r.paciente_nome.trim().split(/\s+/).slice(0,2).map(s => s[0]).join("").toUpperCase()}</span><div className="flex-1 min-w-0"><p className="font-semibold text-sm break-words">{r.paciente_nome}</p><p className="text-xs text-muted-foreground break-words">{r.profissional_nome}</p>{excecao && <p className="text-xs clinical-record-type">{excecao}</p>}</div>{renderStatus(r)}</div>
-                    <div className="flex flex-wrap items-center gap-3"><div><p className="text-[10px] uppercase clinical-field-label">Faltas</p><p className="font-bold text-sm tabular-nums">{r.total_faltas}</p></div><div><p className="text-[10px] uppercase clinical-field-label">Última falta</p><p className="font-semibold text-xs tabular-nums">{formatDate(r.ultima_falta)}</p></div>{canUnblock && r.total_faltas > 0 && <Button className="ml-auto clinical-record-action clinical-action-main" size="sm" onClick={() => abrirModal(r)}><Unlock className="h-4 w-4" /> Regularizar</Button>}</div>
-                  </div>;
+                  const initials = r.paciente_nome.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase();
+                  return <Card key={r.id} className="clinical-premium">
+                    <CardContent className="p-3 space-y-2.5">
+                      <div className="flex items-start gap-2.5">
+                        <span className="clinical-dock-icon clinical-tone-blue treatment-avatar" aria-hidden="true">{initials || "—"}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm sm:text-base break-words [overflow-wrap:anywhere]">{r.paciente_nome}</p>
+                          <p className="clinical-record-type font-semibold text-xs break-words flex items-center gap-1"><User className="h-3.5 w-3.5 shrink-0" />{r.profissional_nome}</p>
+                          {excecao && <p className="text-xs text-muted-foreground flex items-center gap-1"><ShieldCheck className="h-3 w-3 shrink-0" />{excecao}</p>}
+                        </div>
+                        <div className="shrink-0">{renderStatus(r)}</div>
+                      </div>
+                      <div className="clinical-inset rounded-lg border p-2.5 grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-center">
+                        <div className="min-w-0"><p className="clinical-field-label text-[10px] font-semibold uppercase">Faltas injustificadas</p><p className={cn("font-bold text-sm tabular-nums", !excecao && r.status_falta === "BLOQUEADO" && "text-destructive")}>{r.total_faltas} <span className="font-normal text-xs text-muted-foreground">falta(s)</span></p></div>
+                        <div className="min-w-0"><p className="clinical-field-label text-[10px] font-semibold uppercase">Última falta</p><p className="font-semibold text-sm tabular-nums">{formatDate(r.ultima_falta)}</p></div>
+                        {canUnblock && r.total_faltas > 0 && <div className="col-span-2 sm:col-span-1 flex justify-end"><Button type="button" size="sm" variant="outline" className="clinical-record-action clinical-action-main" onClick={() => abrirModal(r)}><Unlock className="h-4 w-4" /> Regularizar</Button></div>}
+                      </div>
+                    </CardContent>
+                  </Card>;
                 })}
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-t"><p className="text-xs text-muted-foreground">Exibindo {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, orderedRows.length)} de {orderedRows.length} vínculos</p><div className="flex items-center gap-2"><Button size="sm" variant="outline" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}><ChevronLeft className="h-4 w-4" />Anterior</Button><span className="text-xs tabular-nums">{safePage}/{totalPages}</span><Button size="sm" variant="outline" disabled={safePage >= totalPages} onClick={() => setPage(safePage + 1)}>Próxima<ChevronRight className="h-4 w-4" /></Button></div></div>
