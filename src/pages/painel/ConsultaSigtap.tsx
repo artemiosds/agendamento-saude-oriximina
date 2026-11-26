@@ -111,11 +111,11 @@ function CboPicker({ value, options, disabled, onChange }: {
   </div>;
 }
 
-export default function ConsultaSigtap() {
+export default function ConsultaSigtap({ embedded = false }: { embedded?: boolean } = {}) {
   const { user } = useAuth();
   const isMobile = useIsMobile();
   const location = useLocation();
-  const shortcutCode: unknown = location.state?.sigtapCode;
+  const shortcutCode: unknown = embedded ? undefined : location.state?.sigtapCode;
   const appliedShortcut = useRef('');
   const [rows, setRows] = useState<SigtapConsultationRow[]>([]);
   const [cbos, setCbos] = useState<CboOption[]>([]);
@@ -432,23 +432,23 @@ export default function ConsultaSigtap() {
     </div>;
   };
 
-  return <div className="space-y-3 min-w-0 pb-8">
-    <header className="clinical-hub-hero flex flex-wrap items-center gap-3">
-      <span className="clinical-patient-avatar flex items-center justify-center shrink-0"><FileText className="h-5 w-5" aria-hidden="true" /></span>
+  return <div className={`space-y-3 min-w-0 ${embedded ? "" : "pb-8"}`}>
+    <header className={embedded ? "clinical-premium p-3 flex flex-wrap items-center gap-3" : "clinical-hub-hero flex flex-wrap items-center gap-3"}>
+      <span className={embedded ? "clinical-dock-icon clinical-tone-blue" : "clinical-patient-avatar flex items-center justify-center shrink-0"}><FileText className="h-5 w-5" aria-hidden="true" /></span>
       <div className="min-w-[9rem] flex-1">
-        <p className="clinical-hub-eyebrow">Gestão de procedimentos SUS</p>
-        <h1 className="clinical-hub-name text-xl font-bold font-display">Procedimentos do SIGTAP</h1>
-        <p className="clinical-patient-sub text-xs mt-1">Consulte códigos, instrumentos e exigências antes de registrar o atendimento.</p>
+        <p className={embedded ? "text-xs clinical-field-label font-semibold" : "clinical-hub-eyebrow"}>Gestão de procedimentos SUS</p>
+        {embedded ? <h2 className="text-base font-semibold">Procedimentos do SIGTAP</h2> : <h1 className="clinical-hub-name text-xl font-bold font-display">Procedimentos do SIGTAP</h1>}
+        <p className={embedded ? "text-xs text-muted-foreground mt-1" : "clinical-patient-sub text-xs mt-1"}>{embedded ? "Catálogo de consulta da competência atual, independente da competência selecionada na exportação." : "Consulte códigos, instrumentos e exigências antes de registrar o atendimento."}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <BackButton className="m-0 text-white hover:text-white hover:bg-white/10" />
+        {!embedded && <BackButton className="m-0 text-white hover:text-white hover:bg-white/10" />}
         <div className="flex flex-col items-start gap-1 sm:items-end">
-          <Button type="button" className="clinical-hub-new gap-2" disabled={!visible.length || loading || printing || cidLoading}
+          <Button type="button" className={embedded ? "clinical-record-action gap-2" : "clinical-hub-new gap-2"} disabled={!visible.length || loading || printing || cidLoading}
             onClick={() => void printPage()} aria-describedby="sigtap-print-scope">
             {printing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Printer className="h-4 w-4" aria-hidden="true" />}
             Imprimir Tabela (A4)
           </Button>
-          <span id="sigtap-print-scope" className="clinical-patient-sub text-[10px]">Imprime a página exibida.</span>
+          <span id="sigtap-print-scope" className={embedded ? "text-muted-foreground text-[10px]" : "clinical-patient-sub text-[10px]"}>Imprime a página exibida.</span>
         </div>
       </div>
     </header>
