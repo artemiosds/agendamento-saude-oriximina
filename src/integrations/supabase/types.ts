@@ -4534,6 +4534,10 @@ export type Database = {
         Args: { p_agendamento_id: string; p_motivo: string }
         Returns: Json
       }
+      cancel_portal_appointment: {
+        Args: { p_agendamento_id: string; p_motivo?: string }
+        Returns: Json
+      }
       careness_release_date: {
         Args: { p_date: string; p_unit: string; p_value: number }
         Returns: string
@@ -4742,6 +4746,7 @@ export type Database = {
         Args: { p_pagina: number; p_periodo: string }
         Returns: Json
       }
+      get_portal_patient_status: { Args: never; Returns: Json }
       get_procedures_for_cid: {
         Args: { lim?: number; p_cid: string }
         Returns: Json
