@@ -333,10 +333,14 @@ const RelatorioAlta: React.FC = () => {
   const savingRef = React.useRef(false);
   const revisionRef = React.useRef<{ id: string; updated: string | null; status: string | null; payload: Record<string, any> } | null>(null);
   const [conflict,setConflict] = useState(false);
+  const [savedSnapshot,setSavedSnapshot] = useState<string | null>(null);
+  const loadedSnapshotPending = React.useRef(false);
   const formReadOnly = isReportLocked || loading || loadFailed || !pacienteId;
 
   const resetReportTracking = () => {
     revisionRef.current = null;
+    loadedSnapshotPending.current = false;
+    setSavedSnapshot(null);
     setConflict(false);
     setReportId(null);
     setReportOwnerId("");
@@ -436,6 +440,7 @@ const RelatorioAlta: React.FC = () => {
 
   const handlePacienteChange = (nextId: string) => {
     if (nextId === pacienteId || savingRef.current) return;
+    if (hasUnsavedChanges && !window.confirm("Há alterações não salvas. Deseja descartá-las e trocar de paciente?")) return;
     setLoadFailed(false);
     reportLoadTokenRef.current += 1;
     activePatientRef.current = nextId;
@@ -590,7 +595,6 @@ const RelatorioAlta: React.FC = () => {
         setStatus(existingDraft.status as any || "rascunho");
         const data = parseAltaPayload(existingDraft.observacoes);
         revisionRef.current = { id: existingDraft.id, updated: existingDraft.atualizado_em ?? null, status: existingDraft.status ?? null, payload: data };
-        revisionRef.current = { id: existingDraft.id, updated: existingDraft.atualizado_em ?? null, status: existingDraft.status ?? null, payload: data };
         
         setModalidades(data.modalidades || []);
         setCid10(data.cid10 || "");
@@ -647,7 +651,10 @@ const RelatorioAlta: React.FC = () => {
         toast.error(err?.message || "Não foi possível carregar o relatório multiprofissional.");
       }
     } finally {
-      if (token === reportLoadTokenRef.current && activePatientRef.current === pid) setLoading(false);
+      if (token === reportLoadTokenRef.current && activePatientRef.current === pid) {
+        loadedSnapshotPending.current = true;
+        setLoading(false);
+      }
     }
   };
 
@@ -674,6 +681,7 @@ const RelatorioAlta: React.FC = () => {
         setReportOwnerId(existingDraft.profissional_id || "");
         setStatus(existingDraft.status as any || "rascunho");
         const data = parseAltaPayload(existingDraft.observacoes);
+        revisionRef.current = { id: existingDraft.id, updated: existingDraft.atualizado_em ?? null, status: existingDraft.status ?? null, payload: data };
         // Load all data from draft
         setIndDiagCid(data.diagCid || "");
         setIndCif(data.cif || "");
@@ -794,7 +802,10 @@ const RelatorioAlta: React.FC = () => {
         toast.error(error?.message || "Não foi possível carregar o relatório individual.");
       }
     } finally {
-      if (token === reportLoadTokenRef.current && activePatientRef.current === pid) setLoading(false);
+      if (token === reportLoadTokenRef.current && activePatientRef.current === pid) {
+        loadedSnapshotPending.current = true;
+        setLoading(false);
+      }
     }
   };
 
@@ -1228,6 +1239,85 @@ const RelatorioAlta: React.FC = () => {
     }
   };
 
+  const buildDraftPayload = (type: "multi" | "individual", signedSections?: ProfSection[]) => type === "multi" ? {
+      modalidades, cid10, multiCid10Secundario, multiDiagClinico, multiDiagFuncional,
+      multiContextoBiopsicossocial, cifFuncoes, cifAtividades, cifFatores,
+      multiBarreiras, multiPotencialidades, multiFatoresContextuais,
+      multiObjetivosGerais, multiPlanoExecutado,
+      profissionais: signedSections || profSections, motivoAlta, multiTipoAlta, motivoDetalhe,
+      condicaoFuncional, nivelIndep, multiComparacaoFuncional, multiGanhosPrincipais,
+      multiLimitacoesPersistentes, multiRiscoRegressao, multiFatoresAlerta,
+      orientacoesUsuario, orientacoesUbs, multiOrientacoesEscola, multiPontosAtencao,
+      encaminhamentos, freqAps, multiContinuarTerapia, multiPrazoRetorno,
+      multiResponsavelTecnico, resumoConsolidado: multiResumoConsolidado,
+    } : {
+      diagCid: indDiagCid, cif: indCif, diagClinico: indDiagClinico,
+      diagFuncional: indDiagFuncional, nivelComprometimento: indNivelComprometimento,
+      obsDiagnosticas: indObsDiagnosticas, queixaPrincipal: indQueixaPrincipal,
+      motivoEncaminhamento: indMotivoEncaminhamento, contextoFamiliar: indContextoFamiliar,
+      comorbidades: indComorbidades, medicacao: indMedicacao,
+      objetivos: indObjetivos, intervencoes: indIntervencoes,
+      evolucao: indEvolucao, metas: indMetas, metasJust: indMetasJust,
+      ta: indTA, frequenciaAtendimento: indFrequenciaAtendimento,
+      adesaoTratamento: indAdesaoTratamento, evolucaoGlobal: indEvolucaoGlobal,
+      intercorrencias: indIntercorrencias, intercorrenciasObs: indIntercorrenciasObs,
+      respostaTerapeutica: indRespostaTerapeutica, comparacaoInicioAlta: indComparacaoInicioAlta,
+      resumoConsolidado: indResumoConsolidado, riscoPosAlta: indRiscoPosAlta,
+      complexidade: indComplexidade,
+      motivo: indMotivo, tipoAlta: indTipoAlta, motivoDet: indMotivoDet,
+      orientacoes: indOrientacoes, encaminhamento: indEncaminhamento,
+      modalidade: indModalidade, sessoes: indSessoes, faltas: indFaltas,
+      periodoInicio: indPeriodoInicio, periodoFim: indPeriodoFim,
+      continuarTerapia: indContinuarTerapia, riscoRegressao: indRiscoRegressao,
+      prazoReavaliacao: indPrazoReavaliacao,
+      ptsMetas: ptsMetas,
+    };
+
+  // Compare clinical fields only: changes to audit/version metadata are not unsaved edits.
+  const snapshot = (type: "multi" | "individual", signedSections?: ProfSection[]) =>
+    JSON.stringify({ date: type === "multi" ? dataAlta : indDataAlta, fields: buildDraftPayload(type, signedSections) });
+  const currentSnapshot = modo === "multiprofissional" ? snapshot("multi") : modo === "individual" ? snapshot("individual") : null;
+  const hasUnsavedChanges = !!pacienteId && !isReportLocked && !loadFailed && savedSnapshot !== null && currentSnapshot !== null && savedSnapshot !== currentSnapshot;
+
+  useEffect(() => {
+    if (!loading && loadedSnapshotPending.current) {
+      loadedSnapshotPending.current = false;
+      if (!loadFailed) setSavedSnapshot(currentSnapshot);
+    }
+  }, [loading, loadFailed, currentSnapshot]);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges && !loading) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges && !savingRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const guardLink = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      const anchor = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      if (!(anchor instanceof HTMLAnchorElement) || anchor.download || (anchor.target && anchor.target !== "_self")) return;
+      const destination = new URL(anchor.href, window.location.href);
+      if (destination.origin !== window.location.origin || destination.pathname === window.location.pathname) return;
+      if (savingRef.current || (hasUnsavedChanges && !window.confirm("Há alterações não salvas neste relatório. Deseja sair mesmo assim?"))) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", guardLink, true);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      document.removeEventListener("click", guardLink, true);
+    };
+  }, [hasUnsavedChanges, loading]);
+
+  const returnToSelector = () => {
+    if (savingRef.current) return;
+    if (hasUnsavedChanges && !window.confirm("Há alterações não salvas. Voltar e descartá-las?")) return;
+    setModo("selector");
+  };
+
   const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any, signedSections?: ProfSection[]) => {
     if (savingRef.current || loading || loadFailed || conflict) return;
     if (!pacienteId || !user?.id) { toast.error("Selecione um paciente"); return; }
@@ -1256,43 +1346,8 @@ const RelatorioAlta: React.FC = () => {
 
     const updatedHistory = [...history, newHistoryEntry];
 
-    const payload = type === "multi" ? {
-      ...revisionRef.current?.payload,
-      modalidades, cid10, multiCid10Secundario, multiDiagClinico, multiDiagFuncional,
-      multiContextoBiopsicossocial, cifFuncoes, cifAtividades, cifFatores,
-      multiBarreiras, multiPotencialidades, multiFatoresContextuais,
-      multiObjetivosGerais, multiPlanoExecutado,
-      profissionais: signedSections || profSections, motivoAlta, multiTipoAlta, motivoDetalhe,
-      condicaoFuncional, nivelIndep, multiComparacaoFuncional, multiGanhosPrincipais,
-      multiLimitacoesPersistentes, multiRiscoRegressao, multiFatoresAlerta,
-      orientacoesUsuario, orientacoesUbs, multiOrientacoesEscola, multiPontosAtencao,
-      encaminhamentos, freqAps, multiContinuarTerapia, multiPrazoRetorno,
-      multiResponsavelTecnico, resumoConsolidado: multiResumoConsolidado,
-      version: newVersion, history: updatedHistory
-    } : {
-      ...revisionRef.current?.payload,
-      diagCid: indDiagCid, cif: indCif, diagClinico: indDiagClinico,
-      diagFuncional: indDiagFuncional, nivelComprometimento: indNivelComprometimento,
-      obsDiagnosticas: indObsDiagnosticas, queixaPrincipal: indQueixaPrincipal,
-      motivoEncaminhamento: indMotivoEncaminhamento, contextoFamiliar: indContextoFamiliar,
-      comorbidades: indComorbidades, medicacao: indMedicacao,
-      objetivos: indObjetivos, intervencoes: indIntervencoes,
-      evolucao: indEvolucao, metas: indMetas, metasJust: indMetasJust,
-      ta: indTA, frequenciaAtendimento: indFrequenciaAtendimento,
-      adesaoTratamento: indAdesaoTratamento, evolucaoGlobal: indEvolucaoGlobal,
-      intercorrencias: indIntercorrencias, intercorrenciasObs: indIntercorrenciasObs,
-      respostaTerapeutica: indRespostaTerapeutica, comparacaoInicioAlta: indComparacaoInicioAlta,
-      resumoConsolidado: indResumoConsolidado, riscoPosAlta: indRiscoPosAlta,
-      complexidade: indComplexidade,
-      motivo: indMotivo, tipoAlta: indTipoAlta, motivoDet: indMotivoDet,
-      orientacoes: indOrientacoes, encaminhamento: indEncaminhamento,
-      modalidade: indModalidade, sessoes: indSessoes, faltas: indFaltas,
-      periodoInicio: indPeriodoInicio, periodoFim: indPeriodoFim,
-      continuarTerapia: indContinuarTerapia, riscoRegressao: indRiscoRegressao,
-      prazoReavaliacao: indPrazoReavaliacao,
-      ptsMetas: ptsMetas,
-      version: newVersion, history: updatedHistory
-    };
+    const draftPayload = buildDraftPayload(type, signedSections);
+    const payload = { ...revisionRef.current?.payload, ...draftPayload, version: newVersion, history: updatedHistory };
 
     const targetStatus = customStatus || (isDraft ? "rascunho" : "concluido");
 
@@ -1377,6 +1432,7 @@ const RelatorioAlta: React.FC = () => {
     } else {
       revisionRef.current = { id: result.data.id, updated: result.data.atualizado_em ?? null, status: result.data.status ?? null, payload };
       if (signedSections) setProfSections(signedSections);
+      setSavedSnapshot(snapshot(type, signedSections));
       toast.success(signedSections ? "Contribuição registrada e rascunho salvo" : isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta atualizado");
       setStatus(targetStatus as any);
       if (!targetReportId) setReportOwnerId(user.id);
@@ -1513,7 +1569,7 @@ const RelatorioAlta: React.FC = () => {
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setModo("selector")} disabled={loading}>
+            <Button variant="ghost" size="icon" onClick={returnToSelector} disabled={loading}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div>
@@ -1539,6 +1595,7 @@ const RelatorioAlta: React.FC = () => {
         </div>
 
         {evolutionPreview}
+        {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>Salve o rascunho antes de sair. Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}
         {conflict && <Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Conflito de gravação</AlertTitle><AlertDescription>O relatório foi alterado por outra operação ou seu acesso mudou. As alterações não salvas continuam nesta tela. Revise-as antes de recarregar; nenhuma sobrescrita foi efetuada. <Button type="button" variant="outline" size="sm" className="mt-2" disabled={loading} onClick={()=>{if(!window.confirm("Recarregar o registro do banco e descartar as alterações ainda não salvas?"))return;resetReportTracking();if(modo==="multiprofissional"){resetMultiForm();void loadMultiData(pacienteId,++reportLoadTokenRef.current);}else{resetIndividualForm();void loadIndividualData(pacienteId,++reportLoadTokenRef.current);}}}>Recarregar relatório</Button></AlertDescription></Alert>}
         {loadFailed && <Alert variant="destructive"><AlertCircle className="h-4 w-4"/><AlertTitle>Não foi possível carregar o relatório</AlertTitle><AlertDescription>Para evitar perda de dados, a edição e a impressão estão bloqueadas. Limpe a seleção e selecione o paciente novamente.</AlertDescription></Alert>}
         {isReportLocked && (
@@ -1837,7 +1894,7 @@ const RelatorioAlta: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => setModo("selector")} disabled={loading}>
+          <Button variant="ghost" size="icon" onClick={returnToSelector} disabled={loading}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
@@ -1868,6 +1925,7 @@ const RelatorioAlta: React.FC = () => {
       </div>
 
       {evolutionPreview}
+        {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>Salve o rascunho antes de sair. Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}
         {conflict && <Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Conflito de gravação</AlertTitle><AlertDescription>O relatório foi alterado por outra operação ou seu acesso mudou. As alterações não salvas continuam nesta tela. Revise-as antes de recarregar; nenhuma sobrescrita foi efetuada. <Button type="button" variant="outline" size="sm" className="mt-2" disabled={loading} onClick={()=>{if(!window.confirm("Recarregar o registro do banco e descartar as alterações ainda não salvas?"))return;resetReportTracking();if(modo==="multiprofissional"){resetMultiForm();void loadMultiData(pacienteId,++reportLoadTokenRef.current);}else{resetIndividualForm();void loadIndividualData(pacienteId,++reportLoadTokenRef.current);}}}>Recarregar relatório</Button></AlertDescription></Alert>}
         {loadFailed && <Alert variant="destructive"><AlertCircle className="h-4 w-4"/><AlertTitle>Não foi possível carregar o relatório</AlertTitle><AlertDescription>Para evitar perda de dados, a edição e a impressão estão bloqueadas. Limpe a seleção e selecione o paciente novamente.</AlertDescription></Alert>}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
