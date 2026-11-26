@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   canTransitionDiagnosticExam,
   getAvailableDiagnosticSlots,
+  getEffectiveDiagnosticStatus,
+  getDiagnosticStatusLabel,
   getDiagnosticRoomConfig,
   isDiagnosticAppointment,
   normalizeDiagnosticRoomConfig,
@@ -105,5 +107,45 @@ describe("diagnostic status workflow", () => {
     expect(canTransitionDiagnosticExam("exame_realizado_em_laudo", "laudo_liberado")).toBe(true);
     expect(canTransitionDiagnosticExam("agendado", "laudo_liberado")).toBe(false);
     expect(canTransitionDiagnosticExam("laudo_liberado", "cancelado")).toBe(false);
+  });
+});
+
+describe("shared diagnostic status projection", () => {
+  const row = (status: string, technical = "agendado") => ({ status, custom_data: { status_exame: technical } });
+  it("recognizes arrival already recorded by the general agenda without repeating it", () => {
+    for (const status of ["confirmado_chegada", "chegada_confirmada", "aguardando_triagem", "triagem_concluida", "aguardando_enfermagem", "aguardando_atendimento", "apto_atendimento", "chamado", "em_atendimento"]) {
+      const effective = getEffectiveDiagnosticStatus(row(status));
+      expect(effective).toBe("paciente_chegou");
+      expect(canTransitionDiagnosticExam(effective, "paciente_chegou")).toBe(false);
+    }
+  });
+  it("does not infer execution or release from general clinical completion", () => {
+    for (const status of ["concluido", "finalizado", "atendido"]) {
+      expect(getEffectiveDiagnosticStatus(row(status))).toBe("agendado");
+      expect(getEffectiveDiagnosticStatus(row(status, "paciente_chegou"))).toBe("paciente_chegou");
+    }
+  });
+  it("blocks further technical transitions on cancelled, missed and rescheduled exams", () => {
+    for (const [general, effective] of [["cancelado", "cancelado"], ["falta", "falta"], ["paciente_faltou", "falta"], ["remarcado", "remarcado"]]) {
+      for (const technical of ["agendado", "paciente_chegou", "exame_realizado_em_laudo"]) {
+        const status = getEffectiveDiagnosticStatus(row(general, technical));
+        expect(status).toBe(effective);
+        expect(canTransitionDiagnosticExam(status, "laudo_liberado")).toBe(false);
+        expect(canTransitionDiagnosticExam(status, "paciente_chegou")).toBe(false);
+      }
+    }
+  });
+  it("keeps explicit technical execution and released historical reports", () => {
+    expect(getEffectiveDiagnosticStatus(row("confirmado", "exame_realizado_em_laudo"))).toBe("exame_realizado_em_laudo");
+    expect(getEffectiveDiagnosticStatus(row("cancelado", "laudo_liberado"))).toBe("laudo_liberado");
+    expect(getEffectiveDiagnosticStatus(row("confirmado", "cancelado"))).toBe("cancelado");
+    expect(getDiagnosticStatusLabel("falta")).toBe("Falta registrada");
+    expect(getDiagnosticStatusLabel("remarcado")).toBe("Remarcado");
+  });
+  it("does not mutate the original record", () => {
+    const input = row("apto_atendimento");
+    const before = JSON.stringify(input);
+    getEffectiveDiagnosticStatus(input);
+    expect(JSON.stringify(input)).toBe(before);
   });
 });
