@@ -12,7 +12,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   Bell,
@@ -33,6 +32,8 @@ import CondicaoBadges from "@/components/CondicaoBadges";
 import ContactActionButton from "@/components/ContactActionButton";
 import { cn } from "@/lib/utils";
 import PassaporteClinico from "@/components/prontuario/PassaporteClinico";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { MoreVertical } from "lucide-react";
 
 export interface FilaEsperaItemRowProps {
   f: any;
@@ -105,15 +106,17 @@ const FilaEsperaItemRowBase: React.FC<FilaEsperaItemRowProps> = ({
   onEditar,
   onRemover,
 }) => {
+  const [removeOpen, setRemoveOpen] = React.useState(false);
+  const legacyActions = f.status !== "encaixado" && f.status !== "atendido" && f.status !== "cancelado" && !isChamado;
   return (
     <Card
-      className={cn("shadow-card border-0 transition-all", isChamado && "ring-2 ring-primary/30")}
+      className={cn("clinical-premium min-w-0", isChamado && "ring-2 ring-primary/30")}
       style={{
         borderLeft: manchesterRisco
           ? `6px solid ${manchesterRisco.color}`
           : isActive && (f.status !== "aguardando" || reservaTime)
             ? "6px solid hsl(var(--primary))"
-          : isActive && waitMin > 60
+          : f.prioridade === "urgente"
             ? "6px solid hsl(var(--destructive))"
             : isActive && waitMin >= 30
               ? "6px solid hsl(var(--warning))"
@@ -122,7 +125,7 @@ const FilaEsperaItemRowBase: React.FC<FilaEsperaItemRowProps> = ({
                 : undefined,
       }}
     >
-      <CardContent className="p-3 sm:p-4 flex flex-col gap-3">
+      <CardContent className="p-3 flex flex-col gap-2">
         <div className="flex items-start gap-3">
           <div className="flex flex-col items-center gap-1 shrink-0">
             <div
@@ -135,17 +138,7 @@ const FilaEsperaItemRowBase: React.FC<FilaEsperaItemRowProps> = ({
             >
               {numero}
             </div>
-            {isActive && (
-              <span
-                className={cn(
-                  "text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
-                  waitBgClass,
-                  waitTextClass,
-                )}
-              >
-                {waitLabel}
-              </span>
-            )}
+
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -162,7 +155,7 @@ const FilaEsperaItemRowBase: React.FC<FilaEsperaItemRowProps> = ({
               {pacienteCondicao && <CondicaoBadges {...pacienteCondicao} />}
               {manchesterRisco && (
                 <Badge
-                  className={`text-white text-[10px] px-1.5 py-0 ${manchesterRisco.pulse ? "animate-[pulse-manchester_1.5s_infinite]" : ""}`}
+                  className="text-white text-[10px] px-1.5 py-0"
                   style={{ backgroundColor: manchesterRisco.color }}
                 >
                   {manchesterRisco.subtitle}
@@ -177,12 +170,12 @@ const FilaEsperaItemRowBase: React.FC<FilaEsperaItemRowProps> = ({
                   )}
                 >
                   <Clock className="w-3 h-3" />
-                  {f.prioridade === "urgente" ? "URGENTE" : `Espera: ${waitLabel}`}
+                  {`Desde entrada: ${waitLabel}`}
                 </span>
               )}
             </div>
             <p className="text-sm text-muted-foreground">
-              {unidadeNome || f.setor} • {profLabel} • Chegou: {f.horaChegada}
+              {unidadeNome || f.setor} • {profLabel} • Entrada: {f.horaChegada}
             </p>
             {absenceInfo && (
               <TooltipProvider>
@@ -234,6 +227,7 @@ const FilaEsperaItemRowBase: React.FC<FilaEsperaItemRowProps> = ({
             phone={pacienteTelefone}
             patientName={f.pacienteNome}
             unitName={unidadeNome}
+            showLabel
           />
           <Badge className={cn("shrink-0", prioridadeBadgeClass)}>{prioridadeLabelText}</Badge>
           <span
@@ -270,93 +264,43 @@ const FilaEsperaItemRowBase: React.FC<FilaEsperaItemRowProps> = ({
               </Button>
             )}
             {!isChamado && f.status === "aguardando" && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8"
-                onClick={() => onChamar(f)}
-                title="Chamar"
-              >
-                <Bell className="w-4 h-4" />
+              <Button size="sm" variant="outline" className="h-8" onClick={() => onChamar(f)}>
+                <Bell className="w-4 h-4 mr-1" /> Notificar paciente
               </Button>
             )}
-            {f.status !== "encaixado" &&
-              f.status !== "atendido" &&
-              f.status !== "cancelado" &&
-              !isChamado && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8"
-                    onClick={() => onIniciar(f)}
-                    title="Iniciar"
-                  >
-                    <Play className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8"
-                    onClick={() => onFinalizar(f)}
-                    title="Finalizar"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8"
-                    onClick={() => onMarcarFalta(f)}
-                    title="Marcar Falta"
-                  >
-                    <XCircle className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8"
-                    onClick={() => onReagendar(f)}
-                    title="Reagendar"
-                  >
-                    <CalendarClock className="w-4 h-4" />
-                  </Button>
-                </>
-              )}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8"
-              onClick={() => onDetalhes(f)}
-              title="Detalhes"
-            >
-              <Eye className="w-4 h-4" />
+            {legacyActions && f.status === "em_atendimento" && (
+              <Button size="sm" variant="outline" className="h-8" onClick={() => onFinalizar(f)}>
+                <CheckCircle className="w-4 h-4 mr-1" /> Finalizar fila
+              </Button>
+            )}
+            <Button size="sm" variant="outline" className="h-8" onClick={() => onDetalhes(f)}>
+              <Eye className="w-4 h-4 mr-1" /> Detalhes
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8"
-              onClick={() => onEditar(f)}
-              title="Editar"
-            >
-              <Pencil className="w-4 h-4" />
-            </Button>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 text-destructive"
-                  title="Remover"
-                >
-                  <Trash2 className="w-4 h-4" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="sm" className="h-8" aria-label="Mais ações do paciente">
+                  <MoreVertical className="w-4 h-4 mr-1" /> Mais ações
                 </Button>
-              </AlertDialogTrigger>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {legacyActions && <>
+                  <DropdownMenuItem onSelect={() => onIniciar(f)}><Play className="w-4 h-4 mr-2" /> Iniciar na fila</DropdownMenuItem>
+                  {f.status !== "em_atendimento" && <DropdownMenuItem onSelect={() => onFinalizar(f)}><CheckCircle className="w-4 h-4 mr-2" /> Finalizar fila</DropdownMenuItem>}
+                  <DropdownMenuItem onSelect={() => onMarcarFalta(f)}><XCircle className="w-4 h-4 mr-2" /> Marcar falta</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onReagendar(f)}><CalendarClock className="w-4 h-4 mr-2" /> Agendar / reagendar</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>}
+                <DropdownMenuItem onSelect={() => onEditar(f)}><Pencil className="w-4 h-4 mr-2" /> Editar registro</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-destructive" onSelect={() => setRemoveOpen(true)}><Trash2 className="w-4 h-4 mr-2" /> Remover da fila</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Remover da fila?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Tem certeza que deseja remover {pacienteNomeResolved} da fila?
+                    Esta ação exclui o registro de {pacienteNomeResolved} da fila. Confirme somente se realmente deseja removê-lo.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
