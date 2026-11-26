@@ -412,6 +412,8 @@ const RelatorioAlta: React.FC = () => {
   const revisionRef = React.useRef<{ id: string; unitId: string; updated: string | null; status: string | null; payload: Record<string, any> } | null>(null);
   const [conflict,setConflict] = useState(false);
   const [savedSnapshot,setSavedSnapshot] = useState<string | null>(null);
+  const lastAutosaveAttempt = React.useRef<string|null>(null);
+  const [autosaveFailed,setAutosaveFailed] = useState(false);
   const loadedSnapshotPending = React.useRef(false);
   const [sourceBundle,setSourceBundle] = useState<AltaSourceBundle|null>(null);
   const [sourceScope,setSourceScope] = useState("");
@@ -453,6 +455,7 @@ const RelatorioAlta: React.FC = () => {
     setSourceBundle(null);setSourceScope("");setSourcePts("");setSourceMeta(null);setManualSource(null);setManualAvailable(false);
     loadedSnapshotPending.current = false;
     setSavedSnapshot(null);
+    lastAutosaveAttempt.current=null;setAutosaveFailed(false);
     setConflict(false);
     setReportId(null);
     setReportOwnerId("");
@@ -1482,8 +1485,9 @@ const RelatorioAlta: React.FC = () => {
     setModo("selector");
   };
 
-  const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any, signedSections?: ProfSection[]) => {
+  const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any, signedSections?: ProfSection[], automatic = false) => {
     if (savingRef.current || loading || permissionsLoading || loadFailed || conflict || !scopeMatches) return;
+    if (automatic && (!isDraft || !reportId || isReportLocked)) return;
     if (!pacienteId || !user?.id || !user.unidadeId) { toast.error("Selecione um paciente e uma unidade"); return; }
     if (!reportId && (!sourceBundle || !sourceMeta) && !(type==="individual"&&manualSource)) { toast.error("Confirme as fontes clínicas antes de salvar o novo relatório."); return; }
     if (type==="individual" && manualSource && !manualSource.motivo.trim()) {toast.error("Informe a justificativa do preenchimento manual antes de salvar.");return;}
@@ -1512,7 +1516,7 @@ const RelatorioAlta: React.FC = () => {
       version: newVersion,
       data: actionDate,
       user_nome: user.nome || "Sistema",
-      action: signedSections ? "Assinar Contribuição" : customStatus === "emitido" ? "Emissão Final" : isDraft ? "Salvar Rascunho" : "Atualização",
+      action: signedSections ? "Assinar Contribuição" : customStatus === "emitido" ? "Emissão Final" : isDraft ? automatic ? "Salvamento automático de rascunho" : "Salvar Rascunho" : "Atualização",
     };
 
     let updatedHistory = [...history, newHistoryEntry];
@@ -1627,13 +1631,15 @@ const RelatorioAlta: React.FC = () => {
     }
 
     if (result.error || !result.data?.id) {
+      if (automatic) setAutosaveFailed(true);
       toast.error("Não foi possível confirmar o salvamento: " + (result.error?.message || "registro não retornado"));
     } else {
       revisionRef.current = { id: result.data.id, unitId:user.unidadeId, updated: result.data.atualizado_em ?? null, status: result.data.status ?? null, payload };
       if (mergedSections || signedSections) setProfSections(mergedSections || signedSections!);
       setSavedSnapshot(snapshot(type, mergedSections || signedSections));
+      setAutosaveFailed(false);
       if (mergedSections) toast.info("Contribuições independentes conciliadas sem substituir o trabalho da equipe.");
-      toast.success(signedSections ? "Contribuição registrada e rascunho salvo" : isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta atualizado");
+      if (!automatic) toast.success(signedSections ? "Contribuição registrada e rascunho salvo" : isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta atualizado");
       setStatus(targetStatus as any);
       if (!targetReportId) setReportOwnerId(user.id);
       setLastUpdatedBy(user.nome || "");
@@ -1651,10 +1657,11 @@ const RelatorioAlta: React.FC = () => {
         pacienteNome: paciente?.nome,
         profissionalId: user.id,
         profissionalNome: user.nome,
-        detalhes: { tipo: type, isDraft, version: newVersion }
+        detalhes: { tipo: type, isDraft, version: newVersion, automatico: automatic }
       });
     }
     } catch (error: any) {
+      if (automatic) setAutosaveFailed(true);
       toast.error(error?.message || "Não foi possível salvar o relatório.");
     } finally {
       savingRef.current = false;
@@ -1662,6 +1669,24 @@ const RelatorioAlta: React.FC = () => {
     }
   };
 
+  // Automatic persistence uses the same CAS, permissions and audit as explicit save.
+  // Never create a report automatically or persist PHI in browser storage.
+  const autoDraftType = modo==="multiprofissional"?"multi":modo==="individual"?"individual":null;
+  const autoDatesReady = !!autoDraftType && isValidAltaDate(autoDraftType==="multi"?dataAlta:indDataAlta) && (!sourceMeta || ((autoDraftType==="multi"?dataAlta:indDataAlta)===sourceMeta.through && (autoDraftType==="multi" || (indPeriodoInicio===sourceMeta.periodStart && indPeriodoFim===sourceMeta.periodEnd))));
+  const autoReady = !!reportId && !!autoDraftType && hasUnsavedChanges && !formReadOnly && !conflict && !awaitingSources && autoDatesReady && (!manualSource || !!manualSource.motivo.trim()) && !correctionTarget && !isReopening;
+  const autoSaveRef = React.useRef(handleSave);
+  React.useLayoutEffect(()=>{autoSaveRef.current=handleSave;});
+  useEffect(()=>{
+    if (!autoReady || !autoDraftType || !currentSnapshot || lastAutosaveAttempt.current===currentSnapshot) return;
+    const timer=window.setTimeout(()=>{
+      if(savingRef.current)return;
+      lastAutosaveAttempt.current=currentSnapshot;
+      setAutosaveFailed(false);
+      void autoSaveRef.current(autoDraftType,true,undefined,undefined,true);
+    },2500);
+    return ()=>window.clearTimeout(timer);
+  },[autoReady,autoDraftType,currentSnapshot,reportId]);
+  const draftStatus = reportId && !isReportLocked && !loadFailed && scopeMatches && !conflict && !hasUnsavedChanges && !!savedSnapshot && !loading && !permissionsLoading;
   const scopeInvalidated=!!pacienteId&&!!loadedScope&&(loadedScope.userId!==user?.id||loadedScope.unitId!==user?.unidadeId);
   if(scopeInvalidated){
     return <div className="clinical-premium p-4 space-y-3"><Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Contexto de acesso alterado</AlertTitle><AlertDescription>A unidade ou o profissional ativo mudou. O relatório anterior não será exibido, impresso nem gravado neste contexto.</AlertDescription></Alert><Button type="button" variant="outline" disabled={savingRef.current} onClick={()=>{if(hasUnsavedChanges&&!window.confirm("Existem alterações não salvas. Descartá-las e retornar à seleção?"))return;reportLoadTokenRef.current+=1;activePatientRef.current="";resetReportTracking();resetMultiForm();resetIndividualForm();setPacienteId("");setModo("selector");}}>Retornar à seleção</Button></div>;
@@ -1881,7 +1906,7 @@ const RelatorioAlta: React.FC = () => {
         </Dialog>
         {sourcePanel}
         {evolutionPreview}
-        {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>Salve o rascunho antes de sair. Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}
+        {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>{autosaveFailed?"O salvamento automático falhou. Tente salvar manualmente antes de sair.":reportId&&autoReady?"Salvamento automático após uma pausa na edição. Não feche a página até a confirmação.":"Salve o rascunho manualmente antes de sair."} Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}{draftStatus&&<p role="status" className="text-xs text-muted-foreground flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-green-600"/> Rascunho confirmado no banco.</p>}
         {conflict && <Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Conflito de gravação</AlertTitle><AlertDescription>O relatório foi alterado por outra operação ou seu acesso mudou. As alterações não salvas continuam nesta tela. Revise-as antes de recarregar; nenhuma sobrescrita foi efetuada. <Button type="button" variant="outline" size="sm" className="mt-2" disabled={loading} onClick={()=>{if(!window.confirm("Recarregar o registro do banco e descartar as alterações ainda não salvas?"))return;resetReportTracking();if(modo==="multiprofissional"){resetMultiForm();void loadMultiData(pacienteId,++reportLoadTokenRef.current);}else{resetIndividualForm();void loadIndividualData(pacienteId,++reportLoadTokenRef.current);}}}>Recarregar relatório</Button></AlertDescription></Alert>}
         {loadFailed && <Alert variant="destructive"><AlertCircle className="h-4 w-4"/><AlertTitle>Não foi possível carregar o relatório</AlertTitle><AlertDescription>Para evitar perda de dados, a edição e a impressão estão bloqueadas. Limpe a seleção e selecione o paciente novamente.</AlertDescription></Alert>}
         {isReportLocked && (
@@ -2184,7 +2209,7 @@ const RelatorioAlta: React.FC = () => {
 
       {sourcePanel}
         {evolutionPreview}
-        {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>Salve o rascunho antes de sair. Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}
+        {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>{autosaveFailed?"O salvamento automático falhou. Tente salvar manualmente antes de sair.":reportId&&autoReady?"Salvamento automático após uma pausa na edição. Não feche a página até a confirmação.":"Salve o rascunho manualmente antes de sair."} Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}{draftStatus&&<p role="status" className="text-xs text-muted-foreground flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-green-600"/> Rascunho confirmado no banco.</p>}
         {conflict && <Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Conflito de gravação</AlertTitle><AlertDescription>O relatório foi alterado por outra operação ou seu acesso mudou. As alterações não salvas continuam nesta tela. Revise-as antes de recarregar; nenhuma sobrescrita foi efetuada. <Button type="button" variant="outline" size="sm" className="mt-2" disabled={loading} onClick={()=>{if(!window.confirm("Recarregar o registro do banco e descartar as alterações ainda não salvas?"))return;resetReportTracking();if(modo==="multiprofissional"){resetMultiForm();void loadMultiData(pacienteId,++reportLoadTokenRef.current);}else{resetIndividualForm();void loadIndividualData(pacienteId,++reportLoadTokenRef.current);}}}>Recarregar relatório</Button></AlertDescription></Alert>}
         {loadFailed && <Alert variant="destructive"><AlertCircle className="h-4 w-4"/><AlertTitle>Não foi possível carregar as informações</AlertTitle><AlertDescription>Para evitar perda de dados, a edição e a impressão estão bloqueadas. {manualAvailable?"A consulta do relatório existente foi concluída, mas as fontes clínicas estão indisponíveis. Você pode iniciar o preenchimento manual.":"Limpe a seleção e selecione o paciente novamente."}
           {manualAvailable&&<Button type="button" className="mt-2" size="sm" variant="outline" disabled={loading||permissionsLoading||!scopeMatches||!!reportId} onClick={()=>{if(!scopeMatches||permissionsLoading||reportId||!manualAvailable)return;resetIndividualForm();setSourceBundle(null);setSourceMeta(null);setSourceScope("");setSourcePts("");setManualSource({motivo:"",sessoes:"",faltas:"",pts:"nao_conferido"});setManualAvailable(false);loadedSnapshotPending.current=true;setLoadFailed(false);}}>Iniciar preenchimento manual</Button>}
