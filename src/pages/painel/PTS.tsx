@@ -1328,15 +1328,17 @@ const PTS: React.FC = () => {
     <div className="space-y-4 animate-fade-in">
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold font-display text-foreground">PTS — Projeto Terapêutico Singular</h1>
-          <p className="text-muted-foreground text-sm">{ptsList.length} projeto(s) registrado(s)</p>
+      <header className="clinical-hub-hero flex flex-wrap items-center gap-3">
+        <span className="clinical-patient-avatar flex items-center justify-center shrink-0"><Target className="w-5 h-5" aria-hidden="true" /></span>
+        <div className="flex-1 min-w-[9rem]">
+          <p className="clinical-hub-eyebrow">Planejamento terapêutico assistencial</p>
+          <h1 className="clinical-hub-name text-xl font-bold font-display">PTS — Projeto Terapêutico Singular</h1>
+          <p className="clinical-patient-sub text-xs mt-1">{loading ? 'Carregando projetos…' : ptsList.length.toLocaleString('pt-BR') + ' projeto(s) carregado(s)'}</p>
         </div>
-        <Button onClick={openNewDialog}>
+        <Button type="button" className="clinical-hub-new" onClick={openNewDialog}>
           <Plus className="w-4 h-4 mr-1" /> Novo PTS
         </Button>
-      </div>
+      </header>
 
       {/* Search */}
       <div className="relative">
