@@ -6375,18 +6375,19 @@ const ProntuarioPage: React.FC = () => {
                   onMouseEnter={() => handleProntuarioHover(p.id)}
                   onFocus={() => handleProntuarioHover(p.id)}
                 >
-                  {(virtualRow.index===0||filtered[virtualRow.index-1]?.data_atendimento!==p.data_atendimento)&&<div className="flex items-center gap-2 px-1 pb-2 text-xs font-semibold text-muted-foreground"><Calendar className="w-3.5 h-3.5"/>{formatFilterDate(p.data_atendimento)}</div>}
-                  <Card className={cn("border border-border/70 shadow-card hover:border-primary/30 transition-colors",expandedRecord===p.id&&"border-primary/50")}>
-                    <CardContent className="p-3 space-y-2">
+                  {(virtualRow.index===0||filtered[virtualRow.index-1]?.data_atendimento!==p.data_atendimento)&&<div className="clinical-date-divider flex items-center gap-2 px-1 pb-2 text-xs font-semibold text-muted-foreground"><Calendar className="w-3.5 h-3.5"/>{formatFilterDate(p.data_atendimento)}</div>}
+                  <Card className={cn("clinical-premium clinical-record-card",expandedRecord===p.id&&"clinical-record-expanded")}>
+                    <CardContent className="clinical-record-layout p-0">
+                      <div className="clinical-record-rail"><span className="clinical-record-time tabular-nums">{p.hora_atendimento||"—"}</span><span className="clinical-dock-icon clinical-tone-blue" aria-hidden="true"><ClipboardList className="w-4 h-4"/></span></div>
+                      <div className="min-w-0 p-3 space-y-2">
                       <div className="flex gap-2 items-start">
                         <button type="button" className="flex flex-1 min-w-0 items-start gap-2.5 text-left rounded-md focus-visible:ring-2 focus-visible:ring-ring" aria-expanded={expandedRecord===p.id} onClick={()=>setExpandedRecord(x=>x===p.id?"":p.id)}>
-                          <div aria-hidden="true" className="rounded-lg bg-primary/10 text-primary p-2 shrink-0"><ClipboardList className="w-5 h-5"/></div>
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-sm sm:text-base break-words [overflow-wrap:anywhere]">{currentPacienteNome(p.paciente_id,p.paciente_nome)}</p>
                             <p className="text-xs text-muted-foreground break-words">{p.profissional_nome||"Profissional não informado"}{p.setor?" · "+p.setor:""}</p>
-                            <div className="flex flex-wrap gap-1.5 mt-1 items-center text-xs text-muted-foreground"><span className="font-medium text-foreground">{TIPOS_REGISTRO.find(t=>t.value===(p as any).tipo_registro)?.label.replace(/^[🟢🔵🟡🔴🟣🏠]\s*/u,"")||((p as any).tipo_registro||"Tipo não informado").replace(/_/g," ")}</span>{isProfissional&&!isOwn&&<span className="inline-flex items-center gap-1"><Lock className="w-3 h-3"/>Somente leitura</span>}{p.indicacao_retorno&&p.indicacao_retorno!=="sem_retorno"&&p.indicacao_retorno!=="no_indication"&&<Badge variant="outline" className="text-[10px]">Retorno: {retornoOptions.find(o=>o.value===p.indicacao_retorno)?.label||p.indicacao_retorno}</Badge>}</div>
+                            <div className="flex flex-wrap gap-1.5 mt-1 items-center text-xs text-muted-foreground"><span className="clinical-record-type font-semibold">{TIPOS_REGISTRO.find(t=>t.value===(p as any).tipo_registro)?.label.replace(/^[🟢🔵🟡🔴🟣🏠]\s*/u,"")||((p as any).tipo_registro||"Tipo não informado").replace(/_/g," ")}</span>{isProfissional&&!isOwn&&<span className="inline-flex items-center gap-1"><Lock className="w-3 h-3"/>Somente leitura</span>}{p.indicacao_retorno&&p.indicacao_retorno!=="sem_retorno"&&p.indicacao_retorno!=="no_indication"&&<Badge variant="outline" className="text-[10px]">Retorno: {retornoOptions.find(o=>o.value===p.indicacao_retorno)?.label||p.indicacao_retorno}</Badge>}</div>
                           </div>
-                          <div className="shrink-0 text-right text-xs text-muted-foreground"><p className="font-medium text-foreground tabular-nums">{p.hora_atendimento||"—"}</p><ChevronDown className={cn("ml-auto mt-1 w-4 h-4",expandedRecord===p.id&&"rotate-180")}/></div>
+                          <div className="shrink-0 text-right text-xs text-muted-foreground"><ChevronDown className={cn("ml-auto mt-1 w-4 h-4",expandedRecord===p.id&&"rotate-180")}/></div>
                         </button>
                         <DropdownMenu><DropdownMenuTrigger asChild><Button size="icon" variant="ghost" aria-label="Mais ações" className="shrink-0 h-8 w-8"><MoreVertical className="w-4 h-4"/></Button></DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-56">
@@ -6399,13 +6400,14 @@ const ProntuarioPage: React.FC = () => {
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-                      {p.procedimentos_texto&&<div className="rounded-md bg-muted/30 px-2.5 py-1.5 text-xs"><span className="font-medium">Procedimentos: </span><span className={cn("text-muted-foreground break-words [overflow-wrap:anywhere]",expandedRecord!==p.id&&"line-clamp-1")}>{p.procedimentos_texto}</span></div>}
+                      {p.procedimentos_texto&&<div className="clinical-record-summary rounded-md px-2.5 py-2 text-xs"><span className="clinical-field-label font-semibold">Procedimentos: </span><span className={cn("text-muted-foreground break-words [overflow-wrap:anywhere]",expandedRecord!==p.id&&"line-clamp-1")}>{p.procedimentos_texto}</span></div>}
                       {p.queixa_principal&&<p className={cn("text-xs break-words [overflow-wrap:anywhere]",expandedRecord!==p.id&&"line-clamp-1")}><strong>QP:</strong> {p.queixa_principal}</p>}
                       <div className="flex flex-wrap gap-1.5 items-center">
-                        <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={()=>handleViewProntuarioFromHistory(p)}><Eye className="w-4 h-4 text-primary"/>Visualizar</Button>
-                        <Button type="button" size="sm" variant="ghost" className="gap-1.5" onClick={()=>{setHistoricoPacienteId({id:p.paciente_id,nome:p.paciente_nome});setHistoricoCompletoOpen(true);}}><History className="w-4 h-4 text-primary"/>Histórico</Button>
-                        {canEdit&&(!isProfissional||isOwn)&&<Button type="button" size="sm" variant="ghost" className="gap-1.5" onClick={()=>void openEdit(p)}><Pencil className="w-3.5 h-3.5"/>Editar</Button>}
+                        <Button type="button" size="sm" variant="outline" className="clinical-record-action clinical-action-main gap-1.5" onClick={()=>handleViewProntuarioFromHistory(p)}><Eye className="w-4 h-4"/>Visualizar</Button>
+                        <Button type="button" size="sm" variant="ghost" className="clinical-record-action clinical-action-history gap-1.5" onClick={()=>{setHistoricoPacienteId({id:p.paciente_id,nome:p.paciente_nome});setHistoricoCompletoOpen(true);}}><History className="w-4 h-4"/>Histórico</Button>
+                        {canEdit&&(!isProfissional||isOwn)&&<Button type="button" size="sm" variant="ghost" className="clinical-record-action clinical-action-edit gap-1.5" onClick={()=>void openEdit(p)}><Pencil className="w-3.5 h-3.5"/>Editar</Button>}
                         {outputId===p.id&&<span role="status" className="text-xs text-muted-foreground">Preparando…</span>}
+                      </div>
                       </div>
                     </CardContent>
                   </Card>

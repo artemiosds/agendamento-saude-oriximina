@@ -75,16 +75,16 @@ const PacienteItemCardBase: React.FC<PacienteItemCardProps> = ({
   const openingDelete=React.useRef(false);
   const idade=calcularIdadeAnos(p.dataNascimento);
   return (
-    <Card className="h-full min-w-0 border border-border/70 shadow-card hover:shadow-elevated transition-shadow">
-      <CardContent className="p-3.5 flex flex-col gap-3 h-full">
-        <div className="flex items-start gap-2.5 min-w-0">
-          <div aria-hidden="true" className="flex shrink-0 h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary text-sm font-bold">{patientInitials(p.nome)}</div>
+    <Card className="clinical-premium clinical-patient-card h-full min-w-0">
+      <CardContent className="p-0 flex flex-col h-full">
+        <div className="clinical-patient-hero flex items-start gap-2.5 min-w-0">
+          <div aria-hidden="true" className="clinical-patient-avatar flex shrink-0 items-center justify-center text-base font-bold">{patientInitials(p.nome)}</div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm sm:text-[15px] font-semibold leading-snug break-words [overflow-wrap:anywhere] text-foreground">{p.nome}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">{idade||"Paciente cadastrado"}</p>
+            <h3 className="clinical-patient-name text-sm sm:text-[15px] font-semibold leading-snug break-words [overflow-wrap:anywhere]">{p.nome}</h3>
+            <p className="clinical-patient-sub text-xs mt-1">{idade||"Paciente cadastrado"}</p>
           </div>
           <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-            <DropdownMenuTrigger asChild><Button ref={menuTrigger} type="button" size="icon" variant="ghost" className="shrink-0 h-8 w-8" aria-label={"Mais ações de "+p.nome}><MoreVertical className="w-4 h-4"/></Button></DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild><Button ref={menuTrigger} type="button" size="icon" variant="ghost" className="clinical-hero-menu shrink-0 h-8 w-8" aria-label={"Mais ações de "+p.nome}><MoreVertical className="w-4 h-4"/></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-48" onCloseAutoFocus={e=>{if(openingDelete.current){e.preventDefault();openingDelete.current=false;}}}>
               <DropdownMenuItem onSelect={()=>onImprimirFicha(p)}><Printer className="mr-2 w-4 h-4"/>Imprimir ficha</DropdownMenuItem>
               <DropdownMenuItem onSelect={()=>onImprimirLaudoApac(p)}><FileSignature className="mr-2 w-4 h-4"/>Emitir laudo APAC</DropdownMenuItem>
@@ -93,14 +93,15 @@ const PacienteItemCardBase: React.FC<PacienteItemCardProps> = ({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        <div className="clinical-patient-body flex flex-col flex-1 min-w-0 gap-2.5 p-3">
         {(naFila||demandaReprimida)&&<div className="flex flex-wrap gap-1.5 items-center">
           {naFila&&<Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 text-[10px] font-medium"><Clock className="w-3 h-3 mr-1"/>Fila de espera{filaEntry?.horaChegada?' · '+filaEntry.horaChegada:''}{filaEntry?.prioridade&&filaEntry.prioridade!=='normal'?' · '+filaEntry.prioridade:''}</Badge>}
           {demandaReprimida&&<Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[10px] font-medium"><FileUp className="w-3 h-3 mr-1"/>Demanda reprimida</Badge>}
         </div>}
-        <div className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2.5 space-y-2">
-          <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-x-3 gap-y-2 min-w-0">
-            <div className="min-w-0"><p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">CPF</p><p className="text-xs font-medium tabular-nums break-words [overflow-wrap:anywhere]">{formatCPF(p.cpf)||"Não informado"}</p></div>
-            <div className="min-w-0"><p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">CNS</p><p className="text-xs font-medium tabular-nums break-words [overflow-wrap:anywhere]">{formatCNS(p.cns)||"Não informado"}</p></div>
+        <div className="clinical-inset rounded-xl border px-3 py-2.5 space-y-2">
+          <div className="clinical-identity-grid grid grid-cols-1 min-[380px]:grid-cols-2 gap-x-3 gap-y-2 min-w-0">
+            <div className="min-w-0"><p className="clinical-field-label text-[10px] font-semibold uppercase tracking-wide">CPF</p><p className="text-xs font-semibold tabular-nums break-words [overflow-wrap:anywhere]">{formatCPF(p.cpf)||"Não informado"}</p></div>
+            <div className="min-w-0"><p className="clinical-field-label text-[10px] font-semibold uppercase tracking-wide">CNS</p><p className="text-xs font-semibold tabular-nums break-words [overflow-wrap:anywhere]">{formatCNS(p.cns)||"Não informado"}</p></div>
           </div>
           <div className="flex items-center gap-1.5 border-t border-border/60 pt-1.5 min-w-0">
             <Phone className="w-3.5 h-3.5 shrink-0 text-muted-foreground"/>
@@ -110,11 +111,12 @@ const PacienteItemCardBase: React.FC<PacienteItemCardProps> = ({
           {p.email&&<div className="flex gap-1.5 items-start text-xs text-muted-foreground"><Mail className="w-3.5 h-3.5 shrink-0"/><span className="min-w-0 break-words [overflow-wrap:anywhere]">{p.email}</span></div>}
         </div>
         {(p.descricaoClinica||p.cid)&&<div className="flex gap-1.5 items-start text-xs text-muted-foreground"><Stethoscope className="w-3.5 h-3.5 shrink-0 mt-0.5"/><div className="min-w-0 break-words [overflow-wrap:anywhere]">{p.descricaoClinica&&<p>{p.descricaoClinica}</p>}{p.cid&&<p>CID: {p.cid}</p>}</div></div>}
-        <div className={`mt-auto grid gap-1.5 ${canAddToFila&&!naFila?'grid-cols-4':'grid-cols-3'}`}>
-          <Button type="button" variant="outline" className="min-w-0 h-auto min-h-12 flex-col gap-1 px-1 py-1.5 text-[10px] sm:text-xs whitespace-normal" title="Detalhes do paciente" onClick={()=>onOpenDetalhe(p)}><UserRound className="w-4 h-4 text-primary shrink-0"/><span>Paciente</span></Button>
-          <Button type="button" variant="outline" className="min-w-0 h-auto min-h-12 flex-col gap-1 px-1 py-1.5 text-[10px] sm:text-xs whitespace-normal" title="Ver prontuários" onClick={()=>onVerProntuarios(p)}><ClipboardList className="w-4 h-4 text-primary shrink-0"/><span className="[overflow-wrap:anywhere]">Prontuário</span></Button>
-          <Button type="button" variant="outline" className="min-w-0 h-auto min-h-12 flex-col gap-1 px-1 py-1.5 text-[10px] sm:text-xs whitespace-normal" onClick={()=>onOpenDocuments(p)}><FolderOpen className="w-4 h-4 text-primary shrink-0"/><span className="[overflow-wrap:anywhere]">Documentos</span></Button>
-          {canAddToFila&&!naFila&&<Button type="button" variant="outline" className="min-w-0 h-auto min-h-12 flex-col gap-1 px-1 py-1.5 text-[10px] sm:text-xs whitespace-normal" aria-label="Adicionar à fila" title="Adicionar à fila" onClick={()=>onAddFila(p)}><UserPlus className="w-4 h-4 text-primary shrink-0"/><span>Fila</span></Button>}
+        <div className={`clinical-dock mt-auto grid gap-1 ${canAddToFila&&!naFila?'grid-cols-4':'grid-cols-3'}`}>
+          <Button type="button" variant="ghost" className="clinical-dock-action min-w-0 h-auto min-h-12 flex-col gap-1 px-0.5 py-1 text-[10px] sm:text-xs whitespace-normal" title="Detalhes do paciente" onClick={()=>onOpenDetalhe(p)}><span className="clinical-dock-icon clinical-tone-blue" aria-hidden="true"><UserRound className="w-4 h-4 shrink-0"/></span><span>Paciente</span></Button>
+          <Button type="button" variant="ghost" className="clinical-dock-action min-w-0 h-auto min-h-12 flex-col gap-1 px-0.5 py-1 text-[10px] sm:text-xs whitespace-normal" title="Ver prontuários" onClick={()=>onVerProntuarios(p)}><span className="clinical-dock-icon clinical-tone-teal" aria-hidden="true"><ClipboardList className="w-4 h-4 shrink-0"/></span><span className="[overflow-wrap:anywhere]">Prontuário</span></Button>
+          <Button type="button" variant="ghost" className="clinical-dock-action min-w-0 h-auto min-h-12 flex-col gap-1 px-0.5 py-1 text-[10px] sm:text-xs whitespace-normal" onClick={()=>onOpenDocuments(p)}><span className="clinical-dock-icon clinical-tone-violet" aria-hidden="true"><FolderOpen className="w-4 h-4 shrink-0"/></span><span className="[overflow-wrap:anywhere]">Documentos</span></Button>
+          {canAddToFila&&!naFila&&<Button type="button" variant="ghost" className="clinical-dock-action min-w-0 h-auto min-h-12 flex-col gap-1 px-0.5 py-1 text-[10px] sm:text-xs whitespace-normal" aria-label="Adicionar à fila" title="Adicionar à fila" onClick={()=>onAddFila(p)}><span className="clinical-dock-icon clinical-tone-neutral" aria-hidden="true"><UserPlus className="w-4 h-4 shrink-0"/></span><span>Fila</span></Button>}
+        </div>
         </div>
         {canDelete&&<AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
           <AlertDialogContent onCloseAutoFocus={e=>{e.preventDefault();menuTrigger.current?.focus();}}>
