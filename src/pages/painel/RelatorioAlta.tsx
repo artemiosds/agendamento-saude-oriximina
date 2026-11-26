@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { clinicalEvolutionPrintHtml, evolutionEntries, type ClinicalEvolutionSection } from "@/lib/clinicalEvolution";
+import { altaDateLabel, altaEvolutionMessage, altaOfficialBody, altaSeries, collectAltaEvolution, readAltaEvolution, escapeAlta, type AltaEvolutionSnapshot, type AltaMetricSection } from "@/lib/altaEvolution";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePacientes } from "@/contexts/PacientesContext";
 import { useOperacional } from "@/contexts/OperacionalContext";
@@ -123,11 +123,12 @@ const INTERCORRENCIAS_OPCOES = [
   "Nenhuma", "Faltas frequentes", "Baixa adesão", "Agravamento clínico", "Barreiras familiares", "Barreiras sociais", "Intercorrências médicas", "Troca de conduta", "Outro"
 ];
 
-const altaPrintText = (s?: string) => (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\r?\n/g,"<br/>");
+const altaPrintText = (s?: string) => escapeAlta(s);
 
 const fmt = (d: string) => {
   if (!d) return "—";
-  try { return new Date(d).toLocaleDateString("pt-BR"); } catch { return d; }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return altaDateLabel(d);
+  try { return new Date(d).toLocaleDateString("pt-BR"); } catch { return "—"; }
 };
 
 const fmtDateTime = (d: string) => {
@@ -229,46 +230,6 @@ const RelatorioAlta: React.FC = () => {
   const paciente = useMemo(() => pacientes.find(p => p.id === pacienteId), [pacientes, pacienteId]);
   const [indPeriodoInicio, setIndPeriodoInicio] = useState("");
   const [indPeriodoFim, setIndPeriodoFim] = useState("");
-  const { data: evolutionData, error: evolutionError, isPending: evolutionPending } = useQuery({
-    queryKey: ["alta-evolucao-clinica", pacienteId], enabled: !!pacienteId,
-    queryFn: async () => {
-      const [cycles, notes] = await Promise.all([
-        supabase.from("treatment_cycles").select("id,specialty,treatment_type,professional_id").eq("patient_id", pacienteId).limit(100),
-        supabase.from("prontuarios").select("id,data_atendimento,custom_data").eq("paciente_id", pacienteId)
-          .order("data_atendimento", { ascending: true }).limit(500),
-      ]);
-      if (cycles.error) throw cycles.error;
-      if (notes.error) throw notes.error;
-      const sections = (cycles.data || []).map((cycle) => ({
-        cycleId: cycle.id, specialty: cycle.specialty || cycle.treatment_type || "Ciclo sem especialidade",
-        professionalId: cycle.professional_id,
-        entries: evolutionEntries(notes.data || [], cycle.id),
-      })).filter((section) => section.entries.length > 0);
-      return { sections, limited: (cycles.data || []).length === 100 || (notes.data || []).length === 500 };
-    },
-  });
-  const reportEvolutionSections: ClinicalEvolutionSection[] = (evolutionData?.sections || [])
-    .filter((section) => modo === "multiprofissional" || section.professionalId === user?.id)
-    .map((section) => ({ ...section, entries: modo === "individual"
-      ? section.entries.filter((entry) => (!indPeriodoInicio || entry.date >= indPeriodoInicio) && (!indPeriodoFim || entry.date <= indPeriodoFim))
-      : section.entries }))
-    .filter((section) => section.entries.length > 0);
-  const evolutionPrint = evolutionPending || evolutionError || evolutionData?.limited
-    ? `<div class="section"><div class="section-title">Medidas clínicas</div><p>Consulta das medidas incompleta. Confira o prontuário antes de usar estes indicadores.</p></div>`
-    : clinicalEvolutionPrintHtml(reportEvolutionSections);
-  const evolutionPreview = pacienteId && <section aria-label="Medidas clínicas do relatório" className="rounded-md border p-3 text-xs space-y-1">
-    <p className="font-medium">Medidas clínicas registradas</p>
-    {evolutionPending ? <p>Consultando registros…</p> : evolutionError || evolutionData?.limited
-      ? <p role="status" className="text-amber-700">Consulta incompleta. Confira as medidas diretamente no prontuário.</p>
-      : reportEvolutionSections.length ? reportEvolutionSections.map((section) => <p key={section.cycleId}>{section.specialty}: {section.entries.length} registro(s) com escala. Gráfico incluído na impressão.</p>)
-      : <p className="text-muted-foreground">Sem medidas estruturadas para incluir automaticamente.</p>}
-  </section>;
-  const withEvolution = (body: string): string => {
-    if (!evolutionPrint) return body;
-    const signature = body.lastIndexOf('<div class="signature"');
-    return signature < 0 ? body + evolutionPrint : body.slice(0, signature) + evolutionPrint + body.slice(signature);
-  };
-
   /* ── multiprofissional state ─── */
   const [modalidades, setModalidades] = useState<string[]>([]);
   const [cid10, setCid10] = useState("");
@@ -389,6 +350,29 @@ const RelatorioAlta: React.FC = () => {
   const [sourceMeta,setSourceMeta] = useState<AltaSourceMeta|null>(null);
   const formReadOnly = isReportLocked || loading || loadFailed || !pacienteId;
   const awaitingSources=!!sourceBundle&&!reportId&&!sourceMeta;
+  const isAltaMode=modo==="individual"||modo==="multiprofissional";
+  const evolutionThrough=modo==="multiprofissional"?dataAlta:indDataAlta;
+  const evolutionScopeReady=!!sourceMeta&&!!user?.id&&!!user.unidadeId&&sourceMeta.unitId===user.unidadeId&&sourceMeta.through===evolutionThrough&&(modo==="multiprofissional"||!!indPeriodoInicio&&!!indPeriodoFim&&indPeriodoInicio===sourceMeta.periodStart&&indPeriodoFim===sourceMeta.periodEnd);
+  const evolutionQuery=useQuery({
+    queryKey:["alta-medidas-v5",pacienteId,user?.id,user?.unidadeId,modo,sourceMeta?.cycleId,evolutionThrough],
+    enabled:!!pacienteId&&isAltaMode&&!isReportLocked&&!loading&&!loadFailed&&!conflict&&evolutionScopeReady,
+    refetchOnWindowFocus:false,refetchOnReconnect:false,staleTime:60_000,
+    queryFn:async()=>{
+      const unitId=user!.unidadeId!;
+      const professionalId=modo==="individual"?user!.id:null;
+      const [cycles,notes]=await Promise.all([
+        fetchSourcePages<AltaCycle>((start,end)=>{let q=supabase.from("treatment_cycles").select("id,patient_id,professional_id,unit_id,specialty,treatment_type,start_date,status,pts_id").eq("patient_id",pacienteId).eq("unit_id",unitId);if(professionalId)q=q.eq("professional_id",professionalId);if(sourceMeta?.cycleId)q=q.eq("id",sourceMeta.cycleId);return q.order("id").range(start,end);}),
+        fetchSourcePages<AltaNote>((start,end)=>{let q=supabase.from("prontuarios").select("id,paciente_id,profissional_id,unidade_id,data_atendimento,status,tipo_registro,custom_data").eq("paciente_id",pacienteId).eq("unidade_id",unitId).in("status",[...ALTA_NOTE_STATUS]).in("tipo_registro",[...ALTA_NOTE_TYPES]).lte("data_atendimento",evolutionThrough);if(professionalId)q=q.eq("profissional_id",professionalId);return q.order("id").range(start,end);}),
+      ]);
+      return {cycles,notes};
+    },
+  });
+  const completedContributors=Object.fromEntries(profSections.filter(s=>s.status_contribuicao==="concluida"||s.status_contribuicao==="assinada").filter(s=>s.periodo_inicio&&s.periodo_fim).map(s=>[s.profissional_id,{from:s.periodo_inicio,to:s.periodo_fim}]));
+  const liveSections:AltaMetricSection[]=evolutionScopeReady&&evolutionQuery.data&&!evolutionQuery.isError?collectAltaEvolution(evolutionQuery.data.cycles,evolutionQuery.data.notes,{patientId:pacienteId,unitId:user?.unidadeId||"",professionalId:modo==="individual"?user?.id||null:null,cycleId:sourceMeta?.cycleId||null,through:evolutionThrough,from:modo==="individual"?indPeriodoInicio:undefined,to:modo==="individual"?indPeriodoFim:undefined,contributors:modo==="multiprofissional"?completedContributors:undefined}):[];
+  const liveEvolution:AltaEvolutionSnapshot={schema:1,state:!evolutionScopeReady||(modo==="multiprofissional"&&!Object.keys(completedContributors).length)?"unscoped":evolutionQuery.isError||evolutionQuery.isFetching||!evolutionQuery.data?"unavailable":liveSections.length?"recorded":"none",sections:[]};
+  if(liveEvolution.state==="recorded")liveEvolution.sections=liveSections;
+  const savedEvolution=isReportLocked?readAltaEvolution(revisionRef.current?.payload.altaEvolutionV1):null;
+  const visibleEvolution=isReportLocked?savedEvolution:liveEvolution;
 
   const resetReportTracking = () => {
     revisionRef.current = null;
@@ -1041,28 +1025,28 @@ const RelatorioAlta: React.FC = () => {
     
     let html = `
       <div class="info-grid">
-        <div class="info-item"><span class="info-label">Paciente</span><br/><span class="info-value">${p.nome}</span></div>
-        <div class="info-item"><span class="info-label">Data Nasc.</span><br/><span class="info-value">${fmt(p.dataNascimento)} (${calcIdade(p.dataNascimento)})</span></div>
-        <div class="info-item"><span class="info-label">CNS</span><br/><span class="info-value">${p.cns || "—"}</span></div>
-        <div class="info-item"><span class="info-label">CPF</span><br/><span class="info-value">${p.cpf || "—"}</span></div>
-        <div class="info-item"><span class="info-label">Responsável</span><br/><span class="info-value">${p.nomeMae || "—"}</span></div>
+        <div class="info-item"><span class="info-label">Paciente</span><br/><span class="info-value">${altaPrintText(p.nome)}</span></div>
+        <div class="info-item"><span class="info-label">Data Nasc.</span><br/><span class="info-value">${altaDateLabel(p.dataNascimento)} </span></div>
+        <div class="info-item"><span class="info-label">CNS</span><br/><span class="info-value">${altaPrintText(p.cns || "—")}</span></div>
+        <div class="info-item"><span class="info-label">CPF</span><br/><span class="info-value">${altaPrintText(p.cpf || "—")}</span></div>
+        <div class="info-item"><span class="info-label">Responsável</span><br/><span class="info-value">${altaPrintText(p.nomeMae || "—")}</span></div>
         <div class="info-item"><span class="info-label">Data de Alta</span><br/><span class="info-value">${fmt(dataAlta)}</span></div>
-        <div class="info-item"><span class="info-label">Modalidades</span><br/><span class="info-value">${modalidades.join(", ") || "—"}</span></div>
-        <div class="info-item"><span class="info-label">Data Admissão</span><br/><span class="info-value">${fmt(p.criadoEm || "")}</span></div>
+        <div class="info-item"><span class="info-label">Modalidades</span><br/><span class="info-value">${altaPrintText(modalidades.join(", ") || "—")}</span></div>
+        <div class="info-item"><span class="info-label">Período de referência</span><br/><span class="info-value">${sourceMeta?altaDateLabel(sourceMeta.periodStart)+" a "+altaDateLabel(sourceMeta.periodEnd):"—"}</span></div>
       </div>
 
       <div class="section">
         <div class="section-title">Quadro Diagnóstico Multiprofissional</div>
         <div class="info-grid">
            <div class="field"><span class="field-label">CID-10 Principal</span><div class="field-value">${altaPrintText(cid10) || "—"}</div></div>
-           <div class="field"><span class="field-label">CID-10 Secundário</span><div class="field-value">${multiCid10Secundario || "—"}</div></div>
+           <div class="field"><span class="field-label">CID-10 Secundário</span><div class="field-value">${altaPrintText(multiCid10Secundario || "—")}</div></div>
         </div>
-        <div class="field"><span class="field-label">Diagnóstico Clínico</span><div class="field-value">${multiDiagClinico || "—"}</div></div>
+        <div class="field"><span class="field-label">Diagnóstico Clínico</span><div class="field-value">${altaPrintText(multiDiagClinico || "—")}</div></div>
         <div class="field"><span class="field-label">Diagnóstico Funcional Global</span><div class="field-value">${altaPrintText(multiDiagFuncional) || "—"}</div></div>
-        <div class="field"><span class="field-label">Contexto Biopsicossocial</span><div class="field-value">${multiContextoBiopsicossocial || "—"}</div></div>
-        <div class="field"><span class="field-label">CIF — Funções do Corpo</span><div class="field-value">${cifFuncoes || "—"}</div></div>
-        <div class="field"><span class="field-label">CIF — Atividades e Participação</span><div class="field-value">${cifAtividades || "—"}</div></div>
-        <div class="field"><span class="field-label">CIF — Fatores Ambientais</span><div class="field-value">${cifFatores || "—"}</div></div>
+        <div class="field"><span class="field-label">Contexto Biopsicossocial</span><div class="field-value">${altaPrintText(multiContextoBiopsicossocial || "—")}</div></div>
+        <div class="field"><span class="field-label">CIF — Funções do Corpo</span><div class="field-value">${altaPrintText(cifFuncoes || "—")}</div></div>
+        <div class="field"><span class="field-label">CIF — Atividades e Participação</span><div class="field-value">${altaPrintText(cifAtividades || "—")}</div></div>
+        <div class="field"><span class="field-label">CIF — Fatores Ambientais</span><div class="field-value">${altaPrintText(cifFatores || "—")}</div></div>
         <div class="field"><span class="field-label">Barreiras</span><div class="field-value">${altaPrintText(multiBarreiras) || "—"}</div></div>
         <div class="field"><span class="field-label">Potencialidades</span><div class="field-value">${altaPrintText(multiPotencialidades) || "—"}</div></div>
         ${multiFatoresContextuais ? `<div class="field"><span class="field-label">Fatores contextuais</span><div class="field-value">${altaPrintText(multiFatoresContextuais)}</div></div>` : ""}
@@ -1071,7 +1055,7 @@ const RelatorioAlta: React.FC = () => {
       <div class="section">
         <div class="section-title">Resumo do Percurso Terapêutico</div>
         <div class="field"><span class="field-label">Objetivos Gerais</span><div class="field-value">${altaPrintText(multiObjetivosGerais) || "—"}</div></div>
-        <div class="field"><span class="field-label">Resumo do Plano Executado</span><div class="field-value">${multiPlanoExecutado || "—"}</div></div>
+        <div class="field"><span class="field-label">Resumo do Plano Executado</span><div class="field-value">${altaPrintText(multiPlanoExecutado || "—")}</div></div>
       </div>
     `;
 
@@ -1080,27 +1064,27 @@ const RelatorioAlta: React.FC = () => {
       .forEach(s => {
       html += `
         <div class="section" style="page-break-inside: avoid;">
-          <div class="section-title">Evolução: ${s.profissao || "Área"} — ${s.profissional_nome}</div>
+          <div class="section-title">Evolução: ${altaPrintText(s.profissao || "Área")} — ${altaPrintText(s.profissional_nome)}</div>
           <div class="info-grid" style="margin-bottom: 10px; padding: 8px;">
             <div><span class="info-label">Período</span><br/><span class="info-value">${fmt(s.periodo_inicio)} a ${fmt(s.periodo_fim)}</span></div>
             <div><span class="info-label">Sessões realizadas</span><br/><span class="info-value">${s.sessoes}</span></div>
-            <div><span class="info-label">Adesão</span><br/><span class="info-value">${s.adesao || "—"}</span></div>
+            <div><span class="info-label">Adesão</span><br/><span class="info-value">${altaPrintText(s.adesao || "—")}</span></div>
           </div>
-          <div class="field"><span class="field-label">Objetivos Específicos</span><div class="field-value">${s.objetivos_especificos || s.objetivos || "—"}</div></div>
+          <div class="field"><span class="field-label">Objetivos Específicos</span><div class="field-value">${altaPrintText(s.objetivos_especificos || s.objetivos || "—")}</div></div>
           <div class="field"><span class="field-label">Intervenções/Procedimentos</span><div class="field-value">${altaPrintText(s.intervencoes) || "—"}</div></div>
-          <div class="field"><span class="field-label">Evolução Clínica e Funcional da Área</span><div class="field-value">${s.evolucao || "—"}</div></div>
+          <div class="field"><span class="field-label">Evolução Clínica e Funcional da Área</span><div class="field-value">${altaPrintText(s.evolucao || "—")}</div></div>
           <div class="field"><span class="field-label">Status das Metas</span><div class="field-value">${
             s.metas_status === "totalmente" ? "Totalmente atingidas" :
             s.metas_status === "parcialmente" ? "Parcialmente atingidas" : s.metas_status === "nao_atingidas" ? "Não atingidas" : "Aguardando avaliação profissional"
-          }${s.metas_justificativa ? ` — ${s.metas_justificativa}` : ""}</div></div>
-          ${s.tecnologia_assistiva ? `<div class="field"><span class="field-label">Tecnologia Assistiva Concedida</span><div class="field-value">${s.tecnologia_assistiva}</div></div>` : ""}
+          }${s.metas_justificativa ? ` — ${altaPrintText(s.metas_justificativa)}` : ""}</div></div>
+          ${s.tecnologia_assistiva ? `<div class="field"><span class="field-label">Tecnologia Assistiva Concedida</span><div class="field-value">${altaPrintText(s.tecnologia_assistiva)}</div></div>` : ""}
           ${s.intercorrencias ? `<div class="field"><span class="field-label">Intercorrências</span><div class="field-value">${altaPrintText(s.intercorrencias)}</div></div>` : ""}
           ${s.orientacoes_especificas ? `<div class="field"><span class="field-label">Orientações da área</span><div class="field-value">${altaPrintText(s.orientacoes_especificas)}</div></div>` : ""}
           ${s.encaminhamentos_especificos ? `<div class="field"><span class="field-label">Encaminhamentos da área</span><div class="field-value">${altaPrintText(s.encaminhamentos_especificos)}</div></div>` : ""}
           <div class="signature" style="margin-top:20px; text-align: left;">
             <div class="signature-line" style="margin-left: 0; width: 250px;"></div>
-            <div class="name">${s.profissional_nome}</div>
-            <div class="role">${s.profissao} — ${s.conselho}</div>
+            <div class="name">${altaPrintText(s.profissional_nome)}</div>
+            <div class="role">${altaPrintText(s.profissao)} — ${altaPrintText(s.conselho)}</div>
           </div>
         </div>
       `;
@@ -1110,17 +1094,17 @@ const RelatorioAlta: React.FC = () => {
       <div class="section" style="page-break-inside: avoid;">
         <div class="section-title">Conclusão e Condição na Alta</div>
         <div class="info-grid">
-           <div class="field"><span class="field-label">Tipo de Alta</span><div class="field-value">${tipoAltaLabel}</div></div>
-           <div class="field"><span class="field-label">Nível de Independência</span><div class="field-value">${nivelIndep || "—"}</div></div>
+           <div class="field"><span class="field-label">Tipo de Alta</span><div class="field-value">${altaPrintText(tipoAltaLabel)}</div></div>
+           <div class="field"><span class="field-label">Nível de Independência</span><div class="field-value">${altaPrintText(nivelIndep || "—")}</div></div>
         </div>
-        <div class="field"><span class="field-label">Motivo da Alta</span><div class="field-value">${motivoLabel}${motivoDetalhe ? ` — ${motivoDetalhe}` : ""}</div></div>
-        <div class="field"><span class="field-label">Descrição da Condição Funcional</span><div class="field-value">${condicaoFuncional || "—"}</div></div>
-        <div class="field"><span class="field-label">Comparação Admissão x Alta</span><div class="field-value">${multiComparacaoFuncional || "—"}</div></div>
-        <div class="field"><span class="field-label">Ganhos Clínicos Principais</span><div class="field-value">${multiGanhosPrincipais || "—"}</div></div>
-        <div class="field"><span class="field-label">Limitações Persistentes</span><div class="field-value">${multiLimitacoesPersistentes || "—"}</div></div>
+        <div class="field"><span class="field-label">Motivo da Alta</span><div class="field-value">${altaPrintText(motivoLabel)}${motivoDetalhe ? ` — ${altaPrintText(motivoDetalhe)}` : ""}</div></div>
+        <div class="field"><span class="field-label">Descrição da Condição Funcional</span><div class="field-value">${altaPrintText(condicaoFuncional || "—")}</div></div>
+        <div class="field"><span class="field-label">Comparação Admissão x Alta</span><div class="field-value">${altaPrintText(multiComparacaoFuncional || "—")}</div></div>
+        <div class="field"><span class="field-label">Ganhos Clínicos Principais</span><div class="field-value">${altaPrintText(multiGanhosPrincipais || "—")}</div></div>
+        <div class="field"><span class="field-label">Limitações Persistentes</span><div class="field-value">${altaPrintText(multiLimitacoesPersistentes || "—")}</div></div>
         <div class="info-grid">
-           <div class="field"><span class="field-label">Risco de Regressão</span><div class="field-value">${multiRiscoRegressao || "—"}</div></div>
-           <div class="field"><span class="field-label">Fatores de Alerta</span><div class="field-value">${multiFatoresAlerta || "—"}</div></div>
+           <div class="field"><span class="field-label">Risco de Regressão</span><div class="field-value">${altaPrintText(multiRiscoRegressao || "—")}</div></div>
+           <div class="field"><span class="field-label">Fatores de Alerta</span><div class="field-value">${altaPrintText(multiFatoresAlerta || "—")}</div></div>
         </div>
       </div>
 
@@ -1130,18 +1114,18 @@ const RelatorioAlta: React.FC = () => {
         ${multiOrientacoesEscola ? `<div class="field"><span class="field-label">Orientações à escola</span><div class="field-value">${altaPrintText(multiOrientacoesEscola)}</div></div>` : ""}
         ${multiPontosAtencao ? `<div class="field"><span class="field-label">Pontos de atenção</span><div class="field-value">${altaPrintText(multiPontosAtencao)}</div></div>` : ""}
         ${multiContinuarTerapia ? `<div class="field"><span class="field-label">Continuidade do cuidado</span><div class="field-value">${altaPrintText(multiContinuarTerapia)}</div></div>` : ""}
-        <div class="field"><span class="field-label">Orientações para UBS/ESF</span><div class="field-value">${orientacoesUbs || "—"}</div></div>
-        <div class="field"><span class="field-label">Encaminhamentos Realizados</span><div class="field-value">${encaminhamentos.join(", ") || "—"}</div></div>
+        <div class="field"><span class="field-label">Orientações para UBS/ESF</span><div class="field-value">${altaPrintText(orientacoesUbs || "—")}</div></div>
+        <div class="field"><span class="field-label">Encaminhamentos Realizados</span><div class="field-value">${altaPrintText(encaminhamentos.join(", ") || "—")}</div></div>
         <div class="info-grid">
-           <div class="field"><span class="field-label">Frequência Recomendada APS</span><div class="field-value">${freqAps || "—"}</div></div>
-           <div class="field"><span class="field-label">Prazo sugerido de retorno</span><div class="field-value">${multiPrazoRetorno || "—"}</div></div>
+           <div class="field"><span class="field-label">Frequência Recomendada APS</span><div class="field-value">${altaPrintText(freqAps || "—")}</div></div>
+           <div class="field"><span class="field-label">Prazo sugerido de retorno</span><div class="field-value">${altaPrintText(multiPrazoRetorno || "—")}</div></div>
         </div>
       </div>
 
       <div class="section"><div class="section-title">Resumo Final Consolidado</div><div class="field-value">${altaPrintText(multiResumoConsolidado) || "—"}</div></div>
       <div class="signature" style="margin-top:40px">
         <div class="signature-line"></div>
-        <div class="name">${multiResponsavelTecnico || "Responsável Técnico (RT)"}</div>
+        <div class="name">${altaPrintText(multiResponsavelTecnico || "Responsável Técnico (RT)")}</div>
         <div class="role">Assinatura e Carimbo</div>
       </div>
     `;
@@ -1162,45 +1146,45 @@ const RelatorioAlta: React.FC = () => {
 
     return `
       <div class="info-grid">
-        <div class="info-item"><span class="info-label">Paciente</span><br/><span class="info-value">${p.nome}</span></div>
-        <div class="info-item"><span class="info-label">Data Nasc.</span><br/><span class="info-value">${fmt(p.dataNascimento)} (${calcIdade(p.dataNascimento)})</span></div>
-        <div class="info-item"><span class="info-label">CNS</span><br/><span class="info-value">${p.cns || "—"}</span></div>
-        <div class="info-item"><span class="info-label">CPF</span><br/><span class="info-value">${p.cpf || "—"}</span></div>
-        <div class="info-item"><span class="info-label">Responsável</span><br/><span class="info-value">${p.nomeMae || "—"}</span></div>
+        <div class="info-item"><span class="info-label">Paciente</span><br/><span class="info-value">${altaPrintText(p.nome)}</span></div>
+        <div class="info-item"><span class="info-label">Data Nasc.</span><br/><span class="info-value">${altaDateLabel(p.dataNascimento)} </span></div>
+        <div class="info-item"><span class="info-label">CNS</span><br/><span class="info-value">${altaPrintText(p.cns || "—")}</span></div>
+        <div class="info-item"><span class="info-label">CPF</span><br/><span class="info-value">${altaPrintText(p.cpf || "—")}</span></div>
+        <div class="info-item"><span class="info-label">Responsável</span><br/><span class="info-value">${altaPrintText(p.nomeMae || "—")}</span></div>
         <div class="info-item"><span class="info-label">Data de Alta</span><br/><span class="info-value">${fmt(indDataAlta)}</span></div>
-        <div class="info-item"><span class="info-label">Profissional</span><br/><span class="info-value">${profNome} — ${profissao}</span></div>
-        <div class="info-item"><span class="info-label">Conselho</span><br/><span class="info-value">${conselho}</span></div>
+        <div class="info-item"><span class="info-label">Profissional</span><br/><span class="info-value">${altaPrintText(profNome)} — ${altaPrintText(profissao)}</span></div>
+        <div class="info-item"><span class="info-label">Conselho</span><br/><span class="info-value">${altaPrintText(conselho)}</span></div>
       </div>
 
       <div class="section">
         <div class="section-title">Contexto Clínico</div>
         <div class="field"><span class="field-label">Queixa Principal</span><div class="field-value">${altaPrintText(indQueixaPrincipal) || "—"}</div></div>
         <div class="field"><span class="field-label">Motivo do Encaminhamento</span><div class="field-value">${altaPrintText(indMotivoEncaminhamento) || "—"}</div></div>
-        <div class="field"><span class="field-label">Contexto Familiar/Social</span><div class="field-value">${indContextoFamiliar || "—"}</div></div>
-        <div class="field"><span class="field-label">Comorbidades</span><div class="field-value">${indComorbidades || "—"}</div></div>
-        <div class="field"><span class="field-label">Medicação</span><div class="field-value">${indMedicacao || "—"}</div></div>
+        <div class="field"><span class="field-label">Contexto Familiar/Social</span><div class="field-value">${altaPrintText(indContextoFamiliar || "—")}</div></div>
+        <div class="field"><span class="field-label">Comorbidades</span><div class="field-value">${altaPrintText(indComorbidades || "—")}</div></div>
+        <div class="field"><span class="field-label">Medicação</span><div class="field-value">${altaPrintText(indMedicacao || "—")}</div></div>
       </div>
 
       <div class="section">
         <div class="section-title">Diagnóstico</div>
         <div class="field"><span class="field-label">CID-10</span><div class="field-value">${altaPrintText(indDiagCid) || "—"}</div></div>
-        <div class="field"><span class="field-label">CIF</span><div class="field-value">${indCif || "—"}</div></div>
+        <div class="field"><span class="field-label">CIF</span><div class="field-value">${altaPrintText(indCif || "—")}</div></div>
         <div class="field"><span class="field-label">Diagnóstico Clínico</span><div class="field-value">${altaPrintText(indDiagClinico) || "—"}</div></div>
         <div class="field"><span class="field-label">Diagnóstico Funcional</span><div class="field-value">${altaPrintText(indDiagFuncional) || "—"}</div></div>
-        <div class="field"><span class="field-label">Nível de Comprometimento</span><div class="field-value">${indNivelComprometimento || "—"}</div></div>
-        <div class="field"><span class="field-label">Observações Diagnósticas</span><div class="field-value">${indObsDiagnosticas || "—"}</div></div>
+        <div class="field"><span class="field-label">Nível de Comprometimento</span><div class="field-value">${altaPrintText(indNivelComprometimento || "—")}</div></div>
+        <div class="field"><span class="field-label">Observações Diagnósticas</span><div class="field-value">${altaPrintText(indObsDiagnosticas || "—")}</div></div>
       </div>
 
       <div class="section">
         <div class="section-title">Acompanhamento Terapêutico</div>
         <div class="info-grid" style="margin-bottom: 10px; padding: 8px;">
           <div><span class="info-label">Período</span><br/><span class="info-value">${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}</span></div>
-          <div><span class="info-label">Sessões realizadas</span><br/><span class="info-value">${indSessoes}</span></div>
-          <div><span class="info-label">Faltas no período</span><br/><span class="info-value">${indFaltas}</span></div>
-          <div><span class="info-label">Modalidade</span><br/><span class="info-value">${indModalidade || "—"}</span></div>
+          <div><span class="info-label">Sessões realizadas</span><br/><span class="info-value">${altaPrintText(indSessoes)}</span></div>
+          <div><span class="info-label">Faltas no período</span><br/><span class="info-value">${altaPrintText(indFaltas)}</span></div>
+          <div><span class="info-label">Modalidade</span><br/><span class="info-value">${altaPrintText(indModalidade || "—")}</span></div>
         </div>
-        <div class="field"><span class="field-label">Frequência de Atendimento</span><div class="field-value">${indFrequenciaAtendimento || "—"}</div></div>
-        <div class="field"><span class="field-label">Adesão ao Tratamento</span><div class="field-value">${indAdesaoTratamento || "—"}</div></div>
+        <div class="field"><span class="field-label">Frequência de Atendimento</span><div class="field-value">${altaPrintText(indFrequenciaAtendimento || "—")}</div></div>
+        <div class="field"><span class="field-label">Adesão ao Tratamento</span><div class="field-value">${altaPrintText(indAdesaoTratamento || "—")}</div></div>
       </div>
 
       <div class="section">
@@ -1208,54 +1192,47 @@ const RelatorioAlta: React.FC = () => {
         <div class="field"><span class="field-label">Objetivos Terapêuticos Iniciais</span><div class="field-value">${altaPrintText(indObjetivos) || "—"}</div></div>
         <div class="field"><span class="field-label">Intervenções/Procedimentos Realizados</span><div class="field-value">${altaPrintText(indIntervencoes) || "—"}</div></div>
         <div class="field"><span class="field-label">Evolução Clínica</span><div class="field-value">${altaPrintText(indEvolucao) || "—"}</div></div>
-        <div class="field"><span class="field-label">Evolução Global</span><div class="field-value">${indEvolucaoGlobal || "—"}</div></div>
+        <div class="field"><span class="field-label">Evolução Global</span><div class="field-value">${altaPrintText(indEvolucaoGlobal || "—")}</div></div>
         <div class="field"><span class="field-label">Metas Atingidas</span><div class="field-value">${
           indMetas === "totalmente" ? "Totalmente atingidas" :
           indMetas === "parcialmente" ? "Parcialmente atingidas" :
           indMetas === "nao_atingidas" ? "Não atingidas" : "Aguardando avaliação profissional"
-        }${indMetasJust ? ` — ${indMetasJust}` : ""}</div></div>
-        <div class="field"><span class="field-label">Resposta Terapêutica</span><div class="field-value">${indRespostaTerapeutica || "—"}</div></div>
-        <div class="field"><span class="field-label">Comparação Início/Alta</span><div class="field-value">${indComparacaoInicioAlta || "—"}</div></div>
-        ${indTA ? `<div class="field"><span class="field-label">Tecnologia Assistiva</span><div class="field-value">${indTA}</div></div>` : ""}
-        ${indIntercorrencias ? `<div class="field"><span class="field-label">Intercorrências</span><div class="field-value">${indIntercorrencias}${indIntercorrenciasObs ? ` — ${indIntercorrenciasObs}` : ""}</div></div>` : ""}
+        }${indMetasJust ? ` — ${altaPrintText(indMetasJust)}` : ""}</div></div>
+        <div class="field"><span class="field-label">Resposta Terapêutica</span><div class="field-value">${altaPrintText(indRespostaTerapeutica || "—")}</div></div>
+        <div class="field"><span class="field-label">Comparação Início/Alta</span><div class="field-value">${altaPrintText(indComparacaoInicioAlta || "—")}</div></div>
+        ${indTA ? `<div class="field"><span class="field-label">Tecnologia Assistiva</span><div class="field-value">${altaPrintText(indTA)}</div></div>` : ""}
+        ${indIntercorrencias ? `<div class="field"><span class="field-label">Intercorrências</span><div class="field-value">${altaPrintText(indIntercorrencias)}${indIntercorrenciasObs ? ` — ${altaPrintText(indIntercorrenciasObs)}` : ""}</div></div>` : ""}
       </div>
 
       <div class="section" style="page-break-inside: avoid;">
         <div class="section-title">Conclusão e Alta</div>
-        <div class="field"><span class="field-label">Tipo de Alta</span><div class="field-value">${tipoAltaLabel}</div></div>
-        <div class="field"><span class="field-label">Motivo da Alta</span><div class="field-value">${motivoLabel}${indMotivoDet ? ` — ${indMotivoDet}` : ""}</div></div>
-        <div class="field"><span class="field-label">Risco de Regressão</span><div class="field-value">${indRiscoRegressao || "—"}</div></div>
+        <div class="field"><span class="field-label">Tipo de Alta</span><div class="field-value">${altaPrintText(tipoAltaLabel)}</div></div>
+        <div class="field"><span class="field-label">Motivo da Alta</span><div class="field-value">${altaPrintText(motivoLabel)}${indMotivoDet ? ` — ${altaPrintText(indMotivoDet)}` : ""}</div></div>
+        <div class="field"><span class="field-label">Risco de Regressão</span><div class="field-value">${altaPrintText(indRiscoRegressao || "—")}</div></div>
         ${indRiscoPosAlta ? `<div class="field"><span class="field-label">Risco pós-alta</span><div class="field-value">${altaPrintText(indRiscoPosAlta)}</div></div>` : ""}
         ${indComplexidade ? `<div class="field"><span class="field-label">Complexidade do caso</span><div class="field-value">${altaPrintText(indComplexidade)}</div></div>` : ""}
-        <div class="field"><span class="field-label">Necessidade de Continuidade Terapêutica</span><div class="field-value">${indContinuarTerapia || "—"}</div></div>
-        <div class="field"><span class="field-label">Orientações Específicas</span><div class="field-value">${indOrientacoes || "—"}</div></div>
-        <div class="field"><span class="field-label">Encaminhamentos</span><div class="field-value">${indEncaminhamento || "—"}</div></div>
-        <div class="field"><span class="field-label">Prazo sugerido para reavaliação</span><div class="field-value">${indPrazoReavaliacao || "—"}</div></div>
+        <div class="field"><span class="field-label">Necessidade de Continuidade Terapêutica</span><div class="field-value">${altaPrintText(indContinuarTerapia || "—")}</div></div>
+        <div class="field"><span class="field-label">Orientações Específicas</span><div class="field-value">${altaPrintText(indOrientacoes || "—")}</div></div>
+        <div class="field"><span class="field-label">Encaminhamentos</span><div class="field-value">${altaPrintText(indEncaminhamento || "—")}</div></div>
+        <div class="field"><span class="field-label">Prazo sugerido para reavaliação</span><div class="field-value">${altaPrintText(indPrazoReavaliacao || "—")}</div></div>
       </div>
 
       <div class="section"><div class="section-title">Resumo Final Consolidado</div><div class="field-value">${altaPrintText(indResumoConsolidado) || "—"}</div></div>
       <div class="signature" style="margin-top:50px">
         <div class="signature-line"></div>
-        <div class="name">${profNome}</div>
-        <div class="role">${profissao} — ${conselho}</div>
+        <div class="name">${altaPrintText(profNome)}</div>
+        <div class="role">${altaPrintText(profissao)} — ${altaPrintText(conselho)}</div>
       </div>
     `;
   };
 
   const handlePrint = (type: "multi" | "individual") => {
     if (!pacienteId || !reportId || !isReportLocked || loading || loadFailed || conflict) return;
-    if (type === "multi") {
-      openPrintDocument("Relatório de Alta — Multiprofissional", withEvolution(buildMultiPrintBody()), {
-        Paciente: paciente?.nome || "", "Data Alta": fmt(dataAlta)
-      });
-    } else {
-      const func = funcionarios.find(f => f.id === user?.id);
-      openPrintDocument(
-        `Relatório de Alta — ${func?.profissao || "Individual"}`,
-        withEvolution(buildIndPrintBody()),
-        { Paciente: paciente?.nome || "", "Data Alta": fmt(indDataAlta) }
-      );
-    }
+    if (!paciente || paciente.id!==pacienteId || revisionRef.current?.id!==reportId) {toast.error("Não foi possível conferir a identificação do relatório. Recarregue antes de imprimir.");return;}
+    const body=type==="multi"?buildMultiPrintBody():buildIndPrintBody();
+    const title=type==="multi"?"Relatório de Alta — Multiprofissional":"Relatório de Alta — Individual";
+    const meta={Paciente:escapeAlta(paciente.nome),"Data de Alta":escapeAlta(fmt(type==="multi"?dataAlta:indDataAlta)),Versão:escapeAlta(version)};
+    void openPrintDocument(title,altaOfficialBody(body,readAltaEvolution(revisionRef.current?.payload.altaEvolutionV1),version),meta);
   };
 
   const buildDraftPayload = (type: "multi" | "individual", signedSections?: ProfSection[]) => type === "multi" ? {
@@ -1357,6 +1334,7 @@ const RelatorioAlta: React.FC = () => {
       if (errs.length > 0) { toast.error(errs[0]); return; }
     }
 
+    if (!isDraft && liveEvolution.state==="unavailable" && !window.confirm("A consulta das medidas clínicas está indisponível ou ainda em andamento. Finalizar sem incluir gráficos nesta versão?")) return;
     savingRef.current = true;
     setLoading(true);
     try {
@@ -1372,7 +1350,7 @@ const RelatorioAlta: React.FC = () => {
     const updatedHistory = [...history, newHistoryEntry];
 
     const draftPayload = buildDraftPayload(type, signedSections);
-    const payload = { ...revisionRef.current?.payload, ...draftPayload, version: newVersion, history: updatedHistory };
+    const payload = { ...revisionRef.current?.payload, ...draftPayload, version: newVersion, history: updatedHistory, ...(!isDraft?{altaEvolutionV1:liveEvolution}:{}) };
 
     const targetStatus = customStatus || (isDraft ? "rascunho" : "concluido");
 
@@ -1516,6 +1494,13 @@ const RelatorioAlta: React.FC = () => {
     }catch(e){toast.error(e instanceof Error?e.message:"Não foi possível reconferir as fontes.");}
     finally{savingRef.current=false;setLoading(false);}
   };
+  const evolutionPreview=pacienteId&&!loading&&!loadFailed&&<section className="clinical-premium p-3 space-y-3 min-w-0" aria-label="Evolução clínica">
+    <div className="flex flex-wrap items-center gap-2"><span className="clinical-dock-icon clinical-tone-blue"><Activity className="w-4 h-4"/></span><div className="flex-1 min-w-0"><h2 className="text-sm font-semibold">Evolução clínica registrada</h2><p className="text-xs text-muted-foreground">{isReportLocked?"Medidas preservadas na versão finalizada":"Medidas do ciclo e do período conferido, sem inferência clínica."}</p></div>{!isReportLocked&&evolutionScopeReady&&<Button type="button" size="sm" variant="outline" disabled={evolutionQuery.isFetching||conflict} onClick={()=>void evolutionQuery.refetch()}><RefreshCw className="w-3.5 h-3.5 mr-1"/>Atualizar medidas</Button>}</div>
+    {visibleEvolution?.state==="recorded"?visibleEvolution.sections.map(section=><details key={section.cycleId} className="group rounded-lg border clinical-inset p-2.5" open><summary className="cursor-pointer font-semibold text-sm break-words">{section.specialty} · {altaDateLabel(section.startDate)} <span className="text-xs font-normal text-muted-foreground">· ciclo {section.cycleId.slice(-8)}</span></summary><div className="mt-2 grid gap-2 xl:grid-cols-2">{altaSeries(section).map(series=><div key={series.scale+":"+series.context} className="rounded-lg border bg-card p-3 min-w-0 space-y-2"><h3 className="text-xs font-semibold break-words">{series.label}{series.context?" · "+series.context:""}</h3><div className="grid grid-cols-3 gap-1 text-xs"><div><p className="text-muted-foreground">Inicial</p><strong className="text-lg tabular-nums">{series.values[0]}</strong></div><div><p className="text-muted-foreground">Última</p><strong className="text-lg tabular-nums">{series.values[series.values.length-1]}</strong></div><div><p className="text-muted-foreground">Variação</p><strong className="text-lg tabular-nums">{series.delta===null?"—":(series.delta>0?"+":"")+series.delta}</strong></div></div>
+    {series.values.length>1?<svg className="w-full h-auto text-muted-foreground" viewBox="0 0 340 120" role="img" aria-label={series.label+" — curva em ordem dos registros"}><line x1="38" y1="20" x2="38" y2="100" stroke="currentColor" opacity=".5"/><line x1="38" y1="100" x2="322" y2="100" stroke="currentColor" opacity=".5"/><text x="30" y="23" textAnchor="end" fontSize="10" fill="currentColor">{series.max}</text><text x="30" y="103" textAnchor="end" fontSize="10" fill="currentColor">{series.min}</text><polyline fill="none" stroke="#168b9d" strokeWidth="2" points={series.geometry.map(p=>p.x+","+p.y).join(" ")}/>{series.geometry.map((p,i)=><circle key={i} cx={p.x} cy={p.y} r="2.5" fill="#168b9d"><title>{altaDateLabel(series.points[i].date)}: {series.values[i]}</title></circle>)}</svg>:<p className="text-xs text-muted-foreground">Uma medida registrada; sem comparação temporal.</p>}
+    <p className="text-xs text-muted-foreground">{series.values.length} medida(s) · {altaDateLabel(series.points[0].date)} a {altaDateLabel(series.points[series.points.length-1].date)} · ordem dos registros</p><details className="text-xs"><summary className="cursor-pointer font-medium">Conferir valores registrados</summary><div className="max-h-48 overflow-auto mt-1"><table className="w-full text-left"><thead><tr><th>Data</th><th>Sessão</th><th>Valor</th></tr></thead><tbody>{series.points.map((point,i)=><tr key={point.id} className="border-t"><td className="py-1">{altaDateLabel(point.date)}</td><td>{point.session??"—"}</td><td>{series.values[i]}</td></tr>)}</tbody></table></div></details></div>)}</div></details>):<p role="status" className="text-xs text-muted-foreground">{!isReportLocked&&evolutionScopeReady&&evolutionQuery.isFetching?"Consultando medidas clínicas…":altaEvolutionMessage(visibleEvolution)}</p>}
+    <p className="text-xs text-muted-foreground">As escalas não determinam sozinhas a melhora, o cumprimento de metas ou a indicação de alta.</p>
+  </section>;
   const sourcePanel = pacienteId && !loading && !loadFailed && <section className="clinical-premium p-3 space-y-2 min-w-0" aria-label="Fontes do preenchimento">
     <div className="flex flex-wrap items-center gap-2"><span className="clinical-dock-icon clinical-tone-teal"><DatabaseIcon className="w-4 h-4"/></span><div className="flex-1 min-w-0"><h2 className="text-sm font-semibold">Fontes do preenchimento inteligente</h2><p className="text-xs text-muted-foreground">Dados registrados na unidade; revise o conteúdo clínico antes de finalizar.</p></div></div>
     {sourceMeta?<div className="space-y-2">
