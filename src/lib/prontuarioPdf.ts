@@ -291,13 +291,13 @@ async function fetchFullProntuarioData(prontuarioId: string) {
 
 export async function downloadProntuarioPdf(
   input: ProntuarioLike | string,
-): Promise<void> {
+): Promise<boolean> {
   const prontuarioId = typeof input === 'string' ? input : input.id;
   const data = await fetchFullProntuarioData(prontuarioId);
   
   if (!data) {
     console.error("Erro ao carregar dados completos do prontuário");
-    return;
+    return false;
   }
 
   const { prontuario, paciente, profissional, unidade, ciclo, pts, procs, exames, configTipos, configEspecialidades, allConfigs } = data;
@@ -320,7 +320,7 @@ export async function downloadProntuarioPdf(
       dataAtendimento: prontuario.data_atendimento,
       data: cd.visita_domiciliar || {},
     });
-    return;
+    return true;
   }
 
   const title = `PRONTUÁRIO DE ATENDIMENTO — ${tipoRegistro.toUpperCase().replace(/_/g, ' ')}`;
@@ -550,6 +550,7 @@ export async function downloadProntuarioPdf(
 
   const html = buildDocumentShell(title, body, config);
   printViaIframe(html);
+  return true;
 }
 
 interface TimelineEntry {
