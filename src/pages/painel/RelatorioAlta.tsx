@@ -445,6 +445,8 @@ const RelatorioAlta: React.FC = () => {
   useEffect(() => {
     if (!pacienteId || (modo !== "multiprofissional" && modo !== "individual")) {
       loadedModeRef.current = modo;
+      setLoading(false);
+      setLoadFailed(false);
       return;
     }
 
@@ -889,6 +891,7 @@ const RelatorioAlta: React.FC = () => {
   };
 
   const handleReopen = async () => {
+    if (loading || loadFailed || savingRef.current) return;
     const reason = reopenReason.trim();
     if (!reason) { toast.error("Informe o motivo da reabertura"); return; }
     if (!reportId || !pacienteId || !user?.id) {
@@ -1013,6 +1016,7 @@ const RelatorioAlta: React.FC = () => {
         <div class="field"><span class="field-label">CIF — Fatores Ambientais</span><div class="field-value">${cifFatores || "—"}</div></div>
         <div class="field"><span class="field-label">Barreiras</span><div class="field-value">${multiBarreiras || "—"}</div></div>
         <div class="field"><span class="field-label">Potencialidades</span><div class="field-value">${multiPotencialidades || "—"}</div></div>
+        ${multiFatoresContextuais ? `<div class="field"><span class="field-label">Fatores contextuais</span><div class="field-value">${altaPrintText(multiFatoresContextuais)}</div></div>` : ""}
       </div>
 
       <div class="section">
@@ -1041,6 +1045,9 @@ const RelatorioAlta: React.FC = () => {
             s.metas_status === "parcialmente" ? "Parcialmente atingidas" : s.metas_status === "nao_atingidas" ? "Não atingidas" : "Aguardando avaliação profissional"
           }${s.metas_justificativa ? ` — ${s.metas_justificativa}` : ""}</div></div>
           ${s.tecnologia_assistiva ? `<div class="field"><span class="field-label">Tecnologia Assistiva Concedida</span><div class="field-value">${s.tecnologia_assistiva}</div></div>` : ""}
+          ${s.intercorrencias ? `<div class="field"><span class="field-label">Intercorrências</span><div class="field-value">${altaPrintText(s.intercorrencias)}</div></div>` : ""}
+          ${s.orientacoes_especificas ? `<div class="field"><span class="field-label">Orientações da área</span><div class="field-value">${altaPrintText(s.orientacoes_especificas)}</div></div>` : ""}
+          ${s.encaminhamentos_especificos ? `<div class="field"><span class="field-label">Encaminhamentos da área</span><div class="field-value">${altaPrintText(s.encaminhamentos_especificos)}</div></div>` : ""}
           <div class="signature" style="margin-top:20px; text-align: left;">
             <div class="signature-line" style="margin-left: 0; width: 250px;"></div>
             <div class="name">${s.profissional_nome}</div>
@@ -1070,7 +1077,10 @@ const RelatorioAlta: React.FC = () => {
 
       <div class="section" style="page-break-inside: avoid;">
         <div class="section-title">Plano de Transição e Pós-Alta</div>
-        <div class="field"><span class="field-label">Orientações ao Usuário</span><div class="field-value">${orientacoesUsuario || "—"}</div></div>
+        <div class="field"><span class="field-label">Orientações ao Usuário / Família</span><div class="field-value">${altaPrintText(orientacoesUsuario) || "—"}</div></div>
+        ${multiOrientacoesEscola ? `<div class="field"><span class="field-label">Orientações à escola</span><div class="field-value">${altaPrintText(multiOrientacoesEscola)}</div></div>` : ""}
+        ${multiPontosAtencao ? `<div class="field"><span class="field-label">Pontos de atenção</span><div class="field-value">${altaPrintText(multiPontosAtencao)}</div></div>` : ""}
+        ${multiContinuarTerapia ? `<div class="field"><span class="field-label">Continuidade do cuidado</span><div class="field-value">${altaPrintText(multiContinuarTerapia)}</div></div>` : ""}
         <div class="field"><span class="field-label">Orientações para UBS/ESF</span><div class="field-value">${orientacoesUbs || "—"}</div></div>
         <div class="field"><span class="field-label">Encaminhamentos Realizados</span><div class="field-value">${encaminhamentos.join(", ") || "—"}</div></div>
         <div class="info-grid">
@@ -1166,6 +1176,8 @@ const RelatorioAlta: React.FC = () => {
         <div class="field"><span class="field-label">Tipo de Alta</span><div class="field-value">${tipoAltaLabel}</div></div>
         <div class="field"><span class="field-label">Motivo da Alta</span><div class="field-value">${motivoLabel}${indMotivoDet ? ` — ${indMotivoDet}` : ""}</div></div>
         <div class="field"><span class="field-label">Risco de Regressão</span><div class="field-value">${indRiscoRegressao || "—"}</div></div>
+        ${indRiscoPosAlta ? `<div class="field"><span class="field-label">Risco pós-alta</span><div class="field-value">${altaPrintText(indRiscoPosAlta)}</div></div>` : ""}
+        ${indComplexidade ? `<div class="field"><span class="field-label">Complexidade do caso</span><div class="field-value">${altaPrintText(indComplexidade)}</div></div>` : ""}
         <div class="field"><span class="field-label">Necessidade de Continuidade Terapêutica</span><div class="field-value">${indContinuarTerapia || "—"}</div></div>
         <div class="field"><span class="field-label">Orientações Específicas</span><div class="field-value">${indOrientacoes || "—"}</div></div>
         <div class="field"><span class="field-label">Encaminhamentos</span><div class="field-value">${indEncaminhamento || "—"}</div></div>
@@ -1495,6 +1507,7 @@ const RelatorioAlta: React.FC = () => {
         </div>
 
         {evolutionPreview}
+        {loadFailed && <Alert variant="destructive"><AlertCircle className="h-4 w-4"/><AlertTitle>Não foi possível carregar o relatório</AlertTitle><AlertDescription>Para evitar perda de dados, a edição e a impressão estão bloqueadas. Limpe a seleção e selecione o paciente novamente.</AlertDescription></Alert>}
         {isReportLocked && (
           <Alert className="border-amber-300 bg-amber-50">
             <Lock className="h-4 w-4 text-amber-700" />
@@ -1625,6 +1638,10 @@ const RelatorioAlta: React.FC = () => {
                       {s.metas_status&&s.metas_status!=="totalmente"&&<div className="space-y-1"><Label className="text-xs">Justificativa das metas *</Label><Textarea disabled={!canEditContribution(s)} value={s.metas_justificativa} onChange={e=>updateProfSection(s.profissional_id,"metas_justificativa",e.target.value)} rows={2}/></div>}
                       <div className="space-y-1"><Label className="text-xs">Adesão</Label><Select disabled={!canEditContribution(s)} value={s.adesao || ""} onValueChange={v=>updateProfSection(s.profissional_id,"adesao",v)}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{ADESAO_TRATAMENTO.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div>
                       <div className="space-y-1"><Label className="text-xs">Intercorrências</Label><Textarea disabled={!canEditContribution(s)} value={s.intercorrencias || ""} onChange={e=>updateProfSection(s.profissional_id,"intercorrencias",e.target.value)} rows={2}/></div>
+                      <div className="space-y-1"><Label className="text-xs">Intervenções realizadas</Label><Textarea disabled={!canEditContribution(s)} value={s.intervencoes || ""} onChange={e=>updateProfSection(s.profissional_id,"intervencoes",e.target.value)} rows={2}/></div>
+                      <div className="space-y-1"><Label className="text-xs">Tecnologia assistiva</Label><Textarea disabled={!canEditContribution(s)} value={s.tecnologia_assistiva || ""} onChange={e=>updateProfSection(s.profissional_id,"tecnologia_assistiva",e.target.value)} rows={2}/></div>
+                      <div className="space-y-1"><Label className="text-xs">Orientações da área</Label><Textarea disabled={!canEditContribution(s)} value={s.orientacoes_especificas || ""} onChange={e=>updateProfSection(s.profissional_id,"orientacoes_especificas",e.target.value)} rows={2}/></div>
+                      <div className="space-y-1"><Label className="text-xs">Encaminhamentos da área</Label><Textarea disabled={!canEditContribution(s)} value={s.encaminhamentos_especificos || ""} onChange={e=>updateProfSection(s.profissional_id,"encaminhamentos_especificos",e.target.value)} rows={2}/></div>
                     </div>
                     <div className="flex items-center justify-between mt-4 flex-wrap gap-2">
                       <div className="flex gap-4">
@@ -1817,6 +1834,7 @@ const RelatorioAlta: React.FC = () => {
       </div>
 
       {evolutionPreview}
+        {loadFailed && <Alert variant="destructive"><AlertCircle className="h-4 w-4"/><AlertTitle>Não foi possível carregar o relatório</AlertTitle><AlertDescription>Para evitar perda de dados, a edição e a impressão estão bloqueadas. Limpe a seleção e selecione o paciente novamente.</AlertDescription></Alert>}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Main Form Content */}
         <div className="lg:col-span-3 space-y-6">
