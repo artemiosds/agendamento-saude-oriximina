@@ -1,7 +1,6 @@
 import { OperationalVirtualList } from "@/components/OperationalVirtualList";
 import { patientCpfError } from '@/lib/patientCpf';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { PageHeader } from "@/components/ui/page-header";
 import { LoadingState, ErrorState } from "@/components/EmptyState";
 import { usePacientes } from "@/contexts/PacientesContext";
 import { useAgendamentos } from "@/contexts/AgendamentosContext";
@@ -936,72 +935,58 @@ const Pacientes: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <PageHeader
-        title="Pacientes"
-        subtitle={
-          <>
-            {needsFullList ? filtered.length : directoryQuery.data?.total ?? 0} cadastrados
-            {pacientesNaFila.size > 0 && (
-              <span className="ml-2">
-                • <Users className="w-3.5 h-3.5 inline" /> {pacientesNaFila.size} na fila
-              </span>
-            )}
-          </>
-        }
-        actions={
-          <>
-            <Button variant="outline" onClick={() => navigate("/painel/atualizacao-cadastral")}>
-              <AlertTriangle className="w-4 h-4 mr-2 text-orange-500" /> Pendências Cadastrais
+      <header className="clinical-hub-hero space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="clinical-patient-avatar flex items-center justify-center shrink-0"><Users className="w-5 h-5" aria-hidden="true" /></span>
+          <div className="flex-1 min-w-[9rem]">
+            <p className="clinical-hub-eyebrow">Gestão de cadastro assistencial</p>
+            <h1 className="clinical-hub-name text-xl font-bold font-display">Pacientes</h1>
+            <p className="clinical-patient-sub text-xs mt-1">Cadastro, identificação e acompanhamento assistencial</p>
+          </div>
+          {canCreate && (
+            <Button type="button" onClick={openNew} className="clinical-hub-new">
+              <Plus className="w-4 h-4" /> Novo Paciente
             </Button>
-            <Button variant="outline" onClick={() => void exportCSV("pendentes")}>
-              <FileDown className="w-4 h-4 mr-2" /> Exportar pendentes
-            </Button>
-            {canImportCSV && (
-              <Button variant="outline" onClick={() => setImportOpen(true)}>
-                <FileDown className="w-4 h-4 mr-2" /> Importar CSV
-              </Button>
-            )}
-            {canCreate && (
-              <Button onClick={openNew} className="gradient-primary text-primary-foreground">
-                <Plus className="w-4 h-4 mr-2" /> Novo Paciente
-              </Button>
-            )}
-          </>
-        }
-      />
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-white/20" aria-label="Resumo cadastral">
+          <div className="triage-hero-metric flex items-center gap-2">
+            <Users className="w-4 h-4 text-white/80 shrink-0" aria-hidden="true" />
+            <div><p className="text-[11px] text-white/85">{search.trim() || debouncedSearch.trim() || filterFila !== "all" ? "Resultados da consulta" : "Pacientes cadastrados"}</p><p className="text-lg font-bold tabular-nums leading-tight">{directoryQuery.isSuccess && !directoryQuery.isError && search === debouncedSearch ? (needsFullList ? filtered.length : directoryQuery.data?.total ?? 0).toLocaleString("pt-BR") : "—"}</p></div>
+          </div>
+          <div className="triage-hero-metric flex items-center gap-2">
+            <Clock className="w-4 h-4 text-white/80 shrink-0" aria-hidden="true" />
+            <div><p className="text-[11px] text-white/85">Na fila · contexto atual</p><p className="text-lg font-bold tabular-nums leading-tight">{pacientesNaFila.size.toLocaleString("pt-BR")}</p></div>
+          </div>
+        </div>
+      </header>
 
-      {analyzedPendencies.total > 0 && (
-        <Card className="border-warning/30 bg-warning/10 shadow-card">
-          <CardContent className="p-3 text-sm text-foreground">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-warning" />
-                <span>
-                  Entre os pacientes exibidos, <strong>{analyzedPendencies.total}</strong> têm pendências cadastrais (CPF, CNS, endereço ou unidade faltando).
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  className="bg-background"
-                  onClick={() => navigate("/painel/atualizacao-cadastral")}
-                >
-                  Ver pendências
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  className="bg-background"
-                  onClick={() => exportCSV("pendentes")}
-                >
-                  Exportar pendentes
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <section className="clinical-premium p-3 space-y-2" aria-label="Gestão cadastral">
+        <div className="flex items-center gap-2">
+          <span className="clinical-dock-icon clinical-tone-blue"><FileText className="h-4 w-4" aria-hidden="true" /></span>
+          <div className="min-w-0 flex-1"><h2 className="text-sm font-semibold">Gestão cadastral</h2><p className="text-xs text-muted-foreground">Atualização de dados, exportação e importação</p></div>
+        </div>
+        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${canImportCSV ? "lg:grid-cols-3" : ""}`}>
+          <Button type="button" variant="outline" className="clinical-record-action justify-start h-auto min-h-10 whitespace-normal text-left" onClick={() => navigate("/painel/atualizacao-cadastral")}>
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-300" /> Pendências Cadastrais
+          </Button>
+          <Button type="button" variant="outline" className="clinical-record-action justify-start h-auto min-h-10 whitespace-normal text-left" onClick={() => void exportCSV("pendentes")} title="Exporta os cadastros pendentes de todo o escopo autorizado, não somente os resultados exibidos">
+            <FileDown className="w-4 h-4 shrink-0" /> Exportar pendentes
+          </Button>
+          {canImportCSV && (
+            <Button type="button" variant="outline" className="clinical-record-action justify-start h-auto min-h-10 whitespace-normal text-left" onClick={() => setImportOpen(true)}>
+              <FileUp className="w-4 h-4 shrink-0" /> Importar CSV
+            </Button>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground">A exportação de pendências considera todo o cadastro do escopo autorizado.</p>
+        {directoryQuery.isSuccess && !directoryQuery.isError && analyzedPendencies.total > 0 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50/70 dark:border-amber-800 dark:bg-amber-950/30 p-2.5 flex items-start gap-2 text-xs">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-700 dark:text-amber-300 mt-0.5" aria-hidden="true" />
+            <div className="min-w-0"><p className="font-semibold text-amber-900 dark:text-amber-100">Pendências cadastrais identificadas</p><p className="mt-0.5 text-muted-foreground"><strong>{analyzedPendencies.total.toLocaleString("pt-BR")}</strong> de {visiblePacientes.length.toLocaleString("pt-BR")} paciente(s) carregado(s) têm informações cadastrais pendentes. Utilize os atalhos acima para consultar ou exportar.</p></div>
+          </div>
+        )}
+      </section>
 
       {/* Patient create/edit dialog */}
       <Dialog
@@ -1181,18 +1166,19 @@ const Pacientes: React.FC = () => {
       {/* Search + Filters */}
       {directoryQuery.isError && <ErrorState description="Não foi possível carregar os pacientes. Tente novamente." onRetry={() => void directoryQuery.refetch()} />}
       {directoryQuery.isLoading && <LoadingState label="Carregando pacientes..." />}
-      <div className="flex flex-col sm:flex-row gap-2">
+      <div className="clinical-premium p-2.5 flex flex-col sm:flex-row gap-2" aria-label="Busca e filtros de pacientes">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por nome, CPF, CNS ou telefone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            aria-label="Buscar paciente por nome, CPF, CNS ou telefone"
             className="pl-10"
           />
         </div>
         <Select value={filterFila} onValueChange={setFilterFila}>
-          <SelectTrigger className="w-full sm:w-[180px]">
+          <SelectTrigger className="w-full sm:w-[180px]" aria-label="Filtrar pacientes por fila">
             <SelectValue placeholder="Filtrar" />
           </SelectTrigger>
           <SelectContent>
@@ -1203,7 +1189,7 @@ const Pacientes: React.FC = () => {
           </SelectContent>
         </Select>
         <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="w-full sm:w-[180px]">
+          <SelectTrigger className="w-full sm:w-[180px]" aria-label="Ordenar pacientes">
             <SelectValue placeholder="Ordenar" />
           </SelectTrigger>
           <SelectContent>
