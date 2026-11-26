@@ -4,7 +4,8 @@ import TriageReconciliationPanel from "@/components/TriageReconciliationPanel";
 import { startCareTriage, saveCareTriageDraft, completeCareTriage } from "@/services/careFlowService";
 import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { getTriagePendingFields } from "@/lib/triagePending";
-import { PageHeader } from '@/components/ui/page-header';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { HeartPulse, MoreVertical, ClipboardCheck, Activity, Thermometer, Droplet, Ruler, Weight, Wind, Calculator } from "lucide-react";
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { usePacientes } from "@/contexts/PacientesContext";
 import { useAgendamentos } from "@/contexts/AgendamentosContext";
@@ -38,7 +39,6 @@ import { hasConfirmedTriage } from "@/lib/triageCompletion";
 import { getTriageVitalAlerts, sanitizeVitalInput, validateTriageVitals } from "@/lib/triageVitals";
 import { differenceInMinutes } from "date-fns";
 import CustomFieldsRenderer from "@/components/CustomFieldsRenderer";
-import { EmptyState } from "@/components/EmptyState";
 import { ClipboardList } from "lucide-react";
 import { useCustomFields } from "@/hooks/useCustomFields";
 import ChamarPacienteButton from "@/components/ChamarPacienteButton";
@@ -291,29 +291,28 @@ const TriagemItem = React.memo(({
   isActioning: boolean,
   resolvePaciente: (id: string, nome: string) => string
 }) => {
-  const waitMinutes = item.filaCriadoEm ? differenceInMinutes(new Date(), new Date(item.filaCriadoEm)) : 0;
-  const waitLabel = waitMinutes >= 60 ? `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60}min` : `${waitMinutes}min`;
+  const waitMinutes = item.filaCriadoEm ? differenceInMinutes(new Date(), new Date(item.filaCriadoEm)) : NaN;
+  const waitLabel = !Number.isFinite(waitMinutes)||waitMinutes<0 ? "—" : waitMinutes >= 60 ? `${Math.floor(waitMinutes / 60)}h ${waitMinutes % 60}min` : `${waitMinutes}min`;
   const espBadge = item.profissionalId
     ? ESPECIALIDADE_LABELS[item.profissionalNome] || item.profissionalNome.toUpperCase()
     : null;
 
   return (
-    <Card className="border-0 shadow-card">
-      <CardContent className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center">
-        <div className="flex shrink-0 items-center gap-3 sm:w-36 sm:flex-col sm:items-start sm:gap-1">
-          <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-center sm:w-full">
+    <Card className={`clinical-premium ${item.prioridadeLegal && item.prioridadeLegal.tier<3?"triage-priority-card":""}`}>
+      <CardContent className="triage-card-layout p-0">
+        <div className="clinical-record-rail triage-position-rail">
+          <div className="text-center min-w-0 w-full">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Posição na fila</p>
-            <p className="font-mono text-3xl font-bold leading-tight tabular-nums text-primary">{String(filtroAtivo ? posicaoEspecialidade : posicaoGeral).padStart(3, '0')}</p>
+            <p className="triage-position font-bold leading-tight tabular-nums">{String(filtroAtivo ? posicaoEspecialidade : posicaoGeral).padStart(3, '0')}</p>
             <p className="text-xs font-medium text-primary">{filtroAtivo ? especialidade : 'Fila geral'}</p>
             {filtroAtivo && <p className="mt-1 text-xs text-muted-foreground">{posicaoGeral}º na fila geral</p>}
           </div>
-          <div className="text-xs text-muted-foreground sm:mt-1">
-            Horário: <span className="font-mono font-semibold tabular-nums text-foreground">{item.hora}</span>
-          </div>
+          <span className="clinical-dock-icon clinical-tone-blue" aria-hidden="true"><ClipboardList className="w-4 h-4"/></span>
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 p-3 space-y-2">
           {!filtroAtivo && <p className="mb-1 text-xs text-muted-foreground">{posicaoEspecialidade}º em {especialidade}</p>}
-          <p className="font-semibold text-foreground">{resolvePaciente(item.pacienteId, item.pacienteNome)}</p>
+          <p className="font-semibold text-sm sm:text-base break-words [overflow-wrap:anywhere]">{resolvePaciente(item.pacienteId, item.pacienteNome)}</p>
+          <p className="clinical-record-type text-xs font-semibold">{especialidade}</p>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
             {item.pacienteDataNascimento && item.pacienteIdade != null ? (
               <span className={`font-medium ${item.pacienteIdade >= 60 ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>
@@ -351,22 +350,20 @@ const TriagemItem = React.memo(({
               {item.filaStatus === "chegada_confirmada" ? "Chegada confirmada" : "Triagem em andamento"}
             </Badge>
           </div>
-        </div>
+        <div className="clinical-inset rounded-lg border p-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs"><div><p className="clinical-field-label text-[10px] uppercase font-semibold">Chegada</p><p className="font-semibold tabular-nums">{item.filaHoraChegada||"—"}</p></div><div><p className="clinical-field-label text-[10px] uppercase font-semibold">Horário previsto</p><p className="font-semibold tabular-nums">{item.hora||"—"}</p></div><div><p className="clinical-field-label text-[10px] uppercase font-semibold">Espera</p><p className="font-semibold tabular-nums flex items-center gap-1"><Clock className="w-3 h-3"/>{waitLabel}</p></div></div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="text-xs">
-            <Clock className="mr-1 h-3 w-3" /> {waitLabel}
-          </Badge>
           {item.unidadeId && (
             <ChamarPacienteButton
               unidadeId={item.unidadeId}
               pacienteNome={resolvePaciente(item.pacienteId, item.pacienteNome)}
               defaultLocal="Sala de Triagem"
+              buttonLabel="Chamar na TV"
               className="border border-[#2A6F97] bg-[#EAF3F8] text-[#1B4D6B] hover:bg-[#D8EAF4] hover:text-[#153F58] focus-visible:ring-[#2A6F97] dark:border-sky-400 dark:bg-slate-900 dark:text-sky-200 dark:hover:bg-slate-800 dark:hover:text-sky-100"
             />
           )}
           <Button 
             size="sm" 
-            className="gradient-primary text-primary-foreground" 
+            className="clinical-record-action clinical-action-main" 
             onClick={() => onOpen(item)}
             disabled={isOpening || isActioning}
           >
@@ -377,29 +374,15 @@ const TriagemItem = React.memo(({
             )}
             {isOpening ? "Abrindo..." : "Iniciar triagem"}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-success/40 text-success hover:bg-success/10"
-            onClick={() => onRelease(item)}
-            disabled={isOpening || isActioning}
-          >
-            {isActioning ? (
-              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <FastForward className="mr-1 h-3.5 w-3.5" />
-            )}
-            {isActioning ? "Liberando..." : "Liberar sem triagem"}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-destructive/40 text-destructive hover:bg-destructive/10"
-            onClick={() => onRemove(item)}
-            disabled={isOpening || isActioning}
-          >
-            <Trash2 className="mr-1 h-3.5 w-3.5" /> Excluir da triagem
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button type="button" size="icon" variant="outline" aria-label="Mais ações da triagem" disabled={isOpening||isActioning} className="h-9 w-9">{isActioning?<Loader2 className="w-4 h-4 animate-spin"/>:<MoreVertical className="w-4 h-4"/>}</Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem disabled={isOpening||isActioning} onSelect={()=>onRelease(item)}><FastForward className="w-4 h-4 mr-2"/>Liberar sem triagem</DropdownMenuItem>
+              <DropdownMenuSeparator/>
+              <DropdownMenuItem disabled={isOpening||isActioning} className="text-destructive" onSelect={()=>onRemove(item)}><Trash2 className="w-4 h-4 mr-2"/>Excluir da triagem</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         </div>
       </CardContent>
     </Card>
@@ -957,12 +940,14 @@ const Triagem: React.FC = () => {
   const solicitarLiberacao = useCallback((item: Agendamento) => setConfirmAction({ type: 'release', item }), []);
   const solicitarRemocao = useCallback((item: Agendamento) => setConfirmAction({ type: 'remove', item }), []);
 
+  const queueSummary=useMemo(()=>{
+    const now=new Date();let priority=0;let longest:number|null=null;
+    for(const item of filaOrdenada){if(item.prioridadeLegal&&item.prioridadeLegal.tier<3)priority++;const minutes=item.filaCriadoEm?differenceInMinutes(now,new Date(item.filaCriadoEm)):NaN;if(Number.isFinite(minutes)&&minutes>=0)longest=longest===null?minutes:Math.max(longest,minutes);}
+    return {priority,longest};
+  },[filaOrdenada]);
   return (
-    <div className="space-y-4 animate-fade-in">
-      <PageHeader
-        title="Triagem de Enfermagem"
-        subtitle={`${filaFiltrada.length} paciente(s) aguardando triagem`}
-      />
+    <div className="space-y-3 min-w-0">
+      <header className="clinical-hub-hero space-y-3"><div className="flex items-center gap-3"><span className="clinical-patient-avatar flex items-center justify-center shrink-0"><HeartPulse className="w-6 h-6"/></span><div className="min-w-0"><p className="clinical-hub-eyebrow">Central de acolhimento</p><h1 className="clinical-hub-name font-bold font-display text-xl">Triagem de Enfermagem</h1><p className="clinical-patient-sub text-xs">Organização do fluxo assistencial</p></div></div><div className="grid grid-cols-3 gap-2">{[["Na fila de triagem",filaOrdenada.length],["Prioridade legal",queueSummary.priority],["Maior espera",queueSummary.longest===null?"—":queueSummary.longest+" min"]].map(([label,value])=><div key={label} className="triage-hero-metric"><p className="clinical-patient-sub text-xs">{label}</p><p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{value}</p></div>)}</div><p className="clinical-patient-sub text-[10px]">Indicadores da fila autorizada · espera estimada na última atualização</p></header>
       <TriageReconciliationPanel />
       {nextPatientToCall && (
         <Card className="border border-primary/30 bg-primary/5">
@@ -986,6 +971,7 @@ const Triagem: React.FC = () => {
           </CardContent>
         </Card>
       )}
+      <div className="clinical-premium p-3 space-y-2">
       <div role="group" aria-label="Filtrar triagem por profissão" className="flex min-w-0 max-w-full overflow-x-auto no-scrollbar gap-2 pb-1">
         {[['todos', 'Todos'], ...Object.entries(TRIAGE_CATEGORY_LABELS).filter(([key]) => especialidadesFila.contagens.has(key))].map(([key, label]) => (
           <Button key={key} type="button" variant={filtroEspecialidade === key ? 'default' : 'outline'}
@@ -1008,20 +994,14 @@ const Triagem: React.FC = () => {
             }}
           />
         </div>
-        <Button variant="outline" onClick={() => setBusca(buscaInput.trim())}>
+        <Button variant="outline" aria-label="Buscar paciente" onClick={() => setBusca(buscaInput.trim())}>
           <Search className="h-4 w-4" />
         </Button>
       </div>
+      </div>
+      <div className="clinical-date-divider flex items-center gap-2 text-xs font-semibold text-muted-foreground">Fila de acolhimento · {filaFiltrada.length} visível(is)</div>
       {filaFiltrada.length === 0 ? (
-        <Card className="border-0 shadow-card">
-          <CardContent className="p-0">
-            <EmptyState
-              icon={<ClipboardList className="w-8 h-8 text-muted-foreground/50" />}
-              title={busca.trim() ? "Nenhum resultado" : "Fila vazia"}
-              description={busca.trim() ? `Nenhum paciente encontrado para "${busca}" no filtro selecionado.` : "Nenhum paciente aguardando triagem no momento."}
-            />
-          </CardContent>
-        </Card>
+        <Card className="clinical-premium"><CardContent className="p-6 flex flex-col items-center text-center gap-2"><span className="clinical-dock-icon clinical-tone-teal !w-12 !h-12"><ClipboardCheck className="w-6 h-6"/></span><h2 className="font-semibold">{busca.trim()||filaOrdenada.length>0?"Nenhum resultado":"Fila vazia"}</h2><p className="text-sm text-muted-foreground">{busca.trim()||filaOrdenada.length>0?"Nenhum paciente encontrado no filtro selecionado.":"Nenhum paciente aguardando triagem no momento."}</p></CardContent></Card>
       ) : (
         <div className="space-y-2">
           {filaFiltrada.map((item) => (
@@ -1043,10 +1023,10 @@ const Triagem: React.FC = () => {
         </div>
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-          <DialogHeader className="flex flex-col gap-2 pr-8 space-y-0 sm:flex-row sm:items-center sm:justify-between">
+        <DialogContent className="triage-premium-form max-h-[90dvh] w-[96vw] max-w-3xl overflow-y-auto">
+          <DialogHeader className="clinical-hub-hero flex flex-col gap-2 pr-8 space-y-0 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0 flex-1">
-              <DialogTitle className="font-display break-words">Triagem  {selectedItem?.pacienteNome}</DialogTitle>
+              <p className="clinical-hub-eyebrow">Ficha de triagem</p><DialogTitle className="clinical-hub-name font-display break-words">{selectedItem?resolvePaciente(selectedItem.pacienteId,selectedItem.pacienteNome):"Paciente"}</DialogTitle>
             </div>
             {selectedItem?.unidadeId && (
               <ChamarPacienteButton
@@ -1087,19 +1067,19 @@ const Triagem: React.FC = () => {
             </div>
           )}
           <div className="space-y-4">
-            <h3 className="border-b pb-1 text-sm font-semibold text-primary">1. Sinais Vitais e Biometria</h3>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <h3 className="triage-section-title"><HeartPulse className="w-4 h-4"/>1. Sinais Vitais e Biometria</h3>
+            <div className="triage-vital-grid grid grid-cols-2 gap-2 sm:grid-cols-3">
               <div>
-                <Label>Peso (kg)</Label>
+                <Label className="flex items-center gap-1.5"><Weight className="w-4 h-4 text-primary shrink-0"/>Peso (kg)</Label>
                 <Input aria-label="Peso (kg)" type="text" inputMode="decimal" min="0.5" max="400" step="0.01" aria-invalid={!!vitalValidation.errors.peso} value={form.peso} onChange={(e) => setForm((p) => ({ ...p, peso: sanitizeVitalInput(e.target.value) }))} placeholder="70.5" />
               </div>
               <div>
-                <Label>Altura (cm ou m)</Label>
+                <Label className="flex items-center gap-1.5"><Ruler className="w-4 h-4 text-primary shrink-0"/>Altura (cm ou m)</Label>
                 <Input aria-label="Altura (cm ou m)" type="text" inputMode="decimal" min="0.2" max="260" step="0.01" aria-invalid={!!vitalValidation.errors.altura} value={form.altura} onChange={(e) => setForm((p) => ({ ...p, altura: sanitizeVitalInput(e.target.value) }))} placeholder="170 ou 1.70" />
                 <p className="mt-1 text-[10px] text-muted-foreground">Aceita 156 cm ou 1,56 m; o sistema normaliza automaticamente.</p>
               </div>
               <div>
-                <Label>IMC</Label>
+                <Label className="flex items-center gap-1.5"><Calculator className="w-4 h-4 text-primary shrink-0"/>IMC</Label>
                 <div className="mt-1 rounded-lg bg-muted p-2 text-sm">
                   {imc ? (
                     <span className="font-semibold">
@@ -1111,23 +1091,23 @@ const Triagem: React.FC = () => {
                 </div>
               </div>
               <div>
-                <Label>Pressão Arterial</Label>
+                <Label className="flex items-center gap-1.5"><HeartPulse className="w-4 h-4 text-primary shrink-0"/>Pressão Arterial</Label>
                 <Input value={form.pressaoArterial} onChange={(e) => setForm((p) => ({ ...p, pressaoArterial: e.target.value }))} placeholder="120/80" />
               </div>
               <div>
-                <Label>Temperatura (°C)</Label>
+                <Label className="flex items-center gap-1.5"><Thermometer className="w-4 h-4 text-primary shrink-0"/>Temperatura (°C)</Label>
                 <Input type="number" step="0.1" min="0" max="60" value={form.temperatura} onChange={(e) => setForm((p) => ({ ...p, temperatura: e.target.value }))} placeholder="36.5" />
               </div>
               <div>
-                <Label>FC (bpm)</Label>
+                <Label className="flex items-center gap-1.5"><Activity className="w-4 h-4 text-primary shrink-0"/>FC (bpm)</Label>
                 <Input type="number" min="0" max="350" step="1" value={form.frequenciaCardiaca} onChange={(e) => setForm((p) => ({ ...p, frequenciaCardiaca: e.target.value }))} placeholder="72" />
               </div>
               <div>
-                <Label>SatO2 (%)</Label>
+                <Label className="flex items-center gap-1.5"><Wind className="w-4 h-4 text-primary shrink-0"/>SatO2 (%)</Label>
                 <Input type="number" min="0" max="100" step="1" value={form.saturacaoOxigenio} onChange={(e) => setForm((p) => ({ ...p, saturacaoOxigenio: e.target.value }))} placeholder="98" />
               </div>
               <div>
-                <Label>Glicemia (mg/dL)</Label>
+                <Label className="flex items-center gap-1.5"><Droplet className="w-4 h-4 text-primary shrink-0"/>Glicemia (mg/dL)</Label>
                 <Input type="number" step="0.01" min="0" max="9999.99" value={form.glicemia} onChange={(e) => setForm((p) => ({ ...p, glicemia: e.target.value }))} placeholder="Opcional" />
               </div>
             </div>
@@ -1143,7 +1123,7 @@ const Triagem: React.FC = () => {
                 <p className="text-[11px] text-muted-foreground">Avisos de apoio: não substituem avaliação profissional, não definem diagnóstico e não alteram automaticamente a classificação Manchester. Considere idade, gestação, sintomas, condições prévias e protocolo da unidade.</p>
               </div>
             )}
-            <h3 className="border-b pb-1 pt-2 text-sm font-semibold text-primary">2. Avaliação Clínica e Risco</h3>
+            <h3 className="triage-section-title"><Activity className="w-4 h-4"/>2. Avaliação Clínica e Risco</h3>
             <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -1211,7 +1191,7 @@ const Triagem: React.FC = () => {
                 placeholder="Detalhe a evolução dos sintomas: início, duração, fatores de melhora/piora, tratamentos prévios..."
               />
             </div>
-            <h3 className="border-b pb-1 pt-2 text-sm font-semibold text-primary">3. Histórico, Alergias e Medicamentos</h3>
+            <h3 className="triage-section-title"><ClipboardList className="w-4 h-4"/>3. Histórico, Alergias e Medicamentos</h3>
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => puxarDadosAnteriores()} disabled={loadingPreviousTriage || !selectedItem}>
                 {loadingPreviousTriage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clock className="mr-2 h-4 w-4" />}
@@ -1312,7 +1292,7 @@ const Triagem: React.FC = () => {
                 ))}
               </div>
             )}
-            <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 flex flex-wrap items-center justify-between gap-2 border-t bg-background px-6 py-3">
+            <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 grid grid-cols-1 sm:grid-cols-2 gap-2 border-t bg-background px-6 py-3 triage-action-footer">
               <Button variant="outline" onClick={salvarRascunho} disabled={saving || !vitalValidation.valid}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <Save className="mr-2 h-4 w-4" /> Salvar Rascunho
               </Button>

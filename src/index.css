@@ -732,3 +732,18 @@ select:focus-visible,
 .treatment-pending{background:#fff1d6;color:#80510a}.treatment-pending-text{color:#80510a}.treatment-absence{background:#fee2e2;color:#991b1b}.treatment-pts{background:#efe7fa;color:#65459b}
 .dark .treatment-pending{background:#49371b;color:#ffd991}.dark .treatment-pending-text{color:#ffd991}.dark .treatment-absence{background:#4b242d;color:#ffb4b4}.dark .treatment-pts{background:#35294c;color:#d8c7ff}
 .treatment-cycle-card.treatment-critical{border-left:3px solid hsl(var(--destructive))}.treatment-cycle-card.treatment-warning{border-left:3px solid hsl(var(--warning))}
+
+
+/* Triage premium: local styling, no animation loops or changes to queue order. */
+.triage-hero-metric { min-width:0; padding:.65rem; border:1px solid rgba(255,255,255,.18); border-radius:.7rem; background:rgba(255,255,255,.08); }
+.triage-card-layout { display:grid; grid-template-columns: minmax(4.6rem,6rem) minmax(0,1fr); }
+.triage-position-rail { justify-content:center; padding:.65rem .25rem; }
+.triage-position { color:var(--cp-blue); font-size:1.65rem; letter-spacing:-.04em; }
+.triage-priority-card { border-color:#c5a16c; }
+.dark .triage-priority-card { border-color:#946c35; }
+.triage-section-title { display:flex; align-items:center; gap:.5rem; background:hsl(var(--muted)/.5); border:1px solid hsl(var(--border)); border-radius:.65rem; padding:.65rem .75rem; font-size:.85rem; font-weight:700; color:hsl(var(--primary)); }
+.triage-vital-grid>div { min-width:0; border:1px solid hsl(var(--border)); border-radius:.7rem; background:hsl(var(--muted)/.25); padding:.65rem; }
+.triage-vital-grid>div>label { margin-bottom:.35rem; font-size:.75rem; }
+.triage-vital-grid input { font-variant-numeric:tabular-nums; background:hsl(var(--background)); }
+.triage-action-footer button { height:auto; min-height:2.5rem; white-space:normal; }
+@media(max-width:380px){.triage-card-layout{grid-template-columns:3.8rem minmax(0,1fr)}.triage-position{font-size:1.25rem}.triage-hero-metric{padding:.4rem}}
