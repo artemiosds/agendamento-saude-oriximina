@@ -316,14 +316,17 @@ const formatAuditValue = (field: string, value: any): string => {
   return auditSafeText(String(value));
 };
 
+const auditEventClock = new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Santarem',dateStyle:'short',timeStyle:'medium'});
+const auditEventTime = (value:string) => Number.isFinite(Date.parse(value)) ? auditEventClock.format(new Date(value)) : 'Horário não registrado';
 const generateHumanSummary = (log: EnrichedLog) => {
   const user = getAuditActorLabel(log);
   const acao = log.acao_legivel || formatAuditAction(log.acao);
   const entidade = log.entidade_resolvida?.titulo || log.entidade_nome || log.entidade_id || log.entidade;
-  const data = format(new Date(log.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+  const data = auditEventTime(log.created_at);
   const unidade = log.unidade_nome || 'unidade não identificada';
 
   if (log.tipo_evento === 'login') return log.status==='sucesso' ? `${user} realizou login no sistema em ${data}.` : `${user} teve um evento de autenticação registrado (${log.status || 'status não informado'}) em ${data}.`;
+  if(log.status!=='sucesso')return `${user}: evento "${acao}" registrado com status ${log.status || 'não informado'}, em ${data}.`;
   
   const entityType = log.entidade === 'paciente' ? 'o cadastro do paciente' : 
                      log.entidade === 'agendamento' ? 'o agendamento de' : 
@@ -687,8 +690,8 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
     const {report}=reportResult;
     const headers=REPORT_METRICS.map(([label])=>label);
     return [
-      {title:'Por responsável identificado',headers:['Nome registrado','CPF mascarado','Perfil registrado','ID do responsável',...headers],rows:report.actors.map(r=>[r.nome,r.cpf,r.role,r.userId,...reportMetricCells(r)])},
-      {title:'Por unidade registrada',headers:['Unidade','ID da unidade','Responsáveis distintos','Eventos sem responsável individual',...headers],rows:report.units.map(r=>[r.nome,r.unitId,String(r.actors),String(r.semResponsavel),...reportMetricCells(r)])}
+      {title:'Por responsável identificado',headers:['Nome registrado','CPF mascarado','Perfil registrado','ID do responsável',...headers],rows:report.actors.map(r=>[exportSafeText(r.nome),r.cpf,exportSafeText(r.role),r.userId,...reportMetricCells(r)])},
+      {title:'Por unidade registrada',headers:['Unidade','ID da unidade','Responsáveis distintos','Eventos sem responsável individual',...headers],rows:report.units.map(r=>[exportSafeText(r.nome),r.unitId,String(r.actors),String(r.semResponsavel),...reportMetricCells(r)])}
     ];
   };
   const reportMetadata=(motivo:string)=>{
@@ -761,15 +764,14 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
     }
     if(!active.current)throw Error('Sessão alterada.');
     const issued=new Date();
-    const dt=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Santarem',dateStyle:'short',timeStyle:'medium'});
-    const time=(v:string)=>Number.isFinite(Date.parse(v))?dt.format(new Date(v)):'Não registrado';
+    const time=auditEventTime;
     const metadata=[
       ['Emissor',exportSafeText(user?.nome)],['CPF do emissor',maskCpf(user?.cpf||'')],['Perfil do emissor',exportSafeText(user?.role)],['Emissão (Oriximiná)',time(issued.toISOString())],
       ['Motivo',exportSafeText(motivo)],['Abrangência',scope==='filtered'?'Todos os resultados do recorte filtrado':'Página atual'],['Eventos',String(source.length)],['Total consultado',String(total)],
       ['Corte da consulta (UTC)',cutoff||'Página já carregada'],['Filtros',exportSafeText(JSON.stringify(snapshotFilters))],['Aviso',exportSafeText(warning)],['Metodologia','Metadados de eventos; não comprova autoria ou imutabilidade. Busca textual/CPF indicados sem divulgar o termo.']
     ];
     const headers=['Data/Hora (Oriximiná)','Usuário','CPF','Perfil','Ação','Resumo','Módulo','Registro afetado','Entidade','ID registro','Unidade','Status','IP','Dispositivo','Erro','ID evento'];
-    const rows=source.map(l=>[time(l.created_at),getAuditActorLabel(l),getCpfDisplay(l),l.role,l.acao_legivel||acaoLabels[l.acao]||l.acao,generateHumanSummary(l),moduloLabels[l.modulo]||l.modulo||l.entidade,l.paciente_nome||l.nome_entidade||'',l.entidade,l.entidade_id,l.unidade_nome||l.unidade_id||'',l.status,l.ip,formatDispositivo(l),l.error_message||'',l.id].map(exportSafeText));
+    const rows=source.map(l=>[time(l.created_at),getAuditActorLabel(l),getCpfDisplay(l),l.role,l.acao_legivel||acaoLabels[l.acao]||l.acao,generateHumanSummary(l),moduloLabels[l.modulo]||l.modulo||l.entidade,l.paciente_nome||l.nome_entidade||'',l.entidade,l.entidade_id,l.unidade_nome||l.unidade_id||'',l.status,l.ip,formatDispositivo(l),l.error_message||'',l.id].map((v,i)=>i===9||i===15?auditSafeText(String(v??'')):exportSafeText(v)));
     const pdfHeaders=['Data/hora','Responsável / CPF / perfil','Ação / módulo','Registro / unidade','Status / IP','ID do evento'];
     const pdfRows=rows.map(r=>[r[0],[r[1],r[2],r[3]].filter(Boolean).join(' · '),[r[4],r[6]].filter(Boolean).join(' · '),[r[7],r[10]].filter(Boolean).join(' · '),[r[11],r[12]].filter(Boolean).join(' · '),r[15]]);
     const content=formatType==='csv'?auditExportCsv(metadata,headers,rows):auditExportHtml(metadata,pdfHeaders,pdfRows);
@@ -1009,7 +1011,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
             <div>
               <div className="md:hidden divide-y divide-border">
                 {logs.map(log=><button key={log.id} type="button" onClick={()=>{setDetailState(null);setSelectedLog(log);}} className="block w-full text-left p-3 space-y-2 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring">
-                  <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-muted-foreground tabular-nums">{format(new Date(log.created_at),'dd/MM/yy HH:mm:ss')}</span><Badge className={'text-[10px] '+(statusBadge[log.status]||'bg-muted text-muted-foreground')}>{log.status}</Badge></div>
+                  <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-muted-foreground tabular-nums">{auditEventTime(log.created_at)}</span><Badge className={'text-[10px] '+(statusBadge[log.status]||'bg-muted text-muted-foreground')}>{log.status}</Badge></div>
                   <div className="flex justify-between items-center gap-2"><span className="font-semibold text-sm break-words min-w-0">{formatAuditAction(log.acao)}</span><ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground"/></div>
                   <div className="grid grid-cols-2 gap-2 text-xs"><div className="min-w-0"><p className="text-muted-foreground">Usuário · {log.role||'Perfil não informado'}</p><p className="font-medium break-words">{getAuditActorLabel(log)}</p></div><div className="min-w-0"><p className="text-muted-foreground">Registro afetado</p><p className="font-medium break-words">{log.nome_entidade||log.entidade_id||log.entidade}</p></div></div>
                   <div className="flex flex-wrap gap-2 items-center"><Badge variant="outline">{moduloLabels[log.modulo]||log.modulo||log.entidade}</Badge><span className="text-xs text-muted-foreground">{formatDispositivo(log)}</span></div>
@@ -1033,7 +1035,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                   {logs.map((log) => (
                     <TableRow key={log.id} className="cursor-pointer hover:bg-muted/50 even:bg-muted/15 transition-colors" onClick={() => {setDetailState(null);setSelectedLog(log);}}>
                       <TableCell className="whitespace-nowrap text-[11px] font-mono">
-                        {format(new Date(log.created_at), 'dd/MM/yy HH:mm:ss')}
+                        {auditEventTime(log.created_at)}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
@@ -1152,7 +1154,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                     </div>
                     <div>
                       <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Data e Hora</p>
-                      <p className="text-sm font-medium">{format(new Date(selectedLog.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</p>
+                      <p className="text-sm font-medium">{auditEventTime(selectedLog.created_at)}</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">

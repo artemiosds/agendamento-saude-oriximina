@@ -20,8 +20,7 @@ export async function getPublicIp(): Promise<string> {
   return fetchPromise;
 }
 
-export function getDeviceInfo() {
-  const ua = navigator.userAgent;
+export function parseDeviceInfo(ua: string, touchPoints = 0) {
   let browser = 'Desconhecido';
   let os = 'Desconhecido';
   let device = 'desktop';
@@ -31,12 +30,17 @@ export function getDeviceInfo() {
   else if (ua.includes('Chrome')) browser = 'Chrome';
   else if (ua.includes('Safari')) browser = 'Safari';
 
-  if (ua.includes('Windows')) os = 'Windows';
+  if (/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && touchPoints > 1)) {
+    os = 'iOS'; device = 'mobile';
+  } else if (ua.includes('Android')) { os = 'Android'; device = 'mobile'; }
+  else if (ua.includes('Windows')) os = 'Windows';
   else if (ua.includes('Mac')) os = 'macOS';
   else if (ua.includes('Linux')) os = 'Linux';
-  else if (ua.includes('Android')) { os = 'Android'; device = 'mobile'; }
-  else if (ua.includes('iPhone') || ua.includes('iPad')) { os = 'iOS'; device = 'mobile'; }
 
   return { browser, os, device, full: `${browser} / ${os}` };
+}
+
+export function getDeviceInfo() {
+  return parseDeviceInfo(typeof navigator==='undefined'?'':navigator.userAgent, typeof navigator==='undefined'?0:navigator.maxTouchPoints||0);
 }
 
