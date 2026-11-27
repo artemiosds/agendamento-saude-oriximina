@@ -390,3 +390,24 @@ it('não apresenta espera média zero quando todos os horários estão ausentes'
   fireEvent.click(screen.getByRole('button', { name: /Espera média/ }));
   expect(within(screen.getByRole('dialog')).getByText('Média indisponível')).toBeInTheDocument();
 });
+
+it('mostra inteligência sob demanda e abre somente registros da condição de qualidade selecionada', async () => {
+  const recent = new Date(Date.now() - 10 * 60000).toISOString();
+  const ready = { ...a, id: 'ok', paciente_id: 'p-ok', paciente_nome: 'Pessoa com chegada', status: 'apto_atendimento' };
+  const missing = { ...a, id: 'missing', paciente_id: 'p-missing', paciente_nome: 'Pessoa sem chegada', status: 'apto_atendimento' };
+  setup('', { rows: [ready, missing], arrivals: { ok: recent } });
+  render(<CockpitUnidade />);
+  expect(screen.queryByRole('region', { name: 'Qualidade das informações' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText('Inteligência operacional', { exact: false, selector: 'summary > span' }));
+  const quality = await screen.findByRole('region', { name: 'Qualidade das informações' });
+  const action = within(quality).getByRole('button', { name: /Aguardando sem chegada válida/ });
+  expect(action).toHaveTextContent('1/2');
+  fireEvent.click(action);
+  const drawer = screen.getByRole('dialog');
+  expect(within(drawer).getByText('Pessoa sem chegada')).toBeInTheDocument();
+  expect(within(drawer).queryByText('Pessoa com chegada')).not.toBeInTheDocument();
+  close();
+  fireEvent.click(screen.getByRole('button', { name: 'Modo telão' }));
+  expect(screen.queryByRole('region', { name: 'Qualidade das informações' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Pessoa sem chegada')).not.toBeInTheDocument();
+});
