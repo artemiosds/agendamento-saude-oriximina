@@ -1,5 +1,5 @@
 import { avisarVideoAtualizado } from '@/lib/painelChamadas';
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -33,7 +33,18 @@ const UnidadesSalas: React.FC = () => {
   const {user}=useAuth();
   const {can,loading:permissionsLoading}=usePermissions();
   const queryClient=useQueryClient();
-  const scopeKey=JSON.stringify([user?.id,userUnidadeId,isGlobalAdmin]);
+  const scopeKey=JSON.stringify([user?.id,user?.authUserId,user?.role,userUnidadeId,isGlobalAdmin]);
+  // Observe the existing operational cache instead of loading duplicate unit/room directories.
+  const directoryScope=JSON.stringify([user?.id,user?.authUserId,user?.role,user?.usuario==='admin.sms',userUnidadeId]);
+  const subscribeDirectory=useCallback((notify:()=>void)=>queryClient.getQueryCache().subscribe(()=>notify()),[queryClient]);
+  const readDirectoryState=useCallback(()=>{
+    const units=queryClient.getQueryState([...queryKeys.unidades.all,'operacional',directoryScope]);
+    const rooms=queryClient.getQueryState([...queryKeys.salas.all,'operacional',directoryScope]);
+    if(units?.status==='error'||rooms?.status==='error')return 'error';
+    return units?.status==='success'&&rooms?.status==='success'?'ready':'loading';
+  },[queryClient,directoryScope]);
+  const directoryState=useSyncExternalStore(subscribeDirectory,readDirectoryState,readDirectoryState);
+  const directoryReady=directoryState==='ready'&&!permissionsLoading&&!!user?.id&&can('unidades_salas','can_view');
   const scopeRef=useRef(scopeKey);scopeRef.current=scopeKey;
   const authorizedUnit=(id:string)=>isGlobalAdmin||!!userUnidadeId&&id===userUnidadeId;
   const canWrite=(action:'can_create'|'can_edit',id:string)=>!permissionsLoading&&!!user?.id&&can('unidades_salas','can_view')&&can('unidades_salas',action)&&authorizedUnit(id);
@@ -72,7 +83,7 @@ const UnidadesSalas: React.FC = () => {
   const [unitMeta,setUnitMeta]=useState<Map<string,UnitMetadata>>(new Map());
   const [configScope,setConfigScope]=useState('');
   const metadataKey=JSON.stringify([scopeKey,unitScopeKey]);
-  const configReady=configState==='ready'&&configScope===metadataKey;
+  const configReady=directoryReady&&configState==='ready'&&configScope===metadataKey;
   const visibleUnits=allowedUnits.filter(unit=>unitId==='all'||unit.id===unitId);
   const visibleRooms=salas.filter(room=>authorizedUnit(room.unidadeId)&&(unitId==='all'||room.unidadeId===unitId));
   const visibleUnitIds=visibleUnits.map(u=>u.id).sort();
@@ -86,7 +97,7 @@ const UnidadesSalas: React.FC = () => {
   // Read only minimal staff fields, within the chosen unit and existing RLS.
   const staffQuery=useQuery({
     queryKey:[...queryKeys.funcionarios.all,'estrutura-salas',visibleScope],
-    enabled:canReadStaff&&visibleUnitIds.length>0,
+    enabled:directoryReady&&canReadStaff&&visibleUnitIds.length>0,
     staleTime:30000,
     queryFn:async({signal})=>{
       const rows:RoomStaff[]=[];
@@ -99,9 +110,9 @@ const UnidadesSalas: React.FC = () => {
       return rows;
     }
   });
-  const staffReady=canReadStaff&&staffQuery.isSuccess&&!staffQuery.isError;
+  const staffReady=directoryReady&&canReadStaff&&staffQuery.isSuccess&&!staffQuery.isError;
   const roomStaff=buildRoomStaff(visibleRooms,staffReady?staffQuery.data||[]:[]);
-  const selectedRoom=detail?.scope===visibleScope?visibleRooms.find(room=>room.id===detail.id):undefined;
+  const selectedRoom=directoryReady&&detail?.scope===visibleScope?visibleRooms.find(room=>room.id===detail.id):undefined;
   const dateParts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santarem',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
   const today=['year','month','day'].map(type=>dateParts.find(p=>p.type===type)?.value||'').join('-');
   const appointmentsQuery=useQuery({
@@ -123,6 +134,7 @@ const UnidadesSalas: React.FC = () => {
     let cancelled = false;
     const loadRoomConfigs = async () => {
       setConfigState('loading');setConfigScope('');
+      if(!directoryReady)return;
       if (allowedUnits.length === 0) { setRoomConfigs({});setUnitMeta(new Map());setConfigScope(metadataKey);setConfigState('ready'); return; }
       const { data, error } = await supabase.from('unidades' as any).select('id,custom_data').in('id',allowedUnits.map(u=>u.id));
       if(cancelled)return;
@@ -135,7 +147,7 @@ const UnidadesSalas: React.FC = () => {
         const configuredRooms = unit.custom_data?.salas_exames;
         if (!configuredRooms || typeof configuredRooms !== 'object') return;
         Object.entries(configuredRooms).forEach(([roomId, value]: [string, any]) => {
-          if (value?.finalidade === 'aparelho_diagnostico') {
+          if (value?.finalidade === 'aparelho_diagnostico'&&salas.some(room=>room.id===roomId&&room.unidadeId===unit.id)) {
             next[roomId] = normalizeDiagnosticRoomConfig(value);
           }
         });
@@ -144,7 +156,7 @@ const UnidadesSalas: React.FC = () => {
     };
     void loadRoomConfigs().catch(()=>{if(!cancelled){setRoomConfigs({});setUnitMeta(new Map());setConfigState('error');}});
     return () => { cancelled = true; };
-  }, [unidades,unitScopeKey,scopeKey,configReload]);
+  }, [unidades,salas,unitScopeKey,scopeKey,configReload,directoryReady]);
 
   const [enviandoLogo, setEnviandoLogo] = useState(false);
   const enviarLogo = async (file: File) => {
@@ -382,26 +394,27 @@ const UnidadesSalas: React.FC = () => {
         <p className="text-xs text-muted-foreground mt-1">Exclusões definitivas e transferências de salas estão protegidas para preservar os vínculos históricos.</p>
       </div>
 
+      {directoryState!=='ready'&&<div role={directoryState==='error'?'alert':'status'} className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">{directoryState==='error'?'Não foi possível confirmar o cadastro de unidades e salas.':'Carregando estrutura física...'}{directoryState==='error'&&<Button size="sm" variant="outline" onClick={()=>void refreshStructure()}>Tentar novamente</Button>}</div>}
       {configState==='error'&&<div role="alert" className="flex items-center gap-2 text-sm text-destructive">Não foi possível confirmar as configurações de exames.<Button size="sm" variant="outline" onClick={()=>setConfigReload(v=>v+1)}>Tentar novamente</Button></div>}
-      {isGlobalAdmin && <UnitScopeNavigator units={allowedUnits} value={unitId} onChange={setUnitId} />}
+      {directoryReady&&isGlobalAdmin && <UnitScopeNavigator units={allowedUnits} value={unitId} onChange={setUnitId} />}
       <section className="grid grid-cols-2 xl:grid-cols-4 gap-2" aria-label="Indicadores da estrutura física">
         {[
           {label:'Unidades cadastradas',value:summary.units,extra:summary.activeUnits+' ativa(s)',Icon:Building2,active:section==='overview',action:()=>selectMetric('overview'),disabled:false},
           {label:'Salas cadastradas',value:summary.rooms,extra:summary.activeRooms+' ativa(s)',Icon:DoorOpen,active:section==='rooms'&&roomFilter==='todas',action:()=>selectMetric('rooms'),disabled:false},
           {label:'Aparelhos / exames',value:summary.devices,extra:'Classificação cadastrada',Icon:Activity,active:section==='rooms'&&roomFilter==='aparelhos',action:()=>selectMetric('rooms','aparelhos'),disabled:!configReady},
           {label:'Unidades com vídeo',value:summary.videoUnits,extra:'Configuração local, não status da TV',Icon:Tv,active:section==='video',action:()=>selectMetric('video'),disabled:!configReady}
-        ].map(({label,value,extra,Icon,active,action,disabled})=><button type="button" key={label} disabled={disabled} onClick={action} aria-pressed={active} className={`clinical-premium p-3 flex items-center gap-2 text-left min-w-0 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-ring ${active?'ring-1 ring-primary/60':''}`}><span className="clinical-dock-icon clinical-tone-blue"><Icon className="w-4 h-4"/></span><span className="flex-1 min-w-0"><strong className="block text-xl tabular-nums">{value??'—'}</strong><span className="block text-xs font-medium">{label}</span><span className="block text-[11px] text-muted-foreground">{extra}</span></span><ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground"/></button>)}
+        ].map(({label,value,extra,Icon,active,action,disabled})=><button type="button" key={label} disabled={disabled||!directoryReady} onClick={action} aria-pressed={active} className={`clinical-premium p-3 flex items-center gap-2 text-left min-w-0 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-ring ${active?'ring-1 ring-primary/60':''}`}><span className="clinical-dock-icon clinical-tone-blue"><Icon className="w-4 h-4"/></span><span className="flex-1 min-w-0"><strong className="block text-xl tabular-nums">{directoryReady?value??'—':'—'}</strong><span className="block text-xs font-medium">{label}</span><span className="block text-[11px] text-muted-foreground">{directoryReady?extra:'Consulta em atualização'}</span></span><ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground"/></button>)}
       </section>
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Seções de estrutura">
         <Button size="sm" variant={section==='overview'?'default':'outline'} onClick={()=>selectMetric('overview')}>Visão geral</Button>
         <Button size="sm" variant={section==='rooms'&&roomFilter==='todas'?'default':'outline'} onClick={()=>selectMetric('rooms')}>Salas</Button>
         <Button size="sm" variant={section==='rooms'&&roomFilter==='aparelhos'?'default':'outline'} disabled={!configReady} onClick={()=>selectMetric('rooms','aparelhos')}>Aparelhos</Button>
         <Button size="sm" variant={section==='video'?'default':'outline'} disabled={!configReady} onClick={()=>selectMetric('video')}>Unidades com vídeo</Button>
-        <Button size="sm" variant="outline" className="ml-auto" disabled={saving||configState==='loading'} onClick={()=>{void refreshStructure();if(canReadStaff&&visibleUnitIds.length)void staffQuery.refetch();}}><RefreshCw className="w-4 h-4 mr-1"/>Atualizar estrutura</Button>
+        <Button size="sm" variant="outline" className="ml-auto" disabled={saving||directoryState==='loading'||(directoryReady&&configState==='loading')} onClick={()=>{void refreshStructure();if(directoryReady&&canReadStaff&&visibleUnitIds.length)void staffQuery.refetch();}}><RefreshCw className="w-4 h-4 mr-1"/>Atualizar estrutura</Button>
       </div>
 
       {/* Unidades */}
-      {section!=='rooms'&&<div>
+      {directoryReady&&section!=='rooms'&&<div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold font-display text-foreground flex items-center gap-2"><Building2 className="w-5 h-5" />Unidades</h2>
           {isGlobalAdmin&&canWrite('can_create','')&&<Button size="sm" disabled={saving} onClick={openNewUnit} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nova Unidade</Button>}
@@ -438,7 +451,7 @@ const UnidadesSalas: React.FC = () => {
       </div>}
 
       {section==='video'&&configReady&&summary.videoUnits===0&&<Card><CardContent className="p-4 text-sm text-muted-foreground">Nenhuma unidade com vídeo configurado na seleção. Na visão geral, utilize a ação Vídeo para configurar.</CardContent></Card>}
-      {section!=='video'&&<section className="space-y-3" aria-label="Salas e consultórios">
+      {directoryReady&&section!=='video'&&<section className="space-y-3" aria-label="Salas e consultórios">
         {roomControls}
         {roomFilter!=='todas'&&!configReady?<p className="text-sm text-muted-foreground">Aguarde a confirmação das configurações de exames.</p>:filteredRooms.length===0?<Card><CardContent className="p-4 text-sm text-muted-foreground">Nenhuma sala encontrada para os filtros selecionados.</CardContent></Card>:<div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">{filteredRooms.map(room=>renderRoomCard(room))}</div>}
       </section>}
