@@ -411,3 +411,41 @@ it('mostra inteligência sob demanda e abre somente registros da condição de q
   expect(screen.queryByRole('region', { name: 'Qualidade das informações' })).not.toBeInTheDocument();
   expect(screen.queryByText('Pessoa sem chegada')).not.toBeInTheDocument();
 });
+
+it('alterna entre planta e lista sem duplicar os ambientes nem expor dados no telão', () => {
+  fixture.salas.push({ id: 'fisio', nome: 'Ginásio de Fisioterapia', ativo: true, unidadeId: 'local' });
+  setup('em_atendimento', { rows: [{ ...a, sala_id: 'fisio', status: 'em_atendimento' }] });
+  const { container } = render(<CockpitUnidade />);
+  expect(screen.getByRole('group', { name: 'Planta da unidade' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Lista de salas' }));
+  expect(screen.queryByRole('group', { name: 'Planta da unidade' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Lista de salas' })).toHaveAttribute('aria-pressed', 'true');
+  const room = screen.getByRole('button', { name: /Ginásio de Fisioterapia/ });
+  expect(room).toHaveAttribute('data-state', 'occupied');
+  expect(screen.queryByRole('button', { name: /Sala externa/ })).not.toBeInTheDocument();
+  fireEvent.click(room);
+  expect(within(screen.getByRole('dialog')).getByText('Paciente teste')).toBeInTheDocument();
+  close();
+  fireEvent.click(screen.getByRole('button', { name: 'Modo telão' }));
+  expect(screen.queryByRole('button', { name: 'Lista de salas' })).not.toBeInTheDocument();
+  expect(screen.getByRole('group', { name: 'Planta da unidade' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Ginásio de Fisioterapia/ })).not.toBeInTheDocument();
+  expect(container.textContent).not.toContain('Paciente teste');
+  fireEvent.click(screen.getByRole('button', { name: 'Sair do modo telão' }));
+  expect(screen.getByRole('button', { name: 'Lista de salas' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.queryByRole('group', { name: 'Planta da unidade' })).not.toBeInTheDocument();
+});
+it('mantém todas as salas na visão geral e permite ampliar sem refazer consultas', () => {
+  for (let i = 1; i <= 7; i++) fixture.salas.push({ id: 'room-' + i, nome: 'Consultório ' + i, ativo: true, unidadeId: 'local' });
+  setup('', { rows: [] });
+  const { container } = render(<CockpitUnidade />);
+  const general = screen.getByRole('button', { name: 'Visão geral' });
+  fireEvent.click(general);
+  expect(general).toHaveAttribute('aria-pressed', 'true');
+  expect(container.querySelector('.planta-map-scale')).toHaveAttribute('data-scale', 'geral');
+  expect(screen.getByRole('button', { name: /^Consultório 7\./ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Leitura ampliada' }));
+  expect(container.querySelector('.planta-map-scale')).toHaveAttribute('data-scale', 'leitura');
+  expect(screen.getByRole('button', { name: /^Consultório 7\./ })).toBeInTheDocument();
+  expect(fixture.observe).toHaveBeenCalledTimes(1);
+});
