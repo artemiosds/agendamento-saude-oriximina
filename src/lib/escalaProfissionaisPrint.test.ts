@@ -42,8 +42,8 @@ describe('impressão institucional da escala', () => {
       { day: new Date(2026, 10, 3), entries: [entry({ hours: '08:00–12:00' })] },
     ] }));
     expect([...dom.querySelectorAll('tbody .escala-token')].map(e => e.textContent)).toEqual(['M1', 'M2']);
-    expect(dom.querySelector('.escala-legend')?.textContent).toContain('M107:00–11:00');
-    expect(dom.querySelector('.escala-legend')?.textContent).toContain('M208:00–12:00');
+    expect(dom.querySelector('.escala-key-row')?.textContent).toContain('M107:00–11:00');
+    expect(dom.querySelector('.escala-key-row')?.textContent).toContain('M208:00–12:00');
     expect(dom.querySelector('tbody .escala-total')?.textContent).toBe('8h');
   });
 
@@ -56,7 +56,7 @@ describe('impressão institucional da escala', () => {
     expect(dom.querySelector('tbody .escala-total')?.textContent).toBe('2h');
     expect(dom.querySelector('.escala-notes')?.textContent).toContain('Feriado cadastrado (bloqueado)');
     expect(dom.querySelector('.escala-notes')?.textContent).toContain('horário remanescente: 10:00–12:00');
-    expect(dom.querySelector('.escala-legend')?.textContent).toContain('Sem escala cadastrada');
+    expect(dom.querySelector('.escala-key-row')?.textContent).toContain('Sem escala cadastrada');
   });
 
   it('separa locais e salas, preserva escala informativa e horas de continuação dentro do recorte', () => {
@@ -68,8 +68,8 @@ describe('impressão institucional da escala', () => {
     expect(dom.querySelectorAll('table')).toHaveLength(2);
     expect(dom.querySelectorAll('tbody tr')).toHaveLength(3);
     expect([...dom.querySelectorAll('tbody .escala-total')].map(e => e.textContent)).toEqual(['2h 30min', '1h', '7h']);
-    expect(dom.querySelector('.escala-legend')?.textContent).toContain('Escala informativa; não oferece vagas');
-    expect(dom.querySelector('.escala-legend')?.textContent).toContain('Continuação do dia anterior');
+    expect(dom.querySelector('.escala-key-row')?.textContent).toContain('Informativa (sem vagas)');
+    expect(dom.querySelector('.escala-key-row')?.textContent).toContain('Continuação do dia anterior');
   });
 
   it('suporta semana que atravessa mês e não imprime profissionais sem entrada no calendário filtrado', () => {
@@ -99,4 +99,53 @@ describe('impressão institucional da escala', () => {
     expect(() => buildEscalaProfissionaisPrint(fixture({ calendar: [] }))).toThrow('Selecione um período');
     expect(() => buildEscalaProfissionaisPrint(fixture({ calendar: [{ day: new Date(), entries: [] }] }))).toThrow('Não há escala');
   });
+
+  it('mantém os 31 dias no formato compacto e separa as quinzenas sem perder registros', () => {
+    const calendar = Array.from({length:31},(_,i)=>({day:new Date(2026,11,i+1,12),entries:[0,14,15,30].includes(i)?[entry()]:[]}));
+    const input=fixture({calendar});
+    const compact=render(input), split=render({...input,monthlyLayout:'fortnight'});
+    expect(compact.dom.querySelectorAll('.escala-day-number')).toHaveLength(31);
+    expect(split.dom.querySelectorAll('.escala-section')).toHaveLength(2);
+    expect([...split.dom.querySelectorAll('table')].map(t=>t.querySelectorAll('.escala-day-number').length)).toEqual([15,16]);
+    expect(split.dom.querySelectorAll('tbody .escala-token')).toHaveLength(4);
+    expect([...split.dom.querySelectorAll('tbody .escala-total:not(.escala-month-total)')].map(e=>e.textContent)).toEqual(['8h','8h']);
+    expect([...split.dom.querySelectorAll('tbody .escala-month-total')].map(e=>e.textContent)).toEqual(['16h','16h']);
+    expect(split.dom.querySelector('.escala-summary')?.textContent).toContain('Carga prevista sem dupla contagem: 16h');
+    expect(split.meta.Formato).toContain('quinzenas');
+  });
+
+  it('preserva faixas sem registros, não inventa folga e não cria linha vazia',()=>{
+    const {dom}=render(fixture({monthlyLayout:'fortnight',calendar:Array.from({length:28},(_,i)=>({day:new Date(2027,1,i+1,12),entries:i===0?[entry()]:[]}))}));
+    expect(dom.querySelectorAll('.escala-section')).toHaveLength(2);
+    expect(dom.querySelectorAll('tbody tr')).toHaveLength(1);
+    expect(dom.body.textContent).toContain('Sem escala cadastrada nesta faixa de datas');
+    expect(dom.body.textContent).toContain('não significa folga');
+  });
+
+  it('mantém conflitos entre locais e desconta horas simultâneas do total geral',()=>{
+    const {dom}=render(fixture({calendar:[{day:new Date(2026,10,2,12),entries:[
+      entry(),entry({place:'Hospital de teste',placeGroup:'Hospital de teste',hours:'10:00–14:00',informational:true}),
+    ]}]}));
+    expect(dom.querySelectorAll('.escala-token.escala-conflict')).toHaveLength(2);
+    expect(dom.querySelector('.escala-summary')?.textContent).toContain('Carga prevista sem dupla contagem: 6h');
+    expect(dom.querySelector('.escala-summary')?.textContent).toContain('2h de registros simultâneos descontados');
+    expect(dom.querySelectorAll('tbody .escala-token')).toHaveLength(2);
+  });
+
+  it('repete códigos pequenos no cabeçalho e usa legenda fluida para horários numerosos',()=>{
+    const short=render();
+    expect(short.dom.querySelector('thead .escala-legend-code')?.textContent).toBe('M');
+    const calendar=Array.from({length:10},(_,i)=>({day:new Date(2026,10,i+1,12),entries:[entry({hours:'08:'+String(i).padStart(2,'0')+'–12:'+String(i).padStart(2,'0')})]}));
+    const long=render(fixture({calendar}));
+    expect(long.dom.querySelectorAll('.escala-legend .escala-legend-code')).toHaveLength(10);
+    expect(long.dom.querySelector('thead .escala-key-row')?.textContent).toContain('abaixo da grade');
+  });
+
+  it('separa marcas visuais do código sem alterar horário, e rejeita duração inválida',()=>{
+    const {dom}=render(fixture({calendar:[{day:new Date(2026,10,2,12),entries:[entry({hours:'00:00–07:00',minutes:420,informational:true,continuation:true,reason:'Ajuste'})]}]}));
+    expect(dom.querySelector('.escala-marks')?.textContent).toBe('i c *');
+    expect(dom.querySelector('.escala-token')?.getAttribute('title')).toContain('00:00–07:00');
+    expect(()=>render(fixture({calendar:[{day:new Date(2026,10,2,12),entries:[entry({minutes:1})]}]}))).toThrow('horários inválidos');
+  });
+
 });
