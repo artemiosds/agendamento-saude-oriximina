@@ -32,7 +32,7 @@ describe('demanda vinculada às salas da Planta Viva', () => {
   const now = Date.parse('2026-11-27T15:00:00Z');
   const activeRooms = new Set(['sala-1', 'sala-2']);
   const row = (id: string, room: string, patient = id, arrival: string | null = '2026-11-27T14:30:00Z', status = 'apto_atendimento') =>
-    ({ id, sala_id: room, paciente_id: patient, arrival, stage: careStage(status) });
+    ({ id, sala_id: room, paciente_id: patient, arrival, stage: careStage(status) as ReturnType<typeof careStage> });
 
   it('não replica a demanda em outras salas da mesma especialidade', () => {
     const waits = linkedRoomWaits([row('a', 'sala-1'), row('b', 'sala-1'), row('c', 'sala-1'), row('d', 'sala-1')], activeRooms, now);
