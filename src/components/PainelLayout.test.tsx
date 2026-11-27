@@ -61,7 +61,7 @@ describe('jornadas do menu lateral', () => {
     expect(screen.getByText('Master Global')).toBeInTheDocument();
     expect(menu.getByRole('button', { name: 'Gestão e Escalas' })).toHaveAttribute('aria-expanded', 'true');
     expect(menu.getByRole('button', { name: 'Atendimento Clínico' })).toHaveAttribute('aria-expanded', 'false');
-    const availability = menu.getByRole('link', { name: 'Disponibilidade' });
+    const availability = within(document.getElementById('menu-grupo-gestao')!).getByRole('link', { name: 'Disponibilidade' });
     expect(availability).toHaveAttribute('href', '/painel/disponibilidade');
     expect(menu.queryByRole('link', { name: 'Escala dos Profissionais' })).toBeNull();
     fireEvent.click(availability);
@@ -71,7 +71,7 @@ describe('jornadas do menu lateral', () => {
   it('destaca Disponibilidade quando o link direto da escala é aberto', () => {
     const menu = mount('/painel/disponibilidade?aba=escala');
     expect(menu.getByRole('button', { name: 'Gestão e Escalas' })).toHaveAttribute('aria-expanded', 'true');
-    expect(menu.getByRole('link', { name: 'Disponibilidade' })).toHaveAttribute('aria-current', 'page');
+    expect(within(document.getElementById('menu-grupo-gestao')!).getByRole('link', { name: 'Disponibilidade' })).toHaveAttribute('aria-current', 'page');
     expect(menu.queryByRole('link', { name: 'Escala dos Profissionais' })).toBeNull();
   });
 
