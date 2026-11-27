@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState, LoadingState } from '@/components/EmptyState';
 import { Users } from 'lucide-react';
@@ -76,6 +76,12 @@ const Funcionarios: React.FC = () => {
   const [customData, setCustomData] = useState<Record<string, any>>({});
   const [funcionarios, setFuncionarios] = useState<FuncionarioDB[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError,setLoadError]=useState('');
+  const [loadedScope,setLoadedScope]=useState('');
+  const loadSequence=useRef(0);
+  const writeBusy=useRef(false);
+  const scopeKey=JSON.stringify([user?.id||'',user?.unidadeId||'',user?.role||'',isGlobalMaster]);
+  const scopeRef=useRef(scopeKey); scopeRef.current=scopeKey;
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -87,7 +93,8 @@ const Funcionarios: React.FC = () => {
   });
   const [cbo, setCbo] = useState<CboValue | null>(null);
   const [showCboError, setShowCboError] = useState(false);
-  const canManage = can('usuarios', 'can_edit');
+  const canManage = can('usuarios', 'can_view') && can('usuarios', 'can_edit');
+  const canCreate = can('usuarios', 'can_view') && can('usuarios', 'can_create');
   const [searchTerm, setSearchTerm] = useState('');
   const [localFilterUnidade, setLocalFilterUnidade] = useState<string>('all');
   const filterUnidade = isGlobalMaster ? globalUnitId : localFilterUnidade;
@@ -102,30 +109,34 @@ const Funcionarios: React.FC = () => {
   const [viewFuncionario, setViewFuncionario] = useState<FuncionarioDB | null>(null);
 
   const loadFuncionarios = async () => {
-    setLoading(true);
+    const seq=++loadSequence.current, scope=scopeKey;
+    setLoading(true);setLoadError('');
     try {
-      const { data, error } = await supabase.functions.invoke('manage-employee', {
-        body: { action: 'list' },
-      });
-      if (data?.funcionarios) {
-        setFuncionarios(data.funcionarios);
-      }
+      const { data, error } = await supabase.functions.invoke('manage-employee', {body:{action:'list'}});
+      if(seq!==loadSequence.current||scopeRef.current!==scope)return;
+      if(error||data?.error||!Array.isArray(data?.funcionarios))throw new Error(data?.error||'Não foi possível carregar a equipe.');
+      setFuncionarios(data.funcionarios);
+      setLoadedScope(scope);
     } catch (err) {
-      console.error('Error loading employees:', err);
+      if(seq!==loadSequence.current||scopeRef.current!==scope)return;
+      setLoadError(err instanceof Error?err.message:'Não foi possível carregar a equipe.');
+    } finally {
+      if(seq===loadSequence.current&&scopeRef.current===scope)setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
-    loadFuncionarios();
-  }, []);
+    setFuncionarios([]);setLoadedScope('');setViewFuncionario(null);setDialogOpen(false);
+    if(user?.id)void loadFuncionarios();
+    return ()=>{loadSequence.current++;};
+  }, [scopeKey]);
 
   useEffect(() => {
     // Check for ID in URL to automatically open edit modal
     const params = new URLSearchParams(window.location.search);
     const idFromUrl = params.get('id');
     
-    if (idFromUrl && funcionarios.length > 0) {
+    if (idFromUrl && canManage && loadedScope===scopeKey && funcionarios.length > 0) {
       const target = funcionarios.find(f => f.id === idFromUrl);
       if (target) {
         openEdit(target);
@@ -133,7 +144,7 @@ const Funcionarios: React.FC = () => {
         window.history.replaceState({}, '', '/painel/funcionarios');
       }
     }
-  }, [funcionarios]);
+  }, [funcionarios,canManage,loadedScope,scopeKey]);
 
   const conselhoMap: Record<string, string> = {
     'Médico': 'CRM', 'Médica': 'CRM', 'Enfermeiro': 'COREN', 'Enfermeira': 'COREN',
@@ -144,7 +155,10 @@ const Funcionarios: React.FC = () => {
     'Biomédico': 'CRBM', 'Biomédica': 'CRBM', 'Fisio': 'CREFITO',
   };
 
+  const canEditEmployee=(f:FuncionarioDB)=>canManage && loadedScope===scopeKey && !loadError && (isGlobalMaster || (!!user?.unidadeId && f.unidade_id===user.unidadeId && !isProtectedGlobalMaster(f))) && (user?.role==='master'||f.role!=='master');
   const openEdit = (f: FuncionarioDB) => {
+    if(!canEditEmployee(f)) {toast.error('Sem permissão para editar este funcionário.');return;}
+    setShowSenha(false);
     setEditId(f.id);
     const cd = (f.custom_data as any) || {};
     setForm({
@@ -174,8 +188,10 @@ const Funcionarios: React.FC = () => {
   };
 
   const openNew = () => {
+    if(!canCreate||loadedScope!==scopeKey||loadError)return;
+    setShowSenha(false);
     setEditId(null);
-    const defaultUnit = isUnitMaster ? (user?.unidadeId || '') : '';
+    const defaultUnit = !isGlobalMaster ? (user?.unidadeId || '') : '';
     setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: defaultUnit, sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '', cns: '', ativo: true, data_admissao: '', tipo_vinculo: '', setor_principal: '', turno_trabalho: '', observacoes_internas: '' });
     setCbo(null);
     setShowCboError(false);
@@ -187,6 +203,11 @@ const Funcionarios: React.FC = () => {
   const requiresCbo = (role: string) => role === 'profissional' || role === 'tecnico' || role === 'enfermagem';
 
   const handleSave = async () => {
+    if(writeBusy.current||loading||loadError||loadedScope!==scopeKey)return;
+    const target=editId?funcionarios.find(f=>f.id===editId):null;
+    if(editId?(!target||!canEditEmployee(target)):!canCreate){toast.error('Sem permissão para salvar este cadastro.');return;}
+    if(!isGlobalMaster&&(!user?.unidadeId||form.unidade_id!==user.unidadeId)){toast.error('Selecione sua unidade de lotação.');return;}
+    if(target?.id===user?.id&&(form.ativo===false||form.role!==target.role||form.unidade_id!==target.unidade_id)){toast.error('Não é permitido desativar ou alterar o próprio perfil ou lotação.');return;}
     if (!form.nome || !form.usuario || !form.email || !form.role) {
       toast.error('Nome, usuário, e-mail e perfil são obrigatórios.');
       return;
@@ -203,19 +224,12 @@ const Funcionarios: React.FC = () => {
       toast.error(cnsValidation.message || 'CNS inválido.');
       return;
     }
-    // Unit master: force unit to their own and block editing global master
-    if (isUnitMaster) {
-      if (editId) {
-        const target = funcionarios.find(f => f.id === editId);
-        if (target && isProtectedGlobalMaster(target)) {
-          toast.error('Você não tem permissão para editar o administrador global.');
-          return;
-        }
-      }
-      // Force unit_id to the user's unit
-      form.unidade_id = user?.unidadeId || '';
-    }
-
+    // Send only configured custom fields that were actually edited; preserve all other JSON keys server-side.
+    const initialCustom=target?.custom_data||{};
+    const reserved=new Set(['__proto__','constructor','prototype','cbo_codigo','cbo_descricao','cns','data_admissao','tipo_vinculo','setor_principal','turno_trabalho','observacoes_internas']);
+    const customExtras=Object.fromEntries(customConfig.fields.filter(field=>field.ativo&&!reserved.has(field.nome)&&Object.prototype.hasOwnProperty.call(customData,field.nome)&&JSON.stringify(customData[field.nome])!==JSON.stringify(initialCustom[field.nome])).map(field=>[field.nome,customData[field.nome]]));
+    const writeScope=scopeKey;
+    writeBusy.current=true;
     setSaving(true);
     try {
       if (editId) {
@@ -243,6 +257,7 @@ const Funcionarios: React.FC = () => {
           cns: unmaskCNS(form.cns),
           ativo: form.ativo,
           custom_data_extras: {
+            ...customExtras,
             data_admissao: form.data_admissao,
             tipo_vinculo: form.tipo_vinculo,
             setor_principal: form.setor_principal,
@@ -256,7 +271,7 @@ const Funcionarios: React.FC = () => {
           body: updateData,
         });
 
-        if (error || data?.error) {
+        if (error || data?.error || data?.success!==true) {
           toast.error(data?.error || 'Erro ao atualizar funcionário.');
           setSaving(false);
           return;
@@ -294,6 +309,7 @@ const Funcionarios: React.FC = () => {
             cns: unmaskCNS(form.cns),
             criado_por: user?.id || '',
             custom_data_extras: {
+            ...customExtras,
               data_admissao: form.data_admissao,
               tipo_vinculo: form.tipo_vinculo,
               setor_principal: form.setor_principal,
@@ -303,7 +319,7 @@ const Funcionarios: React.FC = () => {
           },
         });
 
-        if (error || data?.error) {
+        if (error || data?.error || data?.success!==true) {
           toast.error(data?.error || 'Erro ao cadastrar funcionário.');
           setSaving(false);
           return;
@@ -311,37 +327,12 @@ const Funcionarios: React.FC = () => {
         toast.success('Funcionário cadastrado com sucesso!');
       }
 
-      setDialogOpen(false);
-      await loadFuncionarios();
+      if(scopeRef.current===writeScope){setDialogOpen(false);await loadFuncionarios();}
       // Also refresh DataContext so other pages see the new employee immediately
       await refreshFuncionarios();
     } catch (err) {
       toast.error('Erro ao salvar funcionário.');
-    }
-    setSaving(false);
-  };
-
-  const handleDelete = async (id: string) => {
-    // Prevent unit master from deleting global master
-    const target = funcionarios.find(f => f.id === id);
-    if (isUnitMaster && target && isProtectedGlobalMaster(target)) {
-      toast.error('Você não tem permissão para excluir o administrador global.');
-      return;
-    }
-    try {
-      const { data, error } = await supabase.functions.invoke('manage-employee', {
-        body: { action: 'delete', id },
-      });
-      if (error || data?.error) {
-        toast.error(data?.error || 'Erro ao excluir.');
-        return;
-      }
-      toast.success('Funcionário excluído!');
-      await loadFuncionarios();
-      await refreshFuncionarios();
-    } catch {
-      toast.error('Erro ao excluir funcionário.');
-    }
+    } finally {writeBusy.current=false;setSaving(false);}
   };
 
   /** Check if a given employee is the global master (protected from unit masters) */
@@ -349,25 +340,23 @@ const Funcionarios: React.FC = () => {
 
   /** Toggle ativo/inativo for an employee */
   const handleToggleAtivo = async (f: FuncionarioDB) => {
-    if (isUnitMaster && isProtectedGlobalMaster(f)) {
-      toast.error('Você não tem permissão para alterar o administrador global.');
-      return;
-    }
+    if(writeBusy.current||loading||!canEditEmployee(f)||f.id===user?.id||isProtectedGlobalMaster(f)){toast.error('Não é permitido alterar o status deste funcionário.');return;}
+    const writeScope=scopeKey;
+    writeBusy.current=true;setSaving(true);
     try {
       const { data, error } = await supabase.functions.invoke('manage-employee', {
         body: { action: 'update', id: f.id, ativo: !f.ativo },
       });
-      if (error || data?.error) {
+      if (error || data?.error || data?.success!==true) {
         toast.error(data?.error || 'Erro ao atualizar status.');
         return;
       }
       toast.success(!f.ativo ? 'Funcionário ativado!' : 'Funcionário desativado!');
-      await loadFuncionarios();
+      if(scopeRef.current===writeScope){await loadFuncionarios();setViewFuncionario(prev => prev && prev.id === f.id ? { ...prev, ativo: !f.ativo } : prev);}
       await refreshFuncionarios();
-      setViewFuncionario(prev => prev && prev.id === f.id ? { ...prev, ativo: !f.ativo } : prev);
     } catch {
       toast.error('Erro ao atualizar status.');
-    }
+    } finally {writeBusy.current=false;setSaving(false);}
   };
 
   /** Print employee profile card */
@@ -414,7 +403,7 @@ const Funcionarios: React.FC = () => {
 
   /** Apply unit-scope and master protection (used by all tabs) */
   const scopedFuncionarios = useMemo(() => {
-    let list = funcionarios;
+    let list = loadedScope===scopeKey&&!loadError?funcionarios:[];
     if (user?.usuario !== 'admin.sms' && user?.unidadeId) {
       list = list.filter(f => f.unidade_id === user.unidadeId || !f.unidade_id);
     }
@@ -422,7 +411,7 @@ const Funcionarios: React.FC = () => {
       list = list.filter(f => !isProtectedGlobalMaster(f));
     }
     return list;
-  }, [funcionarios, user, isUnitMaster]);
+  }, [funcionarios, user, isUnitMaster,loadedScope,scopeKey,loadError]);
 
   /** Distinct profession options for filter dropdown */
   const profissoesDisponiveis = useMemo(() => {
@@ -497,13 +486,14 @@ const Funcionarios: React.FC = () => {
   const staffListProps = {
     unidades, canManage, isUnitMaster, currentUserUnitId: user?.unidadeId,
     isProtectedGlobalMaster, onView: setViewFuncionario, onEdit: openEdit,
-    onDelete: handleDelete, attendanceUnits: isGlobalMaster ? attendanceUnits : undefined,
+    onDeactivate: handleToggleAtivo, currentUserId:user?.id, canEditEmployee, saving: saving||loading, attendanceUnits: isGlobalMaster ? attendanceUnits : undefined,
   };
 
   return (
     <div className="space-y-4 animate-fade-in">
       <PageHeader title="Funcionários" subtitle="Cadastro de funcionários internos e profissionais externos" />
 
+      {loadError&&activeTab!=='externos'&&<div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 flex flex-wrap items-center gap-2 text-sm"><span className="flex-1 text-destructive">{loadError} Não foi possível confirmar os dados da equipe.</span><Button type="button" variant="outline" size="sm" onClick={()=>void loadFuncionarios()}>Tentar novamente</Button></div>}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full">
           <TabsTrigger value="internos" className="flex-1">
@@ -553,7 +543,7 @@ const Funcionarios: React.FC = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder="Buscar por nome, e-mail, CPF..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" />
             </div>
-            {canManage && (
+            {canCreate && !loading && !loadError && (
               <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Novo Funcionário</Button>
             )}
           </div>
@@ -598,7 +588,7 @@ const Funcionarios: React.FC = () => {
             <span className="text-xs text-muted-foreground ml-auto">{filteredAtivos.length} funcionário(s) encontrado(s)</span>
           </div>
 
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog open={dialogOpen} onOpenChange={open=>{if(!writeBusy.current)setDialogOpen(open);}}>
             <DialogContent className="max-w-lg p-0 overflow-hidden">
               <div className="modal-shell">
                 <DialogHeader className="px-4 sm:px-6 pt-5 pb-3 border-b shrink-0"><DialogTitle className="font-display pr-6">{editId ? 'Editar' : 'Cadastrar'} Funcionário</DialogTitle></DialogHeader>
@@ -629,7 +619,7 @@ const Funcionarios: React.FC = () => {
                     <Select value={form.role} onValueChange={v => setForm(p => ({ ...p, role: v as UserRole }))}>
                       <SelectTrigger><SelectValue placeholder="Selecione o perfil" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="master">MASTER</SelectItem>
+                        {user?.role==='master'&&<SelectItem value="master">MASTER</SelectItem>}
                         <SelectItem value="gestao">GESTÃO</SelectItem>
                         <SelectItem value="recepcao">RECEPÇÃO</SelectItem>
                         <SelectItem value="tecnico">TRIAGEM</SelectItem>
@@ -642,7 +632,7 @@ const Funcionarios: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Setor</Label><Input value={form.setor} onChange={e => setForm(p => ({ ...p, setor: e.target.value }))} /></div>
                   <div><Label>Unidade {isUnitMaster ? '(fixada)' : ''}</Label>
-                    <Select value={form.unidade_id} onValueChange={v => setForm(p => ({ ...p, unidade_id: v }))} disabled={isUnitMaster}>
+                    <Select value={form.unidade_id} onValueChange={v => setForm(p => ({ ...p, unidade_id: v }))} disabled={!isGlobalMaster}>
                       <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                       <SelectContent>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
                     </Select>
@@ -838,7 +828,7 @@ const Funcionarios: React.FC = () => {
                 )}
                 </div>
                 <div className="modal-footer px-4 sm:px-6">
-                  <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
+                  <Button onClick={handleSave} disabled={saving||loading||!!loadError} className="w-full gradient-primary text-primary-foreground">
                     {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                     {editId ? 'Salvar' : 'Cadastrar'}
                   </Button>
@@ -849,7 +839,7 @@ const Funcionarios: React.FC = () => {
 
           {loading ? (
             <LoadingState label="Carregando funcionários..." size="lg" />
-          ) : filteredAtivos.length === 0 ? (
+          ) : loadError ? null : filteredAtivos.length === 0 ? (
             <EmptyState
               icon={<Users className="w-8 h-8 text-muted-foreground/50" />}
               title="Nenhum funcionário"
@@ -879,7 +869,7 @@ const Funcionarios: React.FC = () => {
         <TabsContent value="inativos" className="mt-4 space-y-4">
           {loading ? (
             <LoadingState label="Carregando..." size="lg" />
-          ) : filteredInativos.length === 0 ? (
+          ) : loadError ? null : filteredInativos.length === 0 ? (
             <EmptyState
               icon={<Users className="w-8 h-8 text-muted-foreground/50" />}
               title="Nenhum funcionário inativo"
@@ -913,10 +903,10 @@ const Funcionarios: React.FC = () => {
               </div>
             </ScrollArea>
           )}
-          {viewFuncionario && canManage && !(isUnitMaster && isProtectedGlobalMaster(viewFuncionario)) && (
+          {viewFuncionario && canEditEmployee(viewFuncionario) && (
             <div className="border-t p-3 flex flex-wrap gap-2 justify-end">
               <Button variant="outline" size="sm" onClick={() => handlePrintFuncionario(viewFuncionario)}><Printer className="w-4 h-4 mr-1" />Imprimir</Button>
-              <Button variant="outline" size="sm" onClick={() => handleToggleAtivo(viewFuncionario)}>
+              <Button variant="outline" size="sm" disabled={saving||viewFuncionario.id===user?.id||isProtectedGlobalMaster(viewFuncionario)} onClick={() => {if(!viewFuncionario.ativo||window.confirm('Desativar este funcionário? Confira os horários futuros. O histórico será mantido.'))void handleToggleAtivo(viewFuncionario);}}>
                 {viewFuncionario.ativo ? <><Power className="w-4 h-4 mr-1" />Desativar</> : <><RotateCcw className="w-4 h-4 mr-1" />Reativar</>}
               </Button>
               <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => { const f = viewFuncionario; setViewFuncionario(null); openEdit(f); }}>
@@ -941,18 +931,22 @@ interface FuncionarioListProps {
   isProtectedGlobalMaster: (f: FuncionarioDB) => boolean;
   onView: (f: FuncionarioDB) => void;
   onEdit: (f: FuncionarioDB) => void;
-  onDelete: (id: string) => void;
+  onDeactivate: (f: FuncionarioDB) => void;
+  currentUserId?:string;
+  canEditEmployee:(f:FuncionarioDB)=>boolean;
+  saving:boolean;
   inactive?: boolean;
   onReactivate?: (f: FuncionarioDB) => void;
   attendanceUnits?: Map<string, Set<string>>;
 }
 
-const FuncionarioList: React.FC<FuncionarioListProps> = ({ items, unidades, canManage, isUnitMaster, currentUserUnitId, isProtectedGlobalMaster, onView, onEdit, onDelete, inactive, onReactivate, attendanceUnits }) => (
+const FuncionarioList: React.FC<FuncionarioListProps> = ({ items, unidades, canManage, isUnitMaster, currentUserUnitId, isProtectedGlobalMaster, onView, onEdit, onDeactivate, currentUserId, canEditEmployee,saving,inactive, onReactivate, attendanceUnits }) => (
   <div className="space-y-2">
     {items.map(f => {
       const unidadeNome = unidades.find(u => u.id === f.unidade_id)?.nome || '';
       const cd = (f.custom_data as any) || {};
-      const canEditThis = !(isUnitMaster && f.unidade_id && f.unidade_id !== currentUserUnitId) && !(isUnitMaster && isProtectedGlobalMaster(f));
+      const canEditThis = canEditEmployee(f);
+      const canChangeStatus=canEditThis&&f.id!==currentUserId&&!isProtectedGlobalMaster(f);
       return (
         <Card key={f.id} className="shadow-sm border hover:shadow-md transition-shadow">
           <CardContent className="p-3 sm:p-4 flex items-center gap-3">
@@ -996,22 +990,22 @@ const FuncionarioList: React.FC<FuncionarioListProps> = ({ items, unidades, canM
               {canManage && canEditThis && !inactive && (
                 <Button size="icon" variant="ghost" title="Editar" onClick={() => onEdit(f)}><Pencil className="w-4 h-4" /></Button>
               )}
-              {inactive && canManage && canEditThis && onReactivate && (
-                <Button size="sm" variant="outline" onClick={() => onReactivate(f)}><RotateCcw className="w-4 h-4 mr-1" />Reativar</Button>
+              {inactive && canManage && canChangeStatus && onReactivate && (
+                <Button size="sm" variant="outline" disabled={saving} onClick={() => onReactivate(f)}><RotateCcw className="w-4 h-4 mr-1" />Reativar</Button>
               )}
-              {canManage && canEditThis && !inactive && (
+              {canManage && canChangeStatus && !inactive && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button size="icon" variant="ghost" className="text-destructive" title="Excluir"><Trash2 className="w-4 h-4" /></Button>
+                    <Button size="icon" variant="ghost" className="text-muted-foreground" disabled={saving} title="Desativar funcionário" aria-label="Desativar funcionário"><Power className="w-4 h-4" /></Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Excluir funcionário?</AlertDialogTitle>
-                      <AlertDialogDescription>Tem certeza que deseja excluir {f.nome}? Esta ação não pode ser desfeita.</AlertDialogDescription>
+                      <AlertDialogTitle>Desativar funcionário?</AlertDialogTitle>
+                      <AlertDialogDescription>Desativar {f.nome} impede novos acessos pelo cadastro ativo e mantém o histórico. Confira previamente os horários e atendimentos futuros. O funcionário poderá ser reativado.</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => onDelete(f.id)}>Excluir</AlertDialogAction>
+                      <AlertDialogAction onClick={() => onDeactivate(f)}>Desativar</AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
