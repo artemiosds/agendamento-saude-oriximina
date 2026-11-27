@@ -8,6 +8,7 @@ import { resolveProfessionalCbo } from '@/lib/sigtapClinicalValidation';
 import { dateKeyEscala, distribuirRegistros, localKeyEscala, minutesEscala as time, registros, summarizeEscalaDay } from '@/lib/escalaInformativa';
 import type { RegistroEscala } from '@/lib/escalaInformativa';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { supabase } from '@/integrations/supabase/client';
@@ -84,7 +85,7 @@ const CalendarDay = memo(function CalendarDay({ day, entries, compact, onRemove 
       <div className="flex items-start justify-between gap-1">
         <p className="break-words font-semibold">{r.person}</p>
         {r.remove && <button type="button" className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          title="Remover entrada manual" aria-label={'Remover escala de ' + r.person + ' em ' + r.place}
+          title={r.remove.recurring?'Encerrar recorrência':'Remover entrada manual'} aria-label={(r.remove.recurring?'Encerrar recorrência de ':'Remover escala de ') + r.person + ' em ' + r.place}
           onClick={() => onRemove(r)}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" /></button>}
       </div>
       <p className="break-words text-muted-foreground">{r.place}</p>
@@ -106,6 +107,7 @@ export function EscalaProfissionais() {
 
 export function Escala() {
   const { user } = useAuth();
+  const { can, loading:permissionsLoading }=usePermissions();
   const { funcionarios, disponibilidades, bloqueios, refreshDisponibilidades, refreshBloqueios, refreshFuncionarios, configuracoes, refreshConfiguracoes } = useOperacional();
   const { unidadesVisiveis, salasVisiveis, isGlobalAdmin, userUnidadeId } = useUnidadeFilter();
   const [place, setPlace] = useState('');
@@ -116,6 +118,7 @@ export function Escala() {
   const [refreshing, setRefreshing] = useState(false);
   const [snapshot, setSnapshot] = useState<{ key: string; rows: RegistroEscala[]; error?: string }>();
   const [target, setTarget] = useState<Entrada>();
+  const [endDate,setEndDate]=useState('');
   const [removing, setRemoving] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [removeError, setRemoveError] = useState('');
@@ -148,7 +151,9 @@ export function Escala() {
   }, [requestKey, from, to, signedIn]);
   const current = signedIn && snapshot?.key === requestKey ? snapshot : undefined;
   const manual = current?.rows ?? EMPTY;
-  const canWrite = !!user && ['master', 'coordenador', 'gestao'].includes(user.role) && (isGlobalAdmin || !!userUnidadeId);
+  const canWrite = !!user && !permissionsLoading && ['master', 'coordenador', 'gestao'].includes(user.role) && (isGlobalAdmin || !!userUnidadeId) && can('disponibilidade','can_view');
+  const canEnd=canWrite&&can('disponibilidade','can_edit');
+  const canDelete=canWrite&&can('disponibilidade','can_delete');
   const refreshScale = async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -156,16 +161,20 @@ export function Escala() {
     catch { toast.error('Não foi possível confirmar todos os dados da grade. Tente novamente.'); }
     finally { setReload(n => n+1); setRefreshing(false); }
   };
-  const onRemove = useCallback((row: Entrada) => { setRemoveError(''); setTarget(row); }, []);
+  const onRemove = useCallback((row: Entrada) => { setRemoveError(''); setEndDate(dateKeyEscala(addDays(localDate(today),1))); setTarget(row); }, [today]);
   const onSaved = useCallback((savedDate: string) => {
     setDate(savedDate); setMonthly(true); setPlace(''); setName(''); setReload(n => n + 1);
   }, []);
   const confirmRemove = async () => {
-    if (!target?.remove || removing || !canWrite || !current || current.error || !manual.some(row=>row.id===target.remove?.id)) return;
+    if (!target?.remove || removing || !current || current.error || !manual.some(row=>row.id===target.remove?.id) || (target.remove.recurring?!canEnd:!canDelete)) return;
+    if(target.remove.recurring&&(!endDate||endDate<today)){setRemoveError('Informe uma data de encerramento a partir de hoje.');return;}
     setRemoving(true);
     try {
-      const { error } = await supabase.rpc('remover_escala_personalizada' as never, { p_id: target.remove.id } as never);
+      const { error } = target.remove.recurring
+        ? await supabase.rpc('encerrar_escala_personalizada' as never, {p_id:target.remove.id,p_primeiro_dia_sem_escala:endDate} as never)
+        : await supabase.rpc('remover_escala_personalizada' as never, { p_id: target.remove.id } as never);
       if (error) throw error;
+      toast.success(target.remove.recurring?'Recorrência encerrada. O histórico foi preservado.':'Escala avulsa removida.');
       setTarget(undefined); setReload(n => n + 1);
     } catch (error) {
       setRemoveError((error as { message?: string }).message || 'Não foi possível remover a escala.');
@@ -248,7 +257,7 @@ export function Escala() {
             minutes: minutes - carry,
             mode: r.profissional ? 'Manual · ' + (r.semanal ? 'Semanal' : 'Avulsa') : 'Escala informativa', informational: true,
             currentInactive: !p.ativo,
-            remove: r.profissional && canWrite ? { id: r.id, recurring: r.semanal } : undefined };
+            remove: r.profissional && (r.semanal ? canEnd && (!r.fim_recorrencia || r.fim_recorrencia>=today) : canDelete && r.data>=today) ? { id: r.id, recurring: r.semanal } : undefined };
           if (key >= from) addNote(key, note);
           const next = nextByDay.get(key);
           if (carry && next && (p.ativo || next < today)) {
@@ -313,7 +322,7 @@ export function Escala() {
       + ' · ' + Math.floor(minutes / 60) + 'h ' + minutes % 60 + 'min de carga prevista sem sobreposição';
     return { calendar, summary, count, overlapMinutes, conflictDays, invalidHours, unidentifiedGrades:unidentified.size, placeTotals: [...totals.values()].sort((a, b) => b.quantity - a.quantity).map(({ label, quantity }) =>
       quantity + (quantity === 1 ? ' turno em ' : ' turnos em ') + label) };
-  }, [selected, activePlace, days, from, gradesByDay, bloqueios, units, rooms, turnLabels, canWrite, funcionarios, deferredName, today]);
+  }, [selected, activePlace, days, from, gradesByDay, bloqueios, units, rooms, turnLabels, canEnd, canDelete, funcionarios, deferredName, today]);
   const period = format(start, 'dd/MM/yyyy') + ' a ' + format(days[days.length - 1], 'dd/MM/yyyy');
   const print = async () => {
     if (printing || refreshing || name !== deferredName || !count || !current || current.error || invalidHours || unidentifiedGrades) return;
@@ -381,18 +390,19 @@ export function Escala() {
     <AlertDialog open={!!target} onOpenChange={open => { if (!open && !removing) setTarget(undefined); }}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{target?.remove?.recurring ? 'Remover a série semanal?' : 'Remover esta escala?'}</AlertDialogTitle>
+          <AlertDialogTitle>{target?.remove?.recurring ? 'Encerrar a série semanal?' : 'Remover esta escala?'}</AlertDialogTitle>
           <AlertDialogDescription>
             {target?.person} · {target?.place} · {target?.hours}. {target?.remove?.recurring
-              ? 'A repetição semanal será removida de todas as datas. Ocorrências alteradas separadamente serão mantidas.'
+              ? 'A repetição termina a partir da data escolhida. Datas anteriores e ocorrências alteradas separadamente serão mantidas. A Agenda não muda.'
               : 'Somente esta entrada manual será removida. A agenda de atendimentos não muda.'}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {target?.remove?.recurring&&<label className="space-y-1 text-sm font-medium">Primeiro dia sem repetição<Input type="date" min={today} value={endDate} onChange={event=>setEndDate(event.target.value)} disabled={removing}/></label>}
         {removeError && <p role="alert" className="text-sm text-destructive">{removeError}</p>}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={removing}>Cancelar</AlertDialogCancel>
-          <AlertDialogAction disabled={removing} onClick={event => { event.preventDefault(); void confirmRemove(); }}>
-            {removing ? 'Removendo…' : 'Remover escala'}
+          <AlertDialogAction disabled={removing || (target?.remove?.recurring ? !canEnd||!endDate||endDate<today : !canDelete)} onClick={event => { event.preventDefault(); void confirmRemove(); }}>
+            {removing ? 'Processando…' : target?.remove?.recurring ? 'Encerrar recorrência' : 'Remover escala'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
