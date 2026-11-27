@@ -113,3 +113,52 @@ export function summarizeEscalaDay(entries: readonly {personId:string;hours:stri
   }
   return {uniqueMinutes,rawMinutes,overlapMinutes:rawMinutes-uniqueMinutes,conflicts,invalid};
 }
+
+
+/** One request uses exactly the dates that will be written by the existing RPC. */
+export function buildEscalaSelection(dates: string[], weekly: boolean, duration: number) {
+  const selected = [...new Set(dates)].sort();
+  const effective = weekly ? primeirasDatasSemanais(selected) : selected;
+  return { selected, effective, count: effective.length,
+    minutes: effective.length * (Number.isFinite(duration) && duration > 0 ? duration : 0) };
+}
+
+/** Advisory preview only. The database remains authoritative, including future recurrences. */
+export function previewEscalaConflicts(input: {
+  personId: string; unitId: string | null; dates: string[]; start: number; duration: number; origin: string | null;
+  manual: RegistroEscala[];
+  grades: readonly {profissionalId:string;unidadeId:string;dataInicio:string;dataFim?:string|null;diasSemana:number[];horaInicio:string;horaFim:string}[];
+}) {
+  const {personId,unitId,dates,start,duration,origin,manual,grades}=input;
+  if(!personId||!dates.length||!Number.isFinite(start)||!Number.isFinite(duration)||duration<=0||duration>1440)return [];
+  const relevant=manual.filter(r=>r.profissional===personId);
+  const relevantGrades=grades.filter(g=>g.profissionalId===personId);
+  const result: {date:string;kind:'grade'|'manual';label:string}[]=[];
+  const seen=new Set<string>();
+  const overlap=(a:number,b:number)=>Number.isFinite(a)&&Number.isFinite(b)&&b>0&&a<start+duration&&a+b>start;
+  for(const date of dates) {
+    const nearby=[-1,0,1].map(delta=>{
+      const d=new Date(date+'T12:00:00');d.setDate(d.getDate()+delta);return d;
+    });
+    const projected=distribuirRegistros(relevant,nearby);
+    nearby.forEach((d,index)=>{
+      const key=dateKeyEscala(d), delta=index-1;
+      const add=(kind:'grade'|'manual',label:string)=>{
+        const k=JSON.stringify([date,kind,label]);if(!seen.has(k)){seen.add(k);result.push({date,kind,label});}
+      };
+      for(const row of projected.get(key)??[]) {
+        if(delta===0&&origin&&(row.id===origin||row.origem===origin))continue;
+        const mins=minutesEscala(row.inicio);
+        const length=row.duracao??minutesEscala(row.fim)-mins;
+        if(overlap(delta*1440+mins,length))add('manual',(row.local||row.local_avulso||'Escala manual')+' · '+row.inicio+'–'+row.fim);
+      }
+      for(const g of relevantGrades) {
+        if(key<g.dataInicio||(g.dataFim&&key>g.dataFim)||!g.diasSemana.includes(d.getDay()))continue;
+        const mins=minutesEscala(g.horaInicio),length=minutesEscala(g.horaFim)-mins;
+        if(delta===0&&g.unidadeId===unitId&&mins===start&&length===duration)continue;
+        if(overlap(delta*1440+mins,length))add('grade','Grade de atendimento · '+g.horaInicio.slice(0,5)+'–'+g.horaFim.slice(0,5));
+      }
+    });
+  }
+  return result;
+}
