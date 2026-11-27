@@ -1,0 +1,160 @@
+BEGIN;
+CREATE SCHEMA IF NOT EXISTS grade_guard;
+REVOKE ALL ON SCHEMA grade_guard FROM PUBLIC,anon;
+GRANT USAGE ON SCHEMA grade_guard TO authenticated;
+CREATE OR REPLACE FUNCTION grade_guard.allowed(unit_id text,action text) RETURNS boolean LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
+DECLARE a public.funcionarios%ROWTYPE; raw_role text; profile text; mod text:='disponibilidade'; result boolean; field text;
+BEGIN
+ IF auth.uid() IS NULL OR action NOT IN ('can_create','can_edit','can_delete') THEN RETURN false; END IF;
+ SELECT * INTO a FROM public.funcionarios WHERE auth_user_id=auth.uid() AND ativo LIMIT 1;
+ IF NOT FOUND THEN RETURN false; END IF;
+ raw_role:=lower(trim(a.role)); profile:=CASE WHEN raw_role IN ('gestão','gestor','coordenacao','coordenador') THEN 'gestao' WHEN raw_role='recepção' THEN 'recepcao' WHEN raw_role='tecnico' THEN 'triagem' WHEN raw_role='tecnico_enfermagem' THEN 'enfermagem' ELSE raw_role END;
+ IF profile='master' AND a.usuario='admin.sms' THEN RETURN true; END IF;
+ IF coalesce(a.unidade_id,'')='' OR unit_id IS DISTINCT FROM a.unidade_id THEN RETURN false; END IF;
+ IF profile='master' THEN RETURN true; END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.permissoes_usuario WHERE user_id=a.id::text AND modulo=mod AND unidade_id IN (a.unidade_id,''))
+ AND NOT EXISTS(SELECT 1 FROM public.permissoes WHERE perfil IN (profile,raw_role) AND modulo=mod AND unidade_id IN (a.unidade_id,'')) THEN mod:='usuarios'; END IF;
+ FOREACH field IN ARRAY ARRAY['can_view',action] LOOP
+ SELECT coalesce(
+ (SELECT (to_jsonb(p)->>field)::boolean FROM public.permissoes_usuario p WHERE p.user_id=a.id::text AND p.modulo=mod AND p.unidade_id=a.unidade_id LIMIT 1),
+ (SELECT (to_jsonb(p)->>field)::boolean FROM public.permissoes_usuario p WHERE p.user_id=a.id::text AND p.modulo=mod AND p.unidade_id='' LIMIT 1),
+ (SELECT (to_jsonb(p)->>field)::boolean FROM public.permissoes p WHERE p.modulo=mod AND p.unidade_id=a.unidade_id AND p.perfil IN (profile,raw_role) ORDER BY (p.perfil=profile) DESC LIMIT 1),
+ (SELECT (to_jsonb(p)->>field)::boolean FROM public.permissoes p WHERE p.modulo=mod AND p.unidade_id='' AND p.perfil IN (profile,raw_role) ORDER BY (p.perfil=profile) DESC LIMIT 1),
+ mod='usuarios' AND profile='gestao' AND field IN ('can_view','can_create','can_edit')) INTO result;
+ IF NOT result THEN RETURN false; END IF;
+ END LOOP;
+ RETURN true;
+END $$;
+REVOKE ALL ON FUNCTION grade_guard.allowed(text,text) FROM PUBLIC,anon,authenticated;
+CREATE OR REPLACE FUNCTION grade_guard.save_group(p_previous_ids text[], p_profissional_id text, p_unidade_id text, p_data_inicio date, p_data_fim date, p_slots jsonb)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_previous_ids text[] := coalesce(p_previous_ids, array[]::text[]);
+  v_previous public.disponibilidades%rowtype;
+  v_expected_ids text[];
+  v_current_ids text[];
+  v_slot_count integer;
+  v_written integer;
+  v_lock bigint;
+  v_target_lock bigint;
+  v_previous_lock bigint;
+begin
+  if auth.uid() is null or not public.is_staff_member() then
+    raise exception using errcode = '42501', message = 'Acesso à grade de disponibilidade não autorizado.';
+  end if;
+
+  if nullif(p_profissional_id, '') is null or nullif(p_unidade_id, '') is null
+    or p_data_inicio is null or p_data_fim is null or p_data_inicio > p_data_fim
+    or pg_catalog.jsonb_typeof(p_slots) is distinct from 'array' then
+    raise exception using errcode = '22023', message = 'Profissional, unidade, período ou horários inválidos.';
+  end if;
+  v_slot_count := pg_catalog.jsonb_array_length(p_slots);
+  if v_slot_count = 0 and pg_catalog.cardinality(v_previous_ids) = 0 then
+    raise exception using errcode = '22023', message = 'Informe os horários da grade.';
+  end if;
+
+  v_target_lock := pg_catalog.hashtextextended(
+    pg_catalog.jsonb_build_array('disponibilidades', p_profissional_id, p_unidade_id)::text, 0
+  );
+  v_previous_lock := v_target_lock;
+  if pg_catalog.cardinality(v_previous_ids) > 0 then
+    select d.* into v_previous from public.disponibilidades d where d.id = v_previous_ids[1];
+    if not found then
+      raise exception using errcode = '40001', message = 'Esta grade foi alterada. Atualize a página e tente novamente.';
+    end if;
+    v_previous_lock := pg_catalog.hashtextextended(
+      pg_catalog.jsonb_build_array('disponibilidades', v_previous.profissional_id, v_previous.unidade_id)::text, 0
+    );
+  end if;
+
+  if not public.is_global_owner() and (
+    not exists (
+      select 1 from public.funcionarios f
+      where f.auth_user_id = auth.uid() and f.ativo is true and f.unidade_id = p_unidade_id
+    ) or (
+      v_previous.id is not null and not exists (
+        select 1 from public.funcionarios f
+        where f.auth_user_id = auth.uid() and f.ativo is true and f.unidade_id = v_previous.unidade_id
+      )
+    )
+  ) then
+    raise exception using errcode = '42501', message = 'Acesso à grade desta unidade não autorizado.';
+  end if;
+
+  if not grade_guard.allowed(p_unidade_id,case when v_slot_count=0 then 'can_delete' when pg_catalog.cardinality(v_previous_ids)>0 then 'can_edit' else 'can_create' end) or (v_previous.id is not null and not grade_guard.allowed(v_previous.unidade_id,case when v_slot_count=0 then 'can_delete' else 'can_edit' end)) then raise exception using errcode='42501',message='Sem permissão para alterar esta grade.'; end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('escala_profissionais_guard_v1',0));
+  -- An edit may move a group. Lock both pairs in a stable order.
+  for v_lock in
+    select distinct key from pg_catalog.unnest(array[v_previous_lock, v_target_lock]) as keys(key) order by key
+  loop
+    perform pg_catalog.pg_advisory_xact_lock(v_lock);
+  end loop;
+
+  if v_previous.id is not null then
+    select pg_catalog.array_agg(expected.id order by expected.id) into v_expected_ids
+    from pg_catalog.unnest(v_previous_ids) as expected(id);
+    select pg_catalog.array_agg(d.id order by d.id) into v_current_ids
+    from public.disponibilidades d
+    where d.profissional_id = v_previous.profissional_id and d.unidade_id = v_previous.unidade_id
+      and d.data_inicio = v_previous.data_inicio and d.data_fim = v_previous.data_fim;
+
+    if v_expected_ids is distinct from v_current_ids then
+      raise exception using errcode = '40001', message = 'Esta grade foi alterada. Atualize a página e tente novamente.';
+    end if;
+  end if;
+
+  if v_slot_count > 0 and exists (
+    select 1 from public.disponibilidades d
+    where d.profissional_id = p_profissional_id and d.unidade_id = p_unidade_id
+      and d.data_inicio <= p_data_fim and d.data_fim >= p_data_inicio
+      and not (d.id = any(v_previous_ids))
+  ) then
+    raise exception using errcode = '23P01', message = 'Este profissional já possui disponibilidade neste período para esta unidade.';
+  end if;
+
+  if v_previous.id is not null and (v_previous.data_fim < (now() at time zone 'America/Santarem')::date OR (v_slot_count=0 AND v_previous.data_inicio <= (now() at time zone 'America/Santarem')::date)) then raise exception using errcode='22023',message='Período histórico ou iniciado protegido.'; end if;
+  if v_slot_count=0 and (exists(select 1 from public.agendamentos a where a.profissional_id=v_previous.profissional_id and a.unidade_id=v_previous.unidade_id and a.data between v_previous.data_inicio and v_previous.data_fim and a.status not in ('cancelado','remarcado')) or exists(select 1 from public.quotas_externas q where q.profissional_interno_id::text=v_previous.profissional_id and q.unidade_id=v_previous.unidade_id and q.ativo and q.periodo_inicio<=v_previous.data_fim and q.periodo_fim>=v_previous.data_inicio)) then raise exception using errcode='22023',message='Grade vinculada a agendamentos ou cotas externas. Preserve o período.'; end if;
+  if v_slot_count>0 and not exists(select 1 from public.funcionarios f where f.id::text=p_profissional_id and f.ativo and f.role='profissional') then raise exception using errcode='22023',message='Profissional ativo não localizado.'; end if;
+  if pg_catalog.cardinality(v_previous_ids) > 0 then
+    delete from public.disponibilidades d where d.id = any(v_previous_ids);
+    get diagnostics v_written = row_count;
+    if v_written <> pg_catalog.cardinality(v_previous_ids) then
+      raise exception using errcode = '40001', message = 'A grade original não pôde ser confirmada. Atualize a página e tente novamente.';
+    end if;
+  end if;
+
+  if v_slot_count = 0 then
+    return v_written;
+  end if;
+
+  insert into public.disponibilidades (
+    id, profissional_id, unidade_id, data_inicio, data_fim, sala_id, hora_inicio, hora_fim,
+    vagas_por_hora, vagas_por_dia, dias_semana, duracao_consulta
+  )
+  select 'd' || pg_catalog.gen_random_uuid()::text, p_profissional_id, p_unidade_id, p_data_inicio, p_data_fim,
+    slot.sala_id, slot.hora_inicio, slot.hora_fim, slot.vagas_por_hora, slot.vagas_por_dia, slot.dias_semana, slot.duracao_consulta
+  from pg_catalog.jsonb_to_recordset(p_slots) as slot(
+    sala_id text, hora_inicio text, hora_fim text, vagas_por_hora integer, vagas_por_dia integer,
+    dias_semana integer[], duracao_consulta integer
+  );
+  get diagnostics v_written = row_count;
+  if v_written <> v_slot_count then
+    raise exception using errcode = 'P0001', message = 'O banco não confirmou todos os horários da grade.';
+  end if;
+  update public.system_config set configuracoes=jsonb_set(configuracoes,'{config_modos_disponibilidade}',coalesce(configuracoes->'config_modos_disponibilidade','{}'::jsonb)||jsonb_build_object(p_profissional_id,case when exists(select 1 from jsonb_array_elements(p_slots) s where (s->>'vagas_por_hora')::integer=0) then 'por_turno' else 'por_hora' end),true),updated_at=now() where id='default' and jsonb_typeof(configuracoes)='object' and (configuracoes->'config_modos_disponibilidade' is null or jsonb_typeof(configuracoes->'config_modos_disponibilidade')='object');
+  if not found then raise exception using errcode='22023',message='Configuração administrativa não confirmada; grade preservada.'; end if;
+  return v_written;
+end;
+$function$;
+REVOKE ALL ON FUNCTION grade_guard.save_group(text[],text,text,date,date,jsonb) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION grade_guard.save_group(text[],text,text,date,date,jsonb) TO authenticated;
+CREATE OR REPLACE FUNCTION public.save_availability_group(p_previous_ids text[],p_profissional_id text,p_unidade_id text,p_data_inicio date,p_data_fim date,p_slots jsonb)
+RETURNS integer LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$ SELECT grade_guard.save_group(p_previous_ids,p_profissional_id,p_unidade_id,p_data_inicio,p_data_fim,p_slots) $$;
+REVOKE ALL ON FUNCTION public.save_availability_group(text[],text,text,date,date,jsonb) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.save_availability_group(text[],text,text,date,date,jsonb) TO authenticated;
+REVOKE INSERT,UPDATE,DELETE,TRUNCATE ON public.disponibilidades FROM PUBLIC,anon,authenticated;
+COMMIT;
