@@ -1,11 +1,12 @@
 import {auditSafeText,maskAuditIdentifier} from './auditSecurity';
+import {auditUnitLabel,recordedUnitName} from './auditUnitIdentity';
 export const REPORT_LIMIT=10000;
 export const REPORT_PAGE=500;
 export const REPORT_MAX_DAYS=31;
 export type ReportEvent={id:string;created_at:string;user_id:string;user_nome:string;role:string;unidade_id:string;unidade_nome:string|null;acao:string;status:string;usuario_cpf?:string|null};
 export type ActivityCounts={totalAcoes:number;logins:number;tentativas:number;falhasLogin:number;erros:number;atendimentosIniciados:number;atendimentosFinalizados:number;prontuariosVisualizados:number;prontuariosEditados:number;prontuariosCriados:number;primeiroAcesso:string;ultimoAcesso:string};
 export type ActorReport=ActivityCounts & {userId:string;nome:string;cpf:string;role:string};
-export type UnitReport=ActivityCounts & {unitId:string;nome:string;actors:number;semResponsavel:number};
+export type UnitReport=ActivityCounts & {unitId:string;nome:string;nomeRegistrado:string;actors:number;semResponsavel:number};
 export type AuditReport={actors:ActorReport[];units:UnitReport[];totals:ActivityCounts;semResponsavel:number};
 const fresh=():ActivityCounts=>({totalAcoes:0,logins:0,tentativas:0,falhasLogin:0,erros:0,atendimentosIniciados:0,atendimentosFinalizados:0,prontuariosVisualizados:0,prontuariosEditados:0,prontuariosCriados:0,primeiroAcesso:'',ultimoAcesso:''});
 const loginActions=['login','login_sucesso','login_falha','login_erro'];
@@ -41,7 +42,8 @@ export function buildAuditReport(events:readonly ReportEvent[]):AuditReport{
     tally(totals,e);
     const uid=e.unidade_id?.trim()||'';
     let unit=units.get(uid);
-    if(!unit){unit={row:{...fresh(),unitId:uid,nome:auditSafeText(e.unidade_nome?.trim()||uid||'Unidade não registrada'),actors:0,semResponsavel:0},ids:new Set()};units.set(uid,unit);}
+    if(!unit){unit={row:{...fresh(),unitId:uid,nome:auditSafeText(auditUnitLabel(e)),nomeRegistrado:auditSafeText(recordedUnitName(e)),actors:0,semResponsavel:0},ids:new Set()};units.set(uid,unit);}
+    if(!unit.row.nomeRegistrado&&recordedUnitName(e)){unit.row.nomeRegistrado=auditSafeText(recordedUnitName(e));unit.row.nome=unit.row.nomeRegistrado;}
     tally(unit.row,e);
     const id=e.user_id?.trim()||'';
     if(!id||/^(sistema|system|automacao|automação|anonimo|anonymous|null|undefined)$/i.test(id)||['sistema','system'].includes(e.role?.toLowerCase())){

@@ -26,6 +26,7 @@ import AuditOverview from '@/components/audit/AuditOverview';
 import AuditRelatedTimeline from '@/components/audit/AuditRelatedTimeline';
 import AuditEventFeed, {type AuditFeedEvent} from '@/components/audit/AuditEventFeed';
 import {auditFeedCounts} from '@/lib/auditEventFeed';
+import {auditUnitLabel,recordedUnitName,pendingAuditUnitIds,unitCatalogName,isAuditUnitField,type AuditUnitRef} from '@/lib/auditUnitIdentity';
 import {List,Table2,CheckCircle2,AlertCircle,Clock} from 'lucide-react';
 import {auditExportEligibility,readFilteredExport,EXPORT_LIMITS,exportSafeText,auditExportCsv,auditExportHtml,type ExportFormat,type ExportScope} from '@/lib/auditDocumentExport';
 import { auditMunicipalDate } from '@/lib/auditOverview';
@@ -92,6 +93,8 @@ interface ResolvedEntity {
 }
 
 interface EnrichedLog extends LogEntry {
+  unidade_atual?:string;
+  unidades_comparacao?:Record<string,string>;
   nome_entidade?: string;
   entidade_resolvida?: ResolvedEntity;
   detalhes_resolvidos?: {
@@ -326,7 +329,7 @@ const generateHumanSummary = (log: EnrichedLog) => {
   const acao = log.acao_legivel || formatAuditAction(log.acao);
   const entidade = log.entidade_resolvida?.titulo || log.entidade_nome || log.entidade_id || log.entidade;
   const data = auditEventTime(log.created_at);
-  const unidade = log.unidade_nome || 'unidade não identificada';
+  const unidade = auditUnitLabel(log,log.unidade_atual);
 
   if (log.tipo_evento === 'login') return log.status==='sucesso' ? `${user} realizou login no sistema em ${data}.` : `${user} teve um evento de autenticação registrado (${log.status || 'status não informado'}) em ${data}.`;
   if(log.status!=='sucesso')return `${user}: evento "${acao}" registrado com status ${log.status || 'não informado'}, em ${data}.`;
@@ -429,6 +432,24 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
 
 
   const cacheRef = useRef(new AuditReadCache<ResolvedEntity>());
+  const unitCache=useRef(new AuditReadCache<string>());
+  const resolveUnits=useCallback(async(refs:readonly AuditUnitRef[],signal:AbortSignal)=>{
+    const ids=pendingAuditUnitIds(refs,unitId);
+    const names=new Map<string,string>();
+    const missing:string[]=[];
+    for(const id of ids){const cached=unitCache.current.get(id);if(cached!==undefined){if(cached)names.set(id,cached);}else missing.push(id);}
+    // Exact ID matches only; inactive units are intentionally included for historical events.
+    for(let i=0;i<missing.length&&!signal.aborted;i+=50){
+      const batch=missing.slice(i,i+50);
+      try{
+        const {data,error}=await supabase.from('unidades').select('id,nome,nome_exibicao').in('id',batch).abortSignal(signal);
+        if(signal.aborted||error||!data)continue;
+        const found=new Map(data.map(row=>[row.id,unitCatalogName(row)]));
+        for(const id of batch){const name=found.get(id)||'';unitCache.current.set(id,name);if(name)names.set(id,name);}
+      }catch{/* Keep events visible and clearly unidentified if the catalog is unavailable. */}
+    }
+    return names;
+  },[unitId]);
   const readEntity = useCallback(async (log:EnrichedLog,signal:AbortSignal) => {
     const ref=auditEntityRef(log);
     if(!ref) return enrichAuditRow(log);
@@ -447,6 +468,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
       const ids=groups.get(ref.kind)||new Set<string>(); ids.add(ref.id);groups.set(ref.kind,ids);
     }
     let unavailable=false;
+    const unitNamesPromise=resolveUnits(rows,signal);
     await Promise.all([...groups].map(async ([kind,ids])=>{
       try {
         const {data,error}=await (supabase as any).from(AUDIT_ENTITY_TABLES[kind]).select(AUDIT_ENTITY_FIELDS[kind]).match(unitFilter).in('id',[...ids]).abortSignal(signal);
@@ -455,11 +477,12 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
         for(const row of data) cacheRef.current.set(entityCacheKey(kind,row.id),currentEntity(kind,row));
       } catch { if(!signal.aborted) unavailable=true; }
     }));
+    const names=await unitNamesPromise;
     return {rows:rows.map(log=>{
       const ref=auditEntityRef(log);
-      return enrichAuditRow(log,ref&&!recordedEntityName(log,ref.kind)?cacheRef.current.get(entityCacheKey(ref.kind,ref.id)):undefined);
+      return enrichAuditRow({...log,unidade_atual:names.get(log.unidade_id)},ref&&!recordedEntityName(log,ref.kind)?cacheRef.current.get(entityCacheKey(ref.kind,ref.id)):undefined);
     }),unavailable};
-  },[unitFilter]);
+  },[unitFilter,resolveUnits]);
 
   const detailId=selectedLog?.id;
   useEffect(()=>{
@@ -471,7 +494,11 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
         const {data,error}=await supabase.from('action_logs').select('*').eq('id',detailId).match(unitFilter).abortSignal(controller.signal).maybeSingle();
         if(controller.signal.aborted || !active.current) return;
         if(error||!data||data.id!==detailId) throw Error('Evento completo não confirmado.');
-        const full=redactAuditData(data) as EnrichedLog;
+        const raw=redactAuditData(data) as EnrichedLog;
+        const comparisonRefs=auditComparisons(raw).filter(row=>isAuditUnitField(row.field)).flatMap(row=>[row.before,row.after]).filter(v=>v.present&&typeof v.value==='string').map(v=>({unidade_id:String(v.value)}));
+        const names=await resolveUnits([raw,...comparisonRefs],controller.signal);
+        if(controller.signal.aborted||!active.current)return;
+        const full={...raw,unidade_atual:names.get(raw.unidade_id),unidades_comparacao:Object.fromEntries(names)};
         setSelectedLog(previous=>previous?.id===detailId?enrichAuditRow(full,previous.entidade_resolvida):previous);
         let warning='';
         try {
@@ -482,7 +509,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
       } catch {if(!controller.signal.aborted&&active.current)setDetailState({id:detailId,error:'Não foi possível consultar o evento completo. Abra novamente para tentar.'});}
     })();
     return()=>controller.abort();
-  },[detailId,readEntity,unitFilter]);
+  },[detailId,readEntity,unitFilter,resolveUnits]);
 
   // Filters
   const [filterDateFrom, setFilterDateFrom] = useState('');
@@ -611,7 +638,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
     actor:exportSafeText(getAuditActorLabel(log)),role:exportSafeText(log.role||'Perfil não informado'),
     entity:exportSafeText(log.nome_entidade||log.entidade_id||log.entidade),
     entityType:exportSafeText(log.entidade||''),entitySubtitle:exportSafeText(log.entidade_resolvida?.subtitulo||''),
-    unit:exportSafeText(log.unidade_nome||log.unidade_id||'Unidade não registrada'),
+    unit:exportSafeText(auditUnitLabel(log,log.unidade_atual)),
     device:exportSafeText(formatDispositivo(log)),summary:exportSafeText(generateHumanSummary(log)),
     error:exportSafeText(log.error_message||''),
     fields:Array.isArray(log.campos_alterados)?[...new Set(log.campos_alterados.filter((f):f is string=>typeof f==='string'&&!!f.trim()))].map(f=>isAuditSecret(f)?'Campo protegido':exportSafeText(formatAuditFieldLabel(f))):[]
@@ -619,7 +646,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
   const feedCounts=useMemo(()=>auditFeedCounts(feedEvents),[feedEvents]);
   const openFeedEvent=(id:string)=>{const log=logs.find(row=>row.id===id);if(log){setDetailState(null);setSelectedLog(log);}};
   const comparisons=useMemo(()=>selectedLog?auditComparisons(selectedLog):[],[selectedLog]);
-  const comparisonValue=(field:string,v:AuditValue)=>!v.present?'Não registrado':v.value===null?'Nulo registrado':v.value===''?'Vazio registrado':typeof v.value==='boolean'?(v.value?'Verdadeiro':'Falso'):formatAuditValue(field,v.value);
+  const comparisonValue=(field:string,v:AuditValue)=>!v.present?'Não registrado':v.value===null?'Nulo registrado':v.value===''?'Vazio registrado':typeof v.value==='boolean'?(v.value?'Verdadeiro':'Falso'):isAuditUnitField(field)&&typeof v.value==='string'?auditUnitLabel({unidade_id:v.value},selectedLog?.unidades_comparacao?.[v.value]):formatAuditValue(field,v.value);
   const detailConfirmed=!!selectedLog&&detailState?.id===selectedLog.id&&detailState.full===true;
 
   const clearFilters = () => {
@@ -690,7 +717,8 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
         return data as ReportEvent[];
       };
       const report=await readAuditReport(count,read,controller.signal,(n,total)=>{if(valid())setReportProgress({n,total});});
-      if(valid())setReportResult({report,period:{...draft,cutoff}});
+      const names=await resolveUnits(report.units.map(row=>({unidade_id:row.unitId,unidade_nome:row.nomeRegistrado})),controller.signal);
+      if(valid())setReportResult({report:{...report,units:report.units.map(row=>({...row,nome:auditUnitLabel({unidade_id:row.unitId,unidade_nome:row.nomeRegistrado},names.get(row.unitId))}))},period:{...draft,cutoff}});
     }catch(err){if(valid())setReportError(err instanceof Error?err.message:'Não foi possível confirmar o relatório.');}
     finally{if(reportController.current===controller){reportController.current=null;if(active.current)setReportLoading(false);}}
   };
@@ -777,7 +805,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
           return enrichAuditRow(redactAuditData({...event,detalhes:{usuario_cpf,entidade_nome:entidade_registrada}}) as EnrichedLog);
         });
       };
-      try{source=await readFilteredExport(formatType,count,read,controller.signal,(done,n)=>{if(active.current)setExportProgress(done.toLocaleString('pt-BR')+' de '+n.toLocaleString('pt-BR')+' eventos');});total=source.length;}
+      try{source=await readFilteredExport(formatType,count,read,controller.signal,(done,n)=>{if(active.current)setExportProgress(done.toLocaleString('pt-BR')+' de '+n.toLocaleString('pt-BR')+' eventos');});const names=await resolveUnits(source,controller.signal);if(controller.signal.aborted)throw Error('Consulta cancelada.');source=source.map(log=>({...log,unidade_atual:names.get(log.unidade_id)}));total=source.length;}
       finally{if(exportController.current===controller)exportController.current=null;}
     }
     if(!active.current)throw Error('Sessão alterada.');
@@ -789,7 +817,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
       ['Corte da consulta (UTC)',cutoff||'Página já carregada'],['Filtros',exportSafeText(JSON.stringify(snapshotFilters))],['Aviso',exportSafeText(warning)],['Metodologia','Metadados de eventos; não comprova autoria ou imutabilidade. Busca textual/CPF indicados sem divulgar o termo.']
     ];
     const headers=['Data/Hora (Oriximiná)','Usuário','CPF','Perfil','Ação','Resumo','Módulo','Registro afetado','Entidade','ID registro','Unidade','Status','IP','Dispositivo','Erro','ID evento'];
-    const rows=source.map(l=>[time(l.created_at),getAuditActorLabel(l),getCpfDisplay(l),l.role,l.acao_legivel||acaoLabels[l.acao]||l.acao,generateHumanSummary(l),moduloLabels[l.modulo]||l.modulo||l.entidade,l.paciente_nome||l.nome_entidade||'',l.entidade,l.entidade_id,l.unidade_nome||l.unidade_id||'',l.status,l.ip,formatDispositivo(l),l.error_message||'',l.id].map((v,i)=>i===9||i===15?auditSafeText(String(v??'')):exportSafeText(v)));
+    const rows=source.map(l=>[time(l.created_at),getAuditActorLabel(l),getCpfDisplay(l),l.role,l.acao_legivel||acaoLabels[l.acao]||l.acao,generateHumanSummary(l),moduloLabels[l.modulo]||l.modulo||l.entidade,l.paciente_nome||l.nome_entidade||'',l.entidade,l.entidade_id,auditUnitLabel(l,l.unidade_atual),l.status,l.ip,formatDispositivo(l),l.error_message||'',l.id].map((v,i)=>i===9||i===15?auditSafeText(String(v??'')):exportSafeText(v)));
     const pdfHeaders=['Data/hora','Responsável / CPF / perfil','Ação / módulo','Registro / unidade','Status / IP','ID do evento'];
     const pdfRows=rows.map(r=>[r[0],[r[1],r[2],r[3]].filter(Boolean).join(' · '),[r[4],r[6]].filter(Boolean).join(' · '),[r[7],r[10]].filter(Boolean).join(' · '),[r[11],r[12]].filter(Boolean).join(' · '),r[15]]);
     const content=formatType==='csv'?auditExportCsv(metadata,headers,rows):auditExportHtml(metadata,pdfHeaders,pdfRows);
@@ -826,7 +854,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
           <Badge variant="outline">{unitId?'Minha unidade':'Rede municipal'}</Badge>
         </div>
         <div className="flex gap-2 flex-wrap border-t border-border pt-3">
-          <Button variant="outline" size="sm" disabled={exportBusy} onClick={() => { cacheRef.current.clear(); setPage(0); setRevision(n=>n+1); }}>
+          <Button variant="outline" size="sm" disabled={exportBusy} onClick={() => { cacheRef.current.clear(); unitCache.current.clear(); setPage(0); setRevision(n=>n+1); }}>
             <RefreshCw className="w-4 h-4 mr-1" /> Atualizar
           </Button>
           <Button variant="outline" size="sm" aria-expanded={showFilters} onClick={() => setShowFilters(!showFilters)}>
@@ -1227,7 +1255,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                     </div>
                     <div>
                       <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Unidade</p>
-                      <p className="text-xs font-medium">{selectedLog.unidade_nome || selectedLog.unidade_id || 'Não informada'}</p>
+                      <p className="text-xs font-medium">{auditUnitLabel(selectedLog,selectedLog.unidade_atual)}</p>{selectedLog.unidade_id&&!recordedUnitName(selectedLog)&&!selectedLog.unidade_atual&&<p className="text-[10px] text-muted-foreground">Identificador técnico: {selectedLog.unidade_id}</p>}
                     </div>
                   </div>
                 </div>
@@ -1371,7 +1399,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
             {reportError&&<p role="alert" className="rounded-lg border border-destructive/40 p-3 text-sm text-destructive">{reportError}</p>}
             {reportResult&&<>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{[['Eventos',reportResult.report.totals.totalAcoes],['Responsáveis',reportResult.report.actors.length],['Unidades registradas',reportResult.report.units.length],['Sem responsável individual',reportResult.report.semResponsavel],['Logins confirmados',reportResult.report.totals.logins],['Tentativas registradas',reportResult.report.totals.tentativas],['Falhas de login',reportResult.report.totals.falhasLogin],['Erros / falhas',reportResult.report.totals.erros]].map(([label,value])=><div key={label} className="rounded-lg border p-3"><p className="text-xl font-semibold tabular-nums">{Number(value).toLocaleString('pt-BR')}</p><p className="text-xs text-muted-foreground">{label}</p></div>)}</div>
-              <p className="text-xs text-muted-foreground">Contagens inicial e final coincidentes no recorte autorizado, sem garantia de snapshot transacional. Nomes e perfis correspondem ao último evento registrado no período. Os números são eventos, não atendimentos únicos, frequência ou produtividade. Horário de Oriximiná.</p>
+              <p className="text-xs text-muted-foreground">Contagens inicial e final coincidentes no recorte autorizado, sem garantia de snapshot transacional. Nomes e perfis dos responsáveis correspondem ao último evento registrado no período. Nomes históricos de unidades têm prioridade; na ausência, o nome do cadastro atual é identificado como tal. Os números são eventos, não atendimentos únicos, frequência ou produtividade. Horário de Oriximiná.</p>
               <div className="flex flex-wrap justify-between gap-2">
                 <div className="flex flex-wrap gap-1">{(['actors','units'] as const).map(tab=><Button key={tab} size="sm" variant={reportTab===tab?'default':'outline'} aria-pressed={reportTab===tab} onClick={()=>{setReportTab(tab);setReportPage(0);}}>{tab==='actors'?'Por profissional':'Por unidade'}</Button>)}</div>
                 <div className="flex gap-2"><Button variant="outline" size="sm" disabled={!canExport||!reportExportable||exportBusy} onClick={()=>setExportRequest('report_csv')}><Download className="w-4 h-4 mr-1"/>CSV</Button><Button variant="outline" size="sm" disabled={!canExport||!reportPdfAllowed||exportBusy} onClick={()=>setExportRequest('report_pdf')}><FileText className="w-4 h-4 mr-1"/>PDF</Button></div>
