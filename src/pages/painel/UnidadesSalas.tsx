@@ -747,7 +747,7 @@ const UnidadesSalas: React.FC = () => {
               <label className="clinical-inset flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-4 cursor-pointer hover:bg-muted/50 text-sm">{enviando?<Loader2 className="w-5 h-5 animate-spin"/>:<Upload className="w-5 h-5 text-primary"/>}<span>{enviando?'Enviando vídeo...':'Selecionar arquivo MP4'}</span><span className="text-xs text-muted-foreground">Até 100 MB · recomendado H.264, 1080p</span><input type="file" accept="video/mp4" className="sr-only" disabled={blocked||enviando} onChange={e=>{const f=e.target.files?.[0];if(f)void enviarVideo(f);e.target.value='';}}/></label>
             </section>
             <p className="text-xs text-muted-foreground">A TV recebe a nova sequência somente depois que o servidor confirma o salvamento. {videoUrl.trim()?'O endereço ainda digitado também será incluído ao salvar.':''}</p>
-            <Button type="button" onClick={salvarVideo} disabled={blocked||enviando||!videoDirty} className="w-full gradient-primary text-primary-foreground">{saving?'Salvando...':'Salvar configuração'}</Button>
+            <Button type="button" onClick={salvarVideo} disabled={blocked||enviando} className="w-full gradient-primary text-primary-foreground">{saving?'Salvando...':'Salvar configuração'}</Button>
           </fieldset>
         </DialogContent>
       </Dialog>
