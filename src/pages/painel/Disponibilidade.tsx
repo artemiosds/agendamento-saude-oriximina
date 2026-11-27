@@ -116,7 +116,7 @@ const Disponibilidade: React.FC = () => {
   const {can,loading:permissionsLoading}=usePermissions();
   const scopeKey=JSON.stringify([user?.id,user?.role,userUnidadeId,isGlobalAdmin]);
   const scopeRef=useRef(scopeKey);scopeRef.current=scopeKey;
-  const may=(action:'can_create'|'can_edit'|'can_delete',unit?:string)=>!permissionsLoading&&!!user?.id&&can('disponibilidade','can_view')&&can('disponibilidade',action)&&(unit===undefined||unidadesVisiveis.some(u=>u.id===unit));
+  const may=(action:'can_create'|'can_edit'|'can_delete',unit?:string)=>!permissionsLoading&&!!user?.id&&can('disponibilidade','can_view')&&can('disponibilidade',action)&&(isGlobalAdmin||!!userUnidadeId)&&(unit===undefined||(isGlobalAdmin||unit===userUnidadeId)&&unidadesVisiveis.some(u=>u.id===unit));
   const { unitId, setUnitId } = useOperationalUnitScope(unidadesVisiveis, isGlobalAdmin);
 
   // Mode per professional
@@ -172,7 +172,7 @@ const Disponibilidade: React.FC = () => {
     };
     void read().catch(()=>{if(!cancelled){setQuotaReservation(null);setQuotaLoading(false);}});
     return () => { cancelled = true; };
-  }, [dialogOpen, form.profissionalId, form.unidadeId, form.dataInicio, form.dataFim]);
+  }, [dialogOpen, scopeKey, form.profissionalId, form.unidadeId, form.dataInicio, form.dataFim]);
 
   // Mode is a draft until the atomic grade RPC confirms the write.
   const loadConfig=useCallback(async()=>{
@@ -391,9 +391,10 @@ const Disponibilidade: React.FC = () => {
       if(scopeRef.current!==scope)return false;
       if(slots.length)setModosPorProfissional(old=>({...old,[group.profissionalId]:slots.some(s=>s.vagasPorHora===0)?'por_turno':'por_hora'}));
       toast.success(successMessage);
-      void refreshDisponibilidades().catch(error=>{console.error('Erro ao atualizar a lista de disponibilidades:',error);if(scopeRef.current===scope)toast.warning('Gravação confirmada, mas a lista não foi atualizada. Utilize Atualizar.');});
-      return true;
+      await refreshDisponibilidades().catch(error=>{console.error('Erro ao atualizar a lista de disponibilidades:',error);if(scopeRef.current===scope)toast.warning('Gravação confirmada, mas a lista não foi atualizada. Utilize Atualizar.');});
+      return scopeRef.current===scope;
     } catch (err) {
+      if(scopeRef.current!==scope)return false;
       const error = err as { code?: string; message?: string } | null;
       console.error('Erro ao gravar a grade de disponibilidade:', err);
       const knownError = ['40001', '23P01', '42501', '22023'].includes(error?.code || '');
@@ -616,6 +617,7 @@ const Disponibilidade: React.FC = () => {
     });
     const savedModo = modosPorProfissional[profId] || 'por_hora';
     setModo(savedModo);
+    setConfigDias(Array.from({length:7},(_,day)=>({diaSemana:day,ativo:day>=1&&day<=5,blocos:[]})));
     setDaySchedules(defaultDaySchedules.map(d => ({ ...d })));
     setTurnoDays(defaultTurnoDays.map(d => ({ ...d, turnosAtivos: [] })));
     setTurnoVagas({});
