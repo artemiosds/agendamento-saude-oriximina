@@ -63,9 +63,13 @@ export default function PainelChamadasConfig() {
       const cd = (cur?.custom_data as Record<string, unknown>) || {};
       const current = playlistPainel(cd, playlists[unidade]?.[0]);
       const next = videoPrincipalPainel(current, v);
-      const { error } = await supabase.from('unidades')
-        .update({ custom_data: { ...cd, video_urls: next, video_url: next[0] || '' } }).eq('id', unidade).select('id').single();
-      if (error) throw error;
+      // Same playlist semantics; merge only the video keys in the unit transaction.
+      const result = await supabase.rpc('salvar_estrutura_unidade' as any, {
+        p_action: 'video', p_id: unidade, p_unit: '',
+        p_data: { video_urls: next }, p_expected: cd,
+      } as any);
+      if (result.error) throw result.error;
+      if (result.data !== unidade) throw new Error('Servidor não confirmou o salvamento.');
       setPlaylists(old => ({ ...old, [unidade]: next }));
       setVideos(old => ({ ...old, [unidade]: next[0] || '' }));
       toast.success("Vídeo de espera salvo. A TV atualiza sozinha."); void avisarVideoAtualizado(unidade);
