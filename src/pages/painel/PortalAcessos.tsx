@@ -11,19 +11,23 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { KeyRound, Loader2, Search, ShieldCheck, Ban, UserPlus, Unlock, Eye, EyeOff, Wand2 } from 'lucide-react';
+import { KeyRound, Loader2, Search, ShieldCheck, Ban, UserPlus, Unlock, Eye, EyeOff, Wand2, UsersRound, Mail, CreditCard, RefreshCw, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { PORTAL_PERMISSOES_PADRAO, type PortalPermissoes } from '@/types';
+import { PORTAL_FILTERS, PORTAL_PAGE_SIZES, isPortalId, portalSearchExpression, maskPortalCpf, maskPortalEmail, portalPageRange, portalLastPage, portalLinkRate, type PortalFilter, type PortalPageSize, type PortalCounts } from '@/lib/portalAccessDirectory';
 import type { PortalChange } from '../../../supabase/functions/_shared/portal-admin-config';
 
 interface Pac { id: string; nome: string; cpf: string | null; email: string | null; auth_user_id: string | null; unidade_id: string | null }
 type Settings = { enabled: boolean; permissions: PortalPermissoes; blocked: string[]; canEditInstitutional: boolean };
 type ConfigDialog = { change: PortalChange; label: string; patient?: Pac };
 const EMPTY_BLOCKED: string[] = [];
+const FILTER_LABELS: Record<PortalFilter, string> = { todos: 'Pacientes cadastrados', ativo: 'Vínculos não bloqueados', bloqueado: 'Bloqueados', sem: 'Sem acesso', semEmail: 'Sem e-mail informado', semCpf: 'Sem CPF informado' };
+const FILTER_ICONS = { todos: UsersRound, ativo: ShieldCheck, bloqueado: Ban, sem: UserPlus, semEmail: Mail, semCpf: CreditCard };
+const NUMBER_FORMAT = new Intl.NumberFormat('pt-BR');
 function parseSettings(data: any): Settings | null {
   const v = data?.settings;
   if (data?.success !== true || typeof data.canEditInstitutional !== 'boolean' || typeof v?.enabled !== 'boolean' ||
-      !Array.isArray(v?.blocked) || v.blocked.some((id: unknown) => typeof id !== 'string') ||
+      !Array.isArray(v?.blocked) || v.blocked.some((id: unknown) => !isPortalId(id)) ||
       !v.permissions || Object.keys(PORTAL_PERMISSOES_PADRAO).some(k => typeof v.permissions[k] !== 'boolean')) return null;
   return { enabled: v.enabled, permissions: v.permissions, blocked: v.blocked, canEditInstitutional: data.canEditInstitutional };
 }
@@ -63,9 +67,13 @@ const PortalAcessos: React.FC = () => {
   const operation = useRef(false);
 
   const [busca, setBusca] = useState('');
-  const [lista, setLista] = useState<Pac[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [filtro, setFiltro] = useState<'todos' | 'ativo' | 'bloqueado' | 'sem'>('todos');
+  const [filtro, setFiltro] = useState<PortalFilter>('todos');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PortalPageSize>(25);
+  const [revision, setRevision] = useState(0);
+  const [directory, setDirectory] = useState<{key: string; rows: Pac[]; count: number} | null>(null);
+  const [directoryError, setDirectoryError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<{key: string; counts: PortalCounts} | null>(null);
   const [dlg, setDlg] = useState<{ pac: Pac; tipo: 'reset_password' | 'create_access' } | null>(null);
   const [senha, setSenha] = useState('');
   const [verSenha, setVerSenha] = useState(false);
@@ -82,8 +90,17 @@ const PortalAcessos: React.FC = () => {
   const bloqueados = settingsReady ? confirmed!.blocked : EMPTY_BLOCKED;
   const perms = settingsReady ? confirmed!.permissions : null;
   const canEditRules = settingsReady && confirmed!.canEditInstitutional && !restrito;
-  const [listScope, setListScope] = useState('');
-  const visibleList = listScope === scope && authorized ? lista : [];
+  const blockedKey = [...new Set(bloqueados)].sort().join(',');
+  const unitId = restrito ? user?.unidadeId : undefined;
+  const summaryKey = JSON.stringify([scope, settingsReady, blockedKey, revision]);
+  const directoryKey = JSON.stringify([summaryKey, filtro, busca, page, pageSize]);
+  const visibleList = authorized && directory?.key === directoryKey ? directory.rows : [];
+  const total = authorized && directory?.key === directoryKey ? directory.count : null;
+  const listFailed = directoryError === directoryKey;
+  const loading = authorized && total === null && !listFailed;
+  const counts = authorized && summary?.key === summaryKey ? summary.counts : null;
+  const linkRate = counts ? portalLinkRate(counts) : null;
+  const changeFilter = (value: PortalFilter) => { setFiltro(value); setPage(1); };
   const configSignal = JSON.stringify(configuracoes.portalPaciente ?? {});
 
   const readSettings = useCallback(async () => {
@@ -107,41 +124,69 @@ const PortalAcessos: React.FC = () => {
   // Reuse the existing shared configuration realtime notification; no new polling/subscription.
   useEffect(() => { void readSettings(); return () => { settingsSeq.current++; }; }, [readSettings, configSignal]);
   useEffect(() => {
-    if (!settingsReady && (filtro === 'ativo' || filtro === 'bloqueado')) setFiltro('todos');
+    if (!settingsReady && (filtro === 'ativo' || filtro === 'bloqueado')) { setFiltro('todos'); setPage(1); }
   }, [settingsReady, filtro]);
 
+  const makeQuery = useCallback((filter: PortalFilter, term: string, head = false) => {
+    // Keep existing authenticated client and RLS; never elevate the privileges of list reads.
+    let q = supabase.from('pacientes').select('id,nome,cpf,email,auth_user_id,unidade_id', { count: 'exact', head });
+    if (unitId) q = q.eq('unidade_id', unitId);
+    const blocked = blockedKey ? blockedKey.split(',') : [];
+    if (filter === 'ativo' || filter === 'bloqueado') q = q.not('auth_user_id', 'is', null);
+    if (filter === 'sem') q = q.is('auth_user_id', null);
+    if (filter === 'ativo' && blocked.length) q = q.not('id', 'in', '(' + blocked.join(',') + ')');
+    if (filter === 'bloqueado') q = q.in('id', blocked.length ? blocked : ['00000000-0000-0000-0000-000000000000']);
+    if (filter === 'semEmail') q = q.or('email.is.null,email.eq.""');
+    if (filter === 'semCpf') q = q.or('cpf.is.null,cpf.eq.""');
+    const expression = portalSearchExpression(term);
+    if (expression) q = q.or(expression);
+    else if (term.trim()) q = q.eq('id', '00000000-0000-0000-0000-000000000000');
+    return q;
+  }, [unitId, blockedKey]);
+
   useEffect(() => {
-    let current = true;
-    const t = setTimeout(async () => {
-      if (!authorized || !user) { setLista([]); setLoading(false); return; }
-      if ((filtro === 'ativo' || filtro === 'bloqueado') && !settingsReady) { setLista([]); setLoading(false); return; }
-      setLoading(true);
-      let q = (supabase as any).from('pacientes').select('id,nome,cpf,email,auth_user_id,unidade_id').order('nome').limit(100);
-      const termo = busca.trim();
-      if (termo) {
-        const dig = termo.replace(/\D/g, '');
-        const safe = termo.replace(/[,%()]/g, ' ');
-        q = q.or([`nome.ilike.%${safe}%`, `email.ilike.%${safe}%`, dig.length >= 3 ? `cpf.ilike.%${dig}%` : null].filter(Boolean).join(','));
-      }
-      if (filtro === 'ativo' || filtro === 'bloqueado') q = q.not('auth_user_id', 'is', null);
-      if (filtro === 'sem') q = q.is('auth_user_id', null);
-      if (filtro === 'bloqueado') q = q.in('id', bloqueados.length ? bloqueados : ['00000000-0000-0000-0000-000000000000']);
-      if (restrito) q = q.eq('unidade_id', user!.unidadeId);
-      const { data, error } = await q;
-      if (!current) return;
-      if (error) toast.error('Erro ao buscar pacientes.');
-      let rows: Pac[] = data || [];
-      if (filtro === 'ativo') rows = rows.filter(p => !bloqueados.includes(p.id));
-      setLista(rows);
-      setListScope(scope);
-      setLoading(false);
+    if (!authorized) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      if ((filtro === 'ativo' || filtro === 'bloqueado') && !settingsReady) return;
+      try {
+        const range = portalPageRange(page, pageSize);
+        const { data, count, error } = await makeQuery(filtro, busca)
+          .order('nome').order('id').range(range.from, range.to).abortSignal(controller.signal);
+        if (controller.signal.aborted) return;
+        // PostgREST may return HTTP 416 for a page which became empty.
+        // Move only when a count was actually supplied; otherwise show the read error.
+        if (count !== null && page > portalLastPage(count, pageSize)) { setPage(portalLastPage(count, pageSize)); return; }
+        if (error || !data || count === null) { setDirectoryError(directoryKey); return; }
+        setDirectory({ key: directoryKey, rows: data, count });
+        setDirectoryError(null);
+      } catch { if (!controller.signal.aborted) setDirectoryError(directoryKey); }
     }, 300);
-    return () => { current = false; clearTimeout(t); };
-  }, [busca, filtro, bloqueados.join(','), restrito, user?.unidadeId, scope, authorized, settingsReady]);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [authorized, directoryKey, filtro, busca, page, pageSize, settingsReady, makeQuery]);
+
+  // Only scoped HEAD counts: no patient records transferred, no queries per row,
+  // no refresh on search typing or page navigation.
+  useEffect(() => {
+    if (!authorized || settingsLoading) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      const values = await Promise.all(PORTAL_FILTERS.map(async filter => {
+        if (!settingsReady && (filter === 'ativo' || filter === 'bloqueado')) return [filter, null] as const;
+        try {
+          const { count, error } = await makeQuery(filter, '', true).abortSignal(controller.signal);
+          return [filter, error || count === null ? null : count] as const;
+        } catch { return [filter, null] as const; }
+      }));
+      if (!controller.signal.aborted) setSummary({ key: summaryKey, counts: Object.fromEntries(values) as PortalCounts });
+    }, 100);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [authorized, summaryKey, settingsReady, settingsLoading, makeQuery]);
 
   useEffect(() => {
     setDlg(null); setSenha(''); setMotivo(''); setVerSenha(false);
-    setConfigDlg(null); setConfigMotivo('');
+    setConfigDlg(null); setConfigMotivo(''); setPage(1); setBusca(''); setFiltro('todos');
+    setDirectory(null); setSummary(null); setDirectoryError(null);
   }, [scope]);
 
   const closeConfig = () => { if (!operation.current) { setConfigDlg(null); setConfigMotivo(''); } };
@@ -210,66 +255,99 @@ const PortalAcessos: React.FC = () => {
       }
       toast.success(dlg.tipo === 'reset_password' ? 'Senha alterada. Entregue a senha ao paciente identificado.' : 'Acesso criado. Entregue as credenciais ao paciente identificado.');
       if (data.auditConfirmed !== true) toast.warning('Alteração realizada, mas o registro de auditoria não foi confirmado.');
-      if (dlg.tipo === 'create_access') setLista(l => l.map(p => p.id === dlg.pac.id ? { ...p, auth_user_id: data.authUserId } : p));
       fechar();
     } catch {
       if (scopeRef.current === requestedScope) toast.error('Não foi possível confirmar a alteração. Confira o cadastro antes de repetir.');
-    } finally { operation.current = false; setSalvando(false); }
+    } finally { if (scopeRef.current === requestedScope) setRevision(n => n + 1); operation.current = false; setSalvando(false); }
   };
 
   const status = (p: Pac) => !p.auth_user_id ? 'sem' : !settingsReady ? 'incerto' : bloqueados.includes(p.id) ? 'bloqueado' : 'ativo';
 
-  const total = visibleList.length;
-
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold font-display text-foreground">Acessos ao Portal do Paciente</h1>
-        <p className="text-sm text-muted-foreground">Gerencie senhas, bloqueios e o que os pacientes podem ver no portal.</p>
-      </div>
+      <header className="rounded-xl border border-border bg-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="rounded-xl bg-primary/10 text-primary p-2.5 shrink-0"><ShieldCheck className="h-6 w-6" aria-hidden="true" /></div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Portal do Paciente · Gestão de acessos</p>
+            <h1 className="text-xl sm:text-2xl font-bold font-display text-foreground">Acessos ao Portal do Paciente</h1>
+            <p className="text-sm text-muted-foreground">Gerencie credenciais, bloqueios e permissões com segurança.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">{restrito ? 'Minha unidade' : 'Rede municipal'}</Badge>
+          <Badge variant="outline" className={settingsReady && confirmed?.enabled ? 'text-success' : 'text-muted-foreground'}>{!settingsReady ? 'Portal não confirmado' : confirmed?.enabled ? 'Portal habilitado' : 'Portal desativado'}</Badge>
+          <Button size="sm" variant="outline" disabled={!authorized || salvando || settingsLoading} onClick={() => { setRevision(n => n + 1); void readSettings(); }}><RefreshCw className="h-4 w-4 mr-1" />Atualizar</Button>
+        </div>
+      </header>
 
       {(!settingsReady || settingsLoading) && <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm">
         <span>{settingsLoading ? 'Conferindo regras e bloqueios do portal…' : 'Não foi possível confirmar as regras e bloqueios. As alterações de configuração estão suspensas até uma leitura válida.'}</span>
         {!settingsLoading && authorized && <Button size="sm" variant="outline" disabled={salvando} onClick={() => void readSettings()}>Tentar novamente</Button>}
       </div>}
       <Tabs defaultValue="pacientes">
-        <TabsList>
+        <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="pacientes">Pacientes</TabsTrigger>
           <TabsTrigger value="regras">O que o paciente pode ver</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pacientes" className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, CPF ou e-mail" className="pl-9" />
+          <section className="space-y-2" aria-label="Indicadores de acesso">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
+              {PORTAL_FILTERS.map(key => {
+                const Icon = FILTER_ICONS[key];
+                const value = counts?.[key];
+                return <button key={key} type="button" aria-pressed={filtro === key} disabled={!authorized || (!settingsReady && (key === 'ativo' || key === 'bloqueado'))}
+                  onClick={() => changeFilter(key)}
+                  className={'min-w-0 rounded-xl border bg-card p-3 text-left transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ' + (filtro === key ? 'border-primary ring-1 ring-primary/30' : 'border-border')}>
+                  <div className="flex items-center justify-between gap-1"><Icon className={'h-4 w-4 ' + (key === 'bloqueado' ? 'text-destructive' : key === 'ativo' ? 'text-success' : 'text-primary')} aria-hidden="true" /><ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true"/></div>
+                  <div className="mt-2 text-xl sm:text-2xl font-bold tabular-nums">{value == null ? '—' : NUMBER_FORMAT.format(value)}</div>
+                  <div className="text-xs leading-snug text-muted-foreground break-words">{FILTER_LABELS[key]}</div>
+                </button>;
+              })}
             </div>
-            <div className="flex gap-1 flex-wrap">
-              {([['todos', 'Todos'], ['ativo', 'Ativos'], ['bloqueado', 'Bloqueados'], ['sem', 'Sem acesso']] as const).map(([k, l]) => (
-                <Button key={k} size="sm" variant={filtro === k ? 'default' : 'outline'} disabled={!settingsReady && (k === 'ativo' || k === 'bloqueado')} onClick={() => setFiltro(k)}>{l}</Button>
-              ))}
+            <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span><strong className="text-foreground">Fichas vinculadas:</strong> {linkRate === null ? 'Não confirmado' : NUMBER_FORMAT.format(linkRate) + '%'}</span>
+              <span>Contagens da abrangência autorizada, sem filtro de busca. Vínculo não comprova login ou uso do portal.</span>
+              {counts && PORTAL_FILTERS.some(k => counts[k] === null) && <span role="status">Indicadores com — não puderam ser confirmados.</span>}
+            </div>
+          </section>
+          <div className="rounded-xl border border-border bg-card p-3 space-y-3">
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true"/>
+              <Input aria-label="Buscar pacientes" value={busca} maxLength={100} onChange={e => { setBusca(e.target.value); setPage(1); }} placeholder="Buscar por nome, CPF ou e-mail" className="pl-9 pr-20"/>
+              {busca && <Button variant="ghost" size="sm" className="absolute right-1 top-1/2 -translate-y-1/2 h-7" onClick={() => { setBusca(''); setPage(1); }}>Limpar</Button>}
+            </div>
+            <div className="flex gap-1 flex-wrap" aria-label="Filtros de pacientes">
+              {PORTAL_FILTERS.map(k => <Button key={k} size="sm" aria-pressed={filtro === k} variant={filtro === k ? 'default' : 'outline'}
+                disabled={!authorized || (!settingsReady && (k === 'ativo' || k === 'bloqueado'))}
+                onClick={() => changeFilter(k)}>{k === 'todos' ? 'Todos' : k === 'ativo' ? 'Não bloqueados' : FILTER_LABELS[k]}</Button>)}
             </div>
           </div>
 
           <Card className="border border-border/50">
             <CardContent className="p-0 divide-y divide-border">
-              {loading ? (
-                <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+              {!authorized ? (
+                <p className="p-8 text-center text-sm text-muted-foreground">Acesso administrativo não autorizado.</p>
+              ) : listFailed ? (
+                <div role="alert" className="p-6 flex flex-col items-center gap-2 text-sm"><AlertCircle className="h-5 w-5 text-muted-foreground"/>Não foi possível consultar os pacientes. Nenhum resultado foi presumido.<Button size="sm" variant="outline" onClick={() => setRevision(n => n + 1)}>Tentar novamente</Button></div>
+              ) : loading ? (
+                <div role="status" className="p-8 flex justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin text-primary" />Consultando pacientes…</div>
               ) : total === 0 ? (
                 <p className="p-8 text-center text-sm text-muted-foreground">Nenhum paciente encontrado.</p>
               ) : visibleList.map(p => {
                 const st = status(p);
                 return (
-                  <div key={p.id} className="p-3 flex flex-col md:flex-row md:items-center gap-2 justify-between">
+                  <div key={p.id} className="px-3 py-3 sm:px-4 flex flex-col md:flex-row md:items-center gap-2 justify-between hover:bg-muted/20">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-foreground truncate">{p.nome}</span>
+                        <span className="font-medium text-foreground break-words">{p.nome}</span>
                         {st === 'ativo' && (confirmed?.enabled ? <Badge className="bg-success/10 text-success border-0">Acesso ativo</Badge> : <Badge variant="outline">Vínculo ativo · portal desativado</Badge>)}
                         {st === 'bloqueado' && <Badge className="bg-destructive/10 text-destructive border-0">Bloqueado</Badge>}
                         {st === 'sem' && <Badge variant="outline" className="text-muted-foreground">Sem acesso</Badge>}
                         {st === 'incerto' && <Badge variant="outline">Vínculo existente · status a conferir</Badge>}
                       </div>
-                      <p className="text-xs text-muted-foreground">CPF: {p.cpf || '—'} · Login: {p.email || 'sem e-mail'}</p>
+                      <p className="text-xs text-muted-foreground">CPF: {maskPortalCpf(p.cpf)} · Login: {maskPortalEmail(p.email)}</p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
                       {p.auth_user_id ? (
@@ -288,7 +366,18 @@ const PortalAcessos: React.FC = () => {
               })}
             </CardContent>
           </Card>
-          <p className="text-xs text-muted-foreground">Mostrando até 100 pacientes. Use a busca para encontrar outros.</p>
+                    <nav aria-label="Paginação dos pacientes" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3 text-xs">
+            <div aria-live="polite" className="text-muted-foreground">{total === null ? 'Total não confirmado' : total === 0 ? '0 registros' : `${NUMBER_FORMAT.format((page-1)*pageSize+1)}–${NUMBER_FORMAT.format(Math.min(page*pageSize,total))} de ${NUMBER_FORMAT.format(total)} registros`}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor="portal-page-size" className="text-muted-foreground">Por página</label>
+              <select id="portal-page-size" value={pageSize} onChange={e => { const value = Number(e.target.value); if (PORTAL_PAGE_SIZES.some(n => n === value)) { setPageSize(value as PortalPageSize); setPage(1); } }} className="h-8 rounded-md border border-input bg-background px-2 text-foreground">
+                {PORTAL_PAGE_SIZES.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <Button size="sm" variant="outline" aria-label="Página anterior" disabled={page <= 1 || loading || listFailed} onClick={() => setPage(n => Math.max(1,n-1))}><ChevronLeft className="h-4 w-4"/></Button>
+              <span className="tabular-nums whitespace-nowrap">Página {page}{total !== null ? ' de ' + portalLastPage(total,pageSize) : ''}</span>
+              <Button size="sm" variant="outline" aria-label="Próxima página" disabled={total === null || loading || page >= portalLastPage(total,pageSize)} onClick={() => setPage(n => n+1)}><ChevronRight className="h-4 w-4"/></Button>
+            </div>
+          </nav>
         </TabsContent>
 
         <TabsContent value="regras">
