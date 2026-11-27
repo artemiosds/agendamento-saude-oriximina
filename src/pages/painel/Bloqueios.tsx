@@ -3,6 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/hooks/queries/queryKeys';
 import { buildBlockDirectory, blockSummary, filterBlockDirectory, emptyBlockFilter, validBlockDate, normalizeBlock, type BlockFilter, type BlockStatus } from '@/lib/blockDirectory';
 import BlockCalendar from '@/components/BlockCalendar';
+import HolidayImportDialog,{fetchHolidayBlocks} from '@/components/HolidayImportDialog';
+import {holidayCatalog,holidayEligibility,holidayPayload} from '@/lib/holidayCatalog';
 import BlockAppointmentReview from '@/components/BlockAppointmentReview';
 import {blockPreset,blockDraftDays,validBlockDraft,blockDraftOverlap} from '@/lib/blockDraft';
 import { usePermissions } from '@/contexts/PermissionsContext';
@@ -29,23 +31,6 @@ const tipoOptions = [
   { value: 'ferias',           label: '📅 Recesso / Férias',      badge: 'bg-info/10 text-info' },
   { value: 'reuniao',          label: '📋 Reunião',               badge: 'bg-warning/10 text-warning' },
   { value: 'indisponibilidade',label: '👤 Indisponibilidade',     badge: 'bg-muted text-muted-foreground' },
-];
-
-const feriadosNacionais2026 = [
-  { date: '2026-01-01', reason: 'Confraternização Universal' },
-  { date: '2026-02-16', reason: 'Carnaval' },
-  { date: '2026-02-17', reason: 'Carnaval' },
-  { date: '2026-02-18', reason: 'Quarta-feira de Cinzas (meio dia)' },
-  { date: '2026-04-03', reason: 'Sexta-feira Santa' },
-  { date: '2026-04-21', reason: 'Tiradentes' },
-  { date: '2026-05-01', reason: 'Dia do Trabalho' },
-  { date: '2026-06-04', reason: 'Corpus Christi' },
-  { date: '2026-09-07', reason: 'Independência do Brasil' },
-  { date: '2026-10-12', reason: 'Nossa Senhora Aparecida' },
-  { date: '2026-11-02', reason: 'Finados' },
-  { date: '2026-11-15', reason: 'Proclamação da República' },
-  { date: '2026-11-20', reason: 'Consciência Negra' },
-  { date: '2026-12-25', reason: 'Natal' },
 ];
 
 // ── Roles que são considerados "profissional de saúde" ──────────────────────
@@ -79,6 +64,7 @@ const Bloqueios: React.FC = () => {
 
   const [dialogOpen, setDialogOpen]     = useState(false);
   const [importing, setImporting]       = useState(false);
+  const [importOpen,setImportOpen]=useState(false);
   const [buscaProfissional, setBuscaProfissional] = useState('');
 
   const [form, setForm] = useState({
@@ -198,7 +184,7 @@ const Bloqueios: React.FC = () => {
     setBuscaProfissional('');
   };
 
-  useEffect(()=>{setDialogOpen(false);resetForm();},[scopeKey]);
+  useEffect(()=>{setDialogOpen(false);setImportOpen(false);resetForm();},[scopeKey]);
 
   const handleSave = async () => {
     if(writeInFlight.current||!canCreate)return;
@@ -272,25 +258,27 @@ const Bloqueios: React.FC = () => {
     }finally{writeInFlight.current=false;setSaving(false);}
   };
 
-  const handleImportHolidays = async () => {
-    if(writeInFlight.current||!canCreate||!isGlobalAdmin)return;
-    if(!window.confirm('Importar as datas faltantes da lista de 2026? Cada data importada bloqueará novos agendamentos em todas as unidades. Os registros existentes serão preservados.'))return;
+  const handleImportHolidays = async (year:number,dates:string[]) => {
+    if(writeInFlight.current||!canCreate||!isGlobalAdmin||!user?.id||!importOpen)return;
+    const catalog=holidayCatalog(year);
+    const unique=new Set(dates);
+    const selected=catalog.filter(f=>unique.has(f.date));
+    if(!selected.length||selected.length!==unique.size||unique.size!==dates.length||selected.some(f=>!f.verified||f.date<todayStr)){toast.error('Seleção inválida ou não confirmada. Confira as datas.');return;}
     const scope=scopeKey;writeInFlight.current=true;setImporting(true);
     try {
-      // Query the current server snapshot; do not trust the potentially stale directory cache.
-      const {data,error,count}=await supabase.from('bloqueios').select('data_inicio,data_fim,unidade_id,profissional_id',{count:'exact'}).eq('tipo','feriado').lte('data_inicio','2026-12-31').gte('data_fim','2026-01-01').limit(1000);
-      if(error||!data||count!==data.length)throw error||new Error('Lista de feriados não confirmada.');
+      const existing=await fetchHolidayBlocks(year);
       if(scopeRef.current!==scope)return;
-      const missing=feriadosNacionais2026.filter(f=>!data.some(b=>!b.unidade_id&&!b.profissional_id&&b.data_inicio<=f.date&&b.data_fim>=f.date));
-      const toImport=missing.filter(f=>!f.reason.includes('meio dia'));
-      const skipped=missing.length-toImport.length;
-      if(!toImport.length){toast.info(skipped?'Quarta-feira de Cinzas exige conferência manual do horário parcial.':'Todas as datas da lista já estão cadastradas.');return;}
-      const {data:inserted,error:insertError}=await supabase.from('bloqueios').insert(toImport.map(f=>({titulo:f.reason,tipo:'feriado',data_inicio:f.date,data_fim:f.date,dia_inteiro:true,hora_inicio:'',hora_fim:'',unidade_id:'',profissional_id:'',criado_por:user?.id||''}))).select('id');
-      if(insertError||inserted?.length!==toImport.length)throw insertError||new Error('Importação não confirmada.');
+      const now=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santarem',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+      const currentDate=['year','month','day'].map(t=>now.find(p=>p.type===t)?.value||'').join('-');
+      if(selected.some(f=>holidayEligibility(f,existing,currentDate)!=='disponivel')){toast.error('A lista mudou ou alguma data deixou de estar disponível. Nenhum registro foi gravado. Atualize a conferência.');return;}
+      const {data:inserted,error:insertError}=await supabase.from('bloqueios').insert(selected.map(f=>holidayPayload(f,user.id))).select('id');
+      if(insertError||inserted?.length!==selected.length)throw insertError||new Error('Importação não confirmada. Atualize a lista antes de tentar novamente.');
       if(scopeRef.current!==scope)return;
-      await logAction({acao:'importar_feriados',entidade:'bloqueio',detalhes:{total:inserted.length,ano:2026},user});
-      toast.success(`${inserted.length} datas de 2026 importadas!`);
-      if(skipped)toast.warning('Quarta-feira de Cinzas não importada: confirme o horário parcial manualmente.');
+      setImportOpen(false);
+      toast.success(`${inserted.length} datas de ${year} importadas!`);
+      // A secondary audit/cache failure must not imply the confirmed insert failed.
+      try{await logAction({acao:'importar_feriados',entidade:'bloqueio',detalhes:{total:inserted.length,ano:year,datas:selected.map(f=>({data:f.date,categoria:f.kind,fonte:f.source,diaInteiro:f.fullDay}))},user});}
+      catch{toast.warning('Importação confirmada. Registro adicional de auditoria não confirmado.');}
       await refreshBloqueios().catch(()=>toast.warning('Importação confirmada. Atualize a lista para conferir.'));
     }catch(err){if(scopeRef.current===scope)toast.error(errorMessage(err));}
     finally{writeInFlight.current=false;setImporting(false);}
@@ -336,11 +324,12 @@ const Bloqueios: React.FC = () => {
         </div>
         <div className="flex flex-wrap gap-2">
           {isGlobalAdmin&&canCreate && (
-            <Button variant="outline" size="sm" className="clinical-hub-new gap-1.5" onClick={handleImportHolidays} disabled={busy}>
+            <Button variant="outline" size="sm" className="clinical-hub-new gap-1.5" onClick={()=>{if(!writeInFlight.current&&canCreate&&isGlobalAdmin)setImportOpen(true);}} disabled={busy}>
               <Download className="w-4 h-4 mr-2" />
-              {importing ? 'Importando...' : 'Importar Feriados 2026'}
+              {importing ? 'Importando...' : 'Importar Feriados'}
             </Button>
           )}
+          {importOpen&&isGlobalAdmin&&canCreate&&<HolidayImportDialog key={scopeKey} open={importOpen} onClose={()=>{if(!writeInFlight.current)setImportOpen(false);}} scope={scopeKey} today={todayStr} busy={importing} onImport={handleImportHolidays}/>}
           {canCreate && (
             <Dialog open={dialogOpen} onOpenChange={(open) => { if(writeInFlight.current)return; if(open&&!canCreate)return;setDialogOpen(open); if (!open) resetForm(); }}>
               <DialogTrigger asChild>
