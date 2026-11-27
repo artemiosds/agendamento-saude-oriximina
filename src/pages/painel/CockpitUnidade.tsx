@@ -143,6 +143,7 @@ export default function CockpitUnidade() {
   const [selected, select] = useState('');
   const [now, setNow] = useState(Date.now);
   const [theater, setTheater] = useState(false);
+  const [fullscreenActive, setFullscreenActive] = useState(false);
   const board = useRef<HTMLElement>(null);
   const hadFullscreen = useRef(false);
   const restoreFocus = useRef<HTMLElement | SVGElement | null>(null);
@@ -150,7 +151,9 @@ export default function CockpitUnidade() {
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 10000);
     const update = () => {
-      if (document.fullscreenElement && document.fullscreenElement === board.current) hadFullscreen.current = true;
+      const active = !!document.fullscreenElement && document.fullscreenElement === board.current;
+      setFullscreenActive(active);
+      if (active) hadFullscreen.current = true;
       else if (hadFullscreen.current) { hadFullscreen.current = false; setTheater(false); }
     };
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !document.fullscreenElement) setTheater(false); };
@@ -177,7 +180,8 @@ export default function CockpitUnidade() {
     } else {
       restoreFocus.current = button;
       setTheater(true);
-      void board.current?.requestFullscreen?.().catch(() => {});
+      // Older TV browsers may not implement or allow fullscreen; CSS mode remains usable.
+      try { void board.current?.requestFullscreen?.().catch(() => {}); } catch { /* CSS fallback */ }
     }
   };
 
@@ -190,6 +194,7 @@ export default function CockpitUnidade() {
         <div><span className="planta-kicker">Secretaria Municipal de Saúde</span><h1>Planta Viva <span>· Cockpit da Unidade</span></h1></div>
       </div>
       <div className="planta-tools">
+        {theater && <div className="planta-theater-clock"><strong>{hourFormat.format(now)}</strong><small>{dateLabel(day)} · {fullscreenActive ? 'Tela cheia' : 'Modo monitor'}</small></div>}
         {isGlobalAdmin && !theater && <label className="planta-unit-select"><span>Unidade</span>
           <select title={unit?.nome} value={unit?.id || ''} disabled={!units.length} onChange={e => select(e.target.value)}>
             {units.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
@@ -208,6 +213,9 @@ export default function CockpitUnidade() {
 
 function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName: string; day: string; now: number; theater: boolean }) {
   const [zone, setZone] = useState<string | null>(null);
+  const [mapMode, setMapMode] = useState<'mapa' | 'lista'>('mapa');
+  const [mapScale, setMapScale] = useState<'leitura' | 'geral'>('leitura');
+  const effectiveMapMode = theater ? 'mapa' : mapMode;
   const [acknowledged, setAcknowledged] = useState<Set<string>>(() => new Set());
   const viewport = useRef<HTMLDivElement>(null);
   const lastTrigger = useRef<HTMLElement | SVGElement | null>(null);
@@ -223,8 +231,8 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     const wrap = viewport.current;
     const target = id ? zoneElement(id) : wrap?.querySelector<SVGElement>('[data-state]');
     if (!target || !wrap) return;
-    target.scrollIntoView({ block: 'nearest', inline: 'nearest',
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    target.scrollIntoView?.({ block: 'nearest', inline: 'nearest',
+      behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     target.focus({ preventScroll: true });
   };
   const { salas, funcionarios } = useOperacional();
@@ -648,7 +656,9 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     <section className="planta-board" aria-label="Planta operacional">
       <header className="planta-board-head">
         <div className="planta-location"><Building2 size={20} aria-hidden="true" />
-          <div><h2>{unitName}</h2><p>{rows ? `${rooms.length} salas ativas cadastradas · ` : ''}{dateLabel(day)}</p></div>
+          <div><h2>{unitName}</h2><p>{rows ? `${rooms.length} salas ativas cadastradas · ` : ''}{dateLabel(day)}</p>
+            <span className="planta-sync" role="status" data-online={!!rows && !stale}><i aria-hidden="true" />{syncLabel}{lastReading}</span>
+          </div>
         </div>
         {rows && <div className="planta-legend" aria-label="Legenda das salas">
           {(Object.entries(roomStatuses) as [RoomState, string][]).map(([state, text]) =>
@@ -657,16 +667,42 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
       </header>
       {error && <p className="planta-error" role="alert">O painel não conseguiu atualizar todos os dados. Tente atualizar.</p>}
       {rows && <>
-        {!theater && <nav className="planta-mobile-zones" aria-label="Atalhos da planta">
+        <div className="planta-view-tools">
+          {!theater && <div className="planta-view-switch" role="group" aria-label="Visualização dos ambientes">
+            <button type="button" className="planta-action" aria-pressed={mapMode === 'mapa'} onClick={() => setMapMode('mapa')}>Planta</button>
+            <button type="button" className="planta-action" aria-pressed={mapMode === 'lista'} onClick={() => setMapMode('lista')}>Lista de salas</button>
+          </div>}
+          {effectiveMapMode === 'mapa' && <div className="planta-view-switch" role="group" aria-label="Escala da planta">
+            <button type="button" className="planta-action" aria-pressed={mapScale === 'leitura'} onClick={() => setMapScale('leitura')}>Leitura ampliada</button>
+            <button type="button" className="planta-action" aria-pressed={mapScale === 'geral'} onClick={() => setMapScale('geral')}>Visão geral</button>
+          </div>}
+          <small>{effectiveMapMode === 'lista' ? 'Abra uma sala para consultar os detalhes.' : mapScale === 'leitura' ? 'Deslize a planta quando necessário.' : 'Visão completa em escala reduzida.'}</small>
+        </div>
+        {!theater && effectiveMapMode === 'mapa' && <nav className="planta-mobile-zones" aria-label="Atalhos da planta">
           <button type="button" className="planta-action" onClick={() => scrollToZone('recepcao')}>Recepção</button>
           {!!currentRooms.length && <button type="button" className="planta-action" onClick={() => scrollToZone()}>Salas cadastradas</button>}
           <button type="button" className="planta-action" onClick={() => scrollToZone('procedimentos')}>Procedimentos</button>
         </nav>}
-        <PlantaUnidade rooms={currentRooms} waiting={mapWaiting} longest={longest}
-          procedures={mapProcedures} waitingCare={waitingCare.length} viewport={viewport} alerts={alertZones} onOpen={theater ? undefined : openZone} />
+        {effectiveMapMode === 'mapa' ? <div className="planta-map-scale" data-scale={mapScale}>
+          <PlantaUnidade rooms={currentRooms} waiting={mapWaiting} longest={longest}
+            procedures={mapProcedures} waitingCare={waitingCare.length} viewport={viewport} alerts={alertZones} onOpen={theater ? undefined : openZone} />
+        </div> : <div className="planta-room-directory" aria-label="Salas cadastradas">
+          <div className="planta-directory-common">
+            <button type="button" className="planta-indicator-room" aria-haspopup="dialog" onClick={event => openZone('recepcao', event.currentTarget)}><span><strong>Recepção e sala de espera</strong><small>{waiting.length} aguardando</small></span><ChevronRight size={16} aria-hidden="true"/></button>
+            <button type="button" className="planta-indicator-room" aria-haspopup="dialog" onClick={event => openZone('procedimentos', event.currentTarget)}><span><strong>Medicação e sessões</strong><small>{procedureActive.length} em andamento · {waitingCare.length} aguardando equipe</small></span><ChevronRight size={16} aria-hidden="true"/></button>
+          </div>
+          {!currentRooms.length && <p className="planta-empty">Nenhuma sala ativa cadastrada.</p>}
+          {currentRooms.map(room => <button key={room.id} type="button" className="planta-directory-room" aria-haspopup="dialog" data-state={room.state} data-alert={alertZones.get(room.id)}
+            onClick={event => openZone(room.id, event.currentTarget)}>
+            <span><strong>{room.name}</strong><small>{room.specialty || 'Especialidade não informada'}</small></span>
+            <span className="planta-directory-state">{roomStatuses[room.state]}{room.elapsed !== null ? ' · ' + room.elapsed + ' min' : ''}</span>
+            <small>{room.overdue > 0 ? room.overdue + ' aguardando 20+ min · ' : ''}{room.historyLabel ?? room.completed + ' concluídos'}</small>
+            <ChevronRight size={16} aria-hidden="true"/>
+          </button>)}
+        </div>}
       </>}
       <footer className="planta-footer">
-        <div className="planta-statuses"><span className="planta-sync" role="status" data-online={!!rows && !stale}><i aria-hidden="true" />{syncLabel}{lastReading}</span>
+        <div className="planta-statuses"><span>Monitoramento administrativo · {theater ? 'Sem identificação de pacientes' : 'Dados da unidade selecionada'}</span>
           {!theater && unmapped.length > 0 && <button type="button" className="planta-action" onClick={e => openZone('sem-sala', e.currentTarget)}>{unmapped.length} em atendimento sem sala</button>}
           {theater && unmapped.length > 0 && <span>{unmapped.length} em atendimento sem sala</span>}
         </div>
