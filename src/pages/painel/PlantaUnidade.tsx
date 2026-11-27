@@ -1,6 +1,7 @@
 import { memo, useId } from 'react';
 import type { ReactNode, Ref } from 'react';
 import { AvatarPersonagem } from './AvatarPersonagem';
+import { roomIllustration, type RoomIllustration } from '@/lib/unitCockpit';
 
 export type RoomState = 'free' | 'calling' | 'occupied' | 'bottleneck';
 export const roomStatuses: Record<RoomState, string> = {
@@ -115,20 +116,105 @@ function Zone({ id, title, summary, x, y, w, h, color, children, lower = false, 
     <rect className="planta-focus" x={x + 2} y={y + 2} width={w - 4} height={h - 4} rx="5" />
   </g>;
 }
+
+/** Decorative SVG furniture, not a representation of the actual inventory or capacity.
+ * Static and memoized: timers and patient state do not rebuild the equipment.
+ */
+const RoomEquipment = memo(function RoomEquipment({ kind, x, y, w }: { kind: RoomIllustration; x: number; y: number; w: number }) {
+  const right = x + w - 72;
+  return <g data-room-layout={kind} aria-hidden="true" pointerEvents="none">
+    {kind === 'physio' ? <>
+      <g transform={`translate(${right} ${y + 66})`}>
+        <rect width="61" height="24" rx="4" fill="#dce7f0" stroke="#87a6b9"/>
+        <path d="M5 3v18m50-18v18M17 4v16m26-16v16" stroke="#f6fbff" strokeWidth="1.3"/>
+        <path d="M5 6h51M5 18h51" stroke="#547d86" strokeWidth="2.5" strokeLinecap="round"/>
+        <circle cx="13" cy="41" r="10" fill="#86b8c3" stroke="#5d909e"/>
+        <path d="M7 36q6-5 12 0" fill="none" stroke="#e4f4f8"/>
+        <rect x="30" y="31" width="29" height="17" rx="4" fill="#d1b89b" stroke="#a08b70"/>
+        <path d="M34 36h21m-21 5h21" stroke="#f5e7ce"/>
+      </g>
+    </> : kind === 'speech' ? <>
+      <g transform={`translate(${right} ${y + 65})`}>
+        <rect width="61" height="28" rx="4" fill="#e8e1f3" stroke="#a49ab8"/>
+        <rect x="4" y="4" width="17" height="19" rx="2" fill="#d2e8eb" stroke="#81a9b0"/>
+        <rect x="26" y="5" width="30" height="17" rx="3" fill="#fffaf1" stroke="#bbad97"/>
+        <path d="M30 13q4-7 8 0t8 0 6 0" fill="none" stroke="#866c9e" strokeWidth="1.5"/>
+        <path d="M14 34a9 9 0 0 1 18 0v8m-18-8v8" fill="none" stroke="#63768b" strokeWidth="2.5"/>
+        <rect x="10" y="39" width="6" height="9" rx="2" fill="#719ca7"/><rect x="30" y="39" width="6" height="9" rx="2" fill="#719ca7"/>
+        <rect x="43" y="34" width="17" height="15" rx="3" fill="#d6bfa5" stroke="#b79c80"/>
+      </g>
+    </> : kind === 'dental' ? <>
+      <g transform={`translate(${right} ${y + 64})`}>
+        <rect x="21" y="2" width="23" height="12" rx="6" fill="#c6e2dc" stroke="#739e98"/>
+        <rect x="18" y="12" width="29" height="34" rx="8" fill="#88b8ae" stroke="#5c9185"/>
+        <rect x="22" y="15" width="21" height="14" rx="5" fill="#e2f1e9"/>
+        <path d="M14 25h5m28 0h6m-21 20v4" stroke="#688781" strokeWidth="2.4" strokeLinecap="round"/>
+        <path d="M3 4h12v10" stroke="#6b8985" strokeWidth="2" fill="none"/>
+        <ellipse cx="15" cy="18" rx="8" ry="4" fill="#faf5d9" stroke="#a8a183"/>
+        <rect x="50" y="4" width="13" height="18" rx="3" fill="#e7f3ee" stroke="#83a59c"/>
+      </g>
+    </> : kind === 'nursing' ? <>
+      <Stretcher x={right + 6} y={y + 67}/>
+      <g transform={`translate(${right + 4} ${y + 98})`}>
+        <rect width="31" height="16" rx="3" fill="#dce9e8" stroke="#8daaa3"/>
+        <path d="M6 8h5l3-4 3 8 3-4h5" stroke="#3b8f87" fill="none" strokeWidth="1.4"/>
+        <rect x="39" width="20" height="16" rx="2" fill="#f8f9ee" stroke="#a2b7a9"/>
+        <path d="M49 3v10m-5-5h10" stroke="#659b8c" strokeWidth="2"/>
+      </g>
+    </> : kind === 'psychology' ? <>
+      <g transform={`translate(${right} ${y + 67})`}>
+        <rect width="62" height="48" rx="9" fill="#e9e2d8" stroke="#d3c6b4"/>
+        <Chair x={13} y={14} rotate={25} color="#c8c6d9"/>
+        <Chair x={46} y={34} rotate={205} color="#c8c6d9"/>
+        <circle cx="30" cy="24" r="8" fill="#e8d6ba" stroke="#b9a487"/>
+        <circle cx="30" cy="24" r="3" fill="#9db5a5"/>
+      </g>
+    </> : kind === 'nutrition' ? <>
+      <g transform={`translate(${right} ${y + 68})`}>
+        <rect width="30" height="34" rx="4" fill="#e4efdc" stroke="#a4b79a"/>
+        <rect x="8" y="5" width="14" height="9" rx="2" fill="#f9fdf5" stroke="#8ca58a"/>
+        <path d="M12 10h6" stroke="#759477"/>
+        <path d="M39 0v36m0-33h12m-12 8h8m-8 8h12m-12 8h8" stroke="#78958b" strokeWidth="1.4"/>
+        <rect x="37" y="36" width="25" height="6" rx="2" fill="#b9cdc4" stroke="#8fa99e"/>
+      </g>
+    </> : kind === 'occupational' ? <>
+      <g transform={`translate(${right} ${y + 66})`}>
+        <rect width="62" height="28" rx="5" fill="#ebddc2" stroke="#ad987b"/>
+        {['#9ebbcf','#d9b48c','#98bca7','#bcacd2'].map((color,i)=><rect key={color} x={6 + i*13} y="8" width="10" height="11" rx="2" fill={color}/>)}
+        <rect x="3" y="32" width="55" height="17" rx="3" fill="#dce9e4" stroke="#9bb7a9"/>
+        <path d="M16 34v13m14-13v13m14-13v13" stroke="#9bb7a9"/>
+      </g>
+    </> : kind === 'reception' ? <>
+      <g transform={`translate(${right} ${y + 69})`}>
+        {[0,1,2,3].map(i=><Chair key={i} x={12 + (i%2)*29} y={9 + Math.floor(i/2)*25} color="#c7dfd6"/>)}
+      </g>
+    </> : kind === 'procedure' ? <>
+      <ProcedureChair x={right+24} y={y+82}/>
+      <Cabinet x={right+2} y={y+105} w={56}/>
+    </> : <>
+      <Stretcher x={right+8} y={y+66}/>
+      <Chair x={right+39} y={y+109} rotate={90} color="#e3dfcf"/>
+    </>}
+    <Plant x={x+19} y={y+122}/>
+    <Chair x={x+58} y={y+72}/>
+    <Desk x={x+42} y={y+80} w={69} h={20}/><Screen x={x+49} y={y+83}/>
+    <Chair x={x+84} y={y+112} rotate={180} color="#d0dfef"/>
+  </g>;
+});
+
 function RegisteredRoom({ room, x, y, w, onOpen, alert }: { room: MapRoom; x: number; y: number; w: number; onOpen?: OpenZone; alert?: 'danger' | 'warning' }) {
   const h = 142;
+  const kind = roomIllustration(room.name, room.specialty);
+  const floor: Record<RoomIllustration, string> = { consultation: '#f4f8f4', physio: '#edf5f7', speech: '#f4f0f7', dental: '#edf6f4', nursing: '#eef5f1', psychology: '#f8f4ed', nutrition: '#f2f6eb', occupational: '#f7f2e8', reception: '#f0f5f3', procedure: '#edf5f4' };
   const status = roomStatuses[room.state] + (room.elapsed === null ? '' : ' · ' + room.elapsed + ' min');
-  return <Zone id={room.id} title={room.name} summary={status} x={x} y={y} w={w} h={h} state={room.state} color="#f4f8f4" onOpen={onOpen} alert={alert} headerHeight={35}>
+  return <Zone id={room.id} title={room.name} summary={status} x={x} y={y} w={w} h={h} state={room.state} color={floor[kind]} onOpen={onOpen} alert={alert} headerHeight={35}>
     <svg x={x + 10} y={y + 3} width={w - 20} height={30} overflow="hidden" aria-hidden="true">
       <text className="planta-room-title" x="0" y="15">{short(room.name, Math.floor((w - 20) / 9))}</text>
       <text className="planta-tile-label" x="0" y="28">{short(room.specialty, Math.floor((w - 20) / 6))}</text>
     </svg>
     <Plate x={x + 10} y={y + 53} state={room.state} label={status} />
-    <Cabinet x={x + w - 41} y={y + 43} w={31} /><Stretcher x={x + w - 64} y={y + 64} />
-    <Chair x={x + w - 33} y={y + 109} rotate={90} color="#e3dfcf" /><Plant x={x + 19} y={y + 122} />
-    <Chair x={x + 58} y={y + 72} />{room.staff && <AvatarPersonagem papel="clinico" x={x + 58} y={y + 65} variante={room.id} />}
-    <Desk x={x + 42} y={y + 80} w={69} h={20} /><Screen x={x + 49} y={y + 83} />
-    <Chair x={x + 84} y={y + 112} rotate={180} color="#d0dfef" />
+    <RoomEquipment kind={kind} x={x} y={y} w={w}/>
+    {room.staff && <AvatarPersonagem papel={kind === 'nursing' ? 'enfermagem' : 'clinico'} x={x + 58} y={y + 65} variante={room.id} />}
     {room.patients[0] && <AvatarPersonagem key={room.patients[0].id} papel="paciente" x={x + 84} y={y + 108} variante={room.patients[0].id} />}
     {room.patients.length > 1 && <text className="planta-mini" x={x + 110} y={y + 117}>+{room.patients.length - 1}</text>}
     {room.state === 'bottleneck' && <>
