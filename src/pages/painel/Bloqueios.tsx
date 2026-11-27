@@ -1,4 +1,7 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback, useSyncExternalStore } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/hooks/queries/queryKeys';
+import { buildBlockDirectory, blockSummary, filterBlockDirectory, emptyBlockFilter, validBlockDate, type BlockFilter, type BlockStatus } from '@/lib/blockDirectory';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useOperacional } from '@/contexts/OperacionalContext';
@@ -12,10 +15,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Plus, Trash2, CalendarOff, Download, Building2, Globe, User, Search } from 'lucide-react';
+import { Plus, Trash2, CalendarOff, Download, Building2, Globe, User, Search, Layers, CalendarCheck, CalendarClock, History, AlertTriangle, RefreshCw, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
+const statusLabels:Record<BlockStatus,string>={vigente:'Vigente',futuro:'Futuro',encerrado:'Encerrado',invalido:'Período a conferir'};
+const months=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const tipoOptions = [
   { value: 'feriado',          label: '🏛️ Feriado',              badge: 'bg-destructive/10 text-destructive' },
   { value: 'ferias',           label: '📅 Recesso / Férias',      badge: 'bg-info/10 text-info' },
@@ -124,6 +129,31 @@ const Bloqueios: React.FC = () => {
     }
     return [];
   }, [bloqueios, user, isGlobalAdmin]);
+
+  // Observe the existing scoped cache; no additional data source or writes.
+  const queryClient=useQueryClient();
+  const directoryScope=JSON.stringify([user?.id,user?.authUserId,user?.role,user?.usuario==='admin.sms',user?.unidadeId||'']);
+  const subscribeDirectory=useCallback((notify:()=>void)=>queryClient.getQueryCache().subscribe(()=>notify()),[queryClient]);
+  const getDirectoryState=useCallback(()=>{
+    const states=[queryKeys.bloqueios.all,queryKeys.funcionarios.all,queryKeys.unidades.all].map(key=>queryClient.getQueryState([...key,'operacional',directoryScope]));
+    return states.some(s=>s?.status==='error')?'error':states.every(s=>s?.status==='success')?'ready':'loading';
+  },[queryClient,directoryScope]);
+  const directoryState=useSyncExternalStore(subscribeDirectory,getDirectoryState,getDirectoryState);
+  const directoryReady=directoryState==='ready'&&!permissionsLoading&&!!user?.id&&can('feriados_bloqueios','can_view')&&(isGlobalAdmin||!!user.unidadeId);
+  const mayBeLimited=bloqueios.length>=1000||funcionarios.length>=1000||unidades.length>=1000;
+  const [filter,setFilter]=useState<BlockFilter>(emptyBlockFilter);
+  const [refreshing,setRefreshing]=useState(false);
+  useEffect(()=>{setFilter(emptyBlockFilter);},[scopeKey]);
+  const entries=useMemo(()=>buildBlockDirectory(visibleBloqueios,funcionarios,unidades,todayStr,directoryReady&&funcionarios.length<1000,directoryReady&&isGlobalAdmin&&unidades.length<1000),[visibleBloqueios,funcionarios,unidades,todayStr,directoryReady,isGlobalAdmin]);
+  const summary=useMemo(()=>blockSummary(entries),[entries]);
+  const filtered=useMemo(()=>filterBlockDirectory(entries,filter),[entries,filter]);
+  const refreshDirectory=async()=>{
+    if(refreshing||busy)return;
+    setRefreshing(true);
+    try{await Promise.all([refreshBloqueios(),queryClient.invalidateQueries({queryKey:queryKeys.funcionarios.all}),queryClient.invalidateQueries({queryKey:queryKeys.unidades.all})]);}
+    catch{toast.error('Não foi possível atualizar todos os dados.');}
+    finally{setRefreshing(false);}
+  };
 
   const getScopeLabel = (b: typeof bloqueios[0]) => {
     if (b.profissionalId) {
@@ -267,16 +297,13 @@ const Bloqueios: React.FC = () => {
   };
 
   const formatDate = (d: string) => {
-    if (!d) return '';
-    return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-    });
+    return validBlockDate(d)?d.split('-').reverse().join('/'):'Data a conferir';
   };
 
   const formatDateRange = (ini: string, fim: string) =>
     ini === fim ? formatDate(ini) : `${formatDate(ini)} — ${formatDate(fim)}`;
 
-  const tipoInfo = (tipo: string) => tipoOptions.find(t => t.value === tipo) || tipoOptions[0];
+  const tipoInfo = (tipo: string) => tipoOptions.find(t => t.value === tipo) || {value:tipo,label:'Tipo a conferir',badge:'text-muted-foreground'};
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -504,23 +531,47 @@ const Bloqueios: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Read-only directory controls */}
+      {directoryState!=='ready'&&<div role={directoryState==='error'?'alert':'status'} className="flex flex-wrap gap-2 items-center text-sm text-muted-foreground">{directoryState==='error'?'Não foi possível confirmar a lista de bloqueios e cadastros.':'Carregando bloqueios e cadastros...'}<Button type="button" size="sm" variant="outline" disabled={refreshing||busy} onClick={()=>void refreshDirectory()}><RefreshCw className={cn('w-4 h-4 mr-1',refreshing&&'animate-spin')}/>Atualizar</Button></div>}
+      {directoryReady&&<>
+        <section className="grid grid-cols-2 xl:grid-cols-5 gap-2" aria-label="Indicadores de bloqueios">
+          {([{status:'todos',label:'Total cadastrado',Icon:Layers,tone:'blue'},{status:'vigente',label:'Vigentes',Icon:CalendarCheck,tone:'teal'},{status:'futuro',label:'Futuros',Icon:CalendarClock,tone:'violet'},{status:'encerrado',label:'Histórico',Icon:History,tone:'blue'},{status:'conferencia',label:'A conferir',Icon:AlertTriangle,tone:'neutral'}] as const).map(({status,label,Icon,tone})=><button key={status} type="button" aria-pressed={filter.status===status} onClick={()=>setFilter({...emptyBlockFilter,status})} className={cn('clinical-premium p-3 flex items-center gap-2 text-left min-w-0 focus-visible:ring-2 focus-visible:ring-ring',filter.status===status&&'ring-1 ring-primary')}><span className={`clinical-dock-icon clinical-tone-${tone}`}><Icon className="w-4 h-4" aria-hidden="true"/></span><span className="flex-1 min-w-0"><strong className="block text-xl tabular-nums">{summary[status]}</strong><span className="block text-xs font-medium">{label}</span></span><ChevronRight className="w-3.5 h-3.5 shrink-0 text-muted-foreground"/></button>)}
+        </section>
+        <p className="text-xs text-muted-foreground">Indicadores por registro visível, em {todayStr.split('-').reverse().join('/')}. Não representam dias únicos, pacientes ou vagas. Ao selecionar um indicador, os demais filtros são limpos.</p>
+        {mayBeLimited&&<p role="alert" className="text-xs text-amber-800 dark:text-amber-300">Consulta possivelmente limitada pelo servidor. Os totais representam somente os registros carregados.</p>}
+        <section className="clinical-premium p-3 space-y-3" aria-label="Filtros de bloqueios">
+          <div className="flex flex-wrap items-center gap-2"><div className="relative flex-1 min-w-[12rem]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"/><Input className="pl-9" value={filter.search} onChange={e=>setFilter(f=>({...f,search:e.target.value}))} placeholder="Buscar motivo, profissional ou unidade..." aria-label="Buscar bloqueios"/></div><Button type="button" size="sm" variant="outline" disabled={refreshing||busy} onClick={()=>void refreshDirectory()}><RefreshCw className={cn('w-4 h-4 mr-1',refreshing&&'animate-spin')}/>Atualizar</Button></div>
+          <div className="grid grid-cols-1 min-[420px]:grid-cols-2 lg:grid-cols-5 gap-2">
+            <div className="space-y-1"><Label>Situação</Label><Select value={filter.status} onValueChange={status=>setFilter(f=>({...f,status:status as BlockFilter['status']}))}><SelectTrigger aria-label="Filtrar situação"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="todos">Todas</SelectItem>{Object.entries(statusLabels).map(([value,label])=><SelectItem key={value} value={value}>{label}</SelectItem>)}<SelectItem value="conferencia">A conferir</SelectItem></SelectContent></Select></div>
+            <div className="space-y-1"><Label>Tipo</Label><Select value={filter.type} onValueChange={type=>setFilter(f=>({...f,type}))}><SelectTrigger aria-label="Filtrar tipo"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="todos">Todos os tipos</SelectItem>{tipoOptions.map(t=><SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1"><Label>Abrangência</Label><Select value={filter.scope} onValueChange={scope=>setFilter(f=>({...f,scope:scope as BlockFilter['scope']}))}><SelectTrigger aria-label="Filtrar abrangência"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="todos">Todas</SelectItem><SelectItem value="global">Global</SelectItem><SelectItem value="unidade">Unidade</SelectItem><SelectItem value="profissional">Profissional</SelectItem></SelectContent></Select></div>
+            <div className="space-y-1"><Label htmlFor="block-filter-year">Ano</Label><Input id="block-filter-year" inputMode="numeric" maxLength={4} placeholder="Todos os anos" value={filter.year} onChange={e=>setFilter(f=>({...f,year:e.target.value.replace(/\D/g,'').slice(0,4)}))}/></div>
+            <div className="space-y-1"><Label>Mês</Label><Select value={filter.month} onValueChange={month=>setFilter(f=>({...f,month}))}><SelectTrigger aria-label="Filtrar mês"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="todos">Todos os meses</SelectItem>{months.map((m,i)=><SelectItem key={m} value={String(i+1).padStart(2,'0')}>{m}</SelectItem>)}</SelectContent></Select></div>
+          </div>
+          {filter.year&&(!/^\d{4}$/.test(filter.year)||filter.year==='0000')&&<p role="status" className="text-xs text-muted-foreground">Informe um ano válido com quatro dígitos ou limpe o campo.</p>}
+          <div className="flex flex-wrap justify-between items-center gap-2 border-t pt-2"><p role="status" className="text-xs text-muted-foreground">{filtered.length} de {entries.length} registros · filtros por interseção de período</p><Button type="button" size="sm" variant="outline" onClick={()=>setFilter(emptyBlockFilter)}>Limpar filtros</Button></div>
+        </section>
+      </>}
       {/* Lista de bloqueios */}
-      {visibleBloqueios.length === 0 ? (
+      {directoryReady&&(filtered.length === 0 ? (
         <Card className="shadow-card border-0">
           <CardContent className="p-8 text-center text-muted-foreground">
-            Nenhum bloqueio cadastrado.
+            {entries.length?'Nenhum bloqueio encontrado para os filtros selecionados.':'Nenhum bloqueio cadastrado na seleção.'}
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-2">
-          {visibleBloqueios.map(b => {
+          {filtered.map(({block:b,status,issues,person,unit},index) => {
             const tipo       = tipoInfo(b.tipo);
             const ScopeIcon  = getScopeIcon(b);
             const criadoPorUser = funcionarios.find(f => f.id === b.criadoPor);
-            const isPast=b.dataFim<todayStr;
+            const isPast=status==='encerrado';
+            const newSection=index===0||filtered[index-1].status!==status;
 
             return (
-              <Card key={b.id} className={cn('shadow-card border-0', isPast && 'opacity-50')}>
+              <React.Fragment key={b.id}>
+              {newSection&&<h2 className="text-sm font-semibold text-foreground pt-2">{statusLabels[status]} · {filtered.filter(e=>e.status===status).length}</h2>}
+              <Card className={cn('shadow-card border-0',isPast&&'bg-muted/20')}>
                 <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
                   <div className="flex items-center gap-2 shrink-0">
                     <CalendarOff className="w-4 h-4 text-destructive" />
@@ -531,9 +582,8 @@ const Bloqueios: React.FC = () => {
 
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-foreground">{b.titulo}</p>
-                    {!b.diaInteiro && b.horaInicio && (
-                      <p className="text-xs text-muted-foreground">{b.horaInicio} — {b.horaFim}</p>
-                    )}
+                    <p className="text-xs text-muted-foreground">{b.diaInteiro?'Dia inteiro':`${b.horaInicio||'—'} — ${b.horaFim||'—'}`}</p>
+                    {issues.length>0&&<p className="text-xs text-amber-800 dark:text-amber-300 mt-1"><AlertTriangle className="inline w-3.5 h-3.5 mr-1"/>{issues.join(' · ')}. Somente conferência.</p>}
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
@@ -545,17 +595,15 @@ const Bloqueios: React.FC = () => {
                         <Badge variant="secondary" className="text-xs gap-1">
                           <ScopeIcon className="w-3 h-3" />
                           {b.profissionalId
-                            ? funcionarios.find(f => f.id === b.profissionalId)?.nome?.split(' ')[0] || 'Prof.'
+                            ? person || 'Profissional não localizado'
                             : b.unidadeId
-                              ? unidades.find(u => u.id === b.unidadeId)?.nome || 'Unidade'
+                              ? unit || 'Unidade não localizada'
                               : 'Global'}
                         </Badge>
                       </TooltipTrigger>
                       <TooltipContent>{getScopeLabel(b)}</TooltipContent>
                     </Tooltip>
-                    {isPast && (
-                      <Badge variant="outline" className="text-xs text-muted-foreground">Passado</Badge>
-                    )}
+                    <Badge variant="outline" className={cn('text-xs',status==='vigente'&&'text-emerald-700 dark:text-emerald-300',status==='invalido'&&'text-destructive')}>{statusLabels[status]}</Badge>
                   </div>
 
                   {canDelete(b) && (
@@ -593,10 +641,11 @@ const Bloqueios: React.FC = () => {
                   )}
                 </CardContent>
               </Card>
+              </React.Fragment>
             );
           })}
         </div>
-      )}
+      ))}
     </div>
   );
 };
