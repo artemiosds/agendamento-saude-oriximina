@@ -150,7 +150,7 @@ export default function CockpitUnidade() {
       </div>
       <div className="planta-tools">
         {isGlobalAdmin && !theater && <label className="planta-unit-select"><span>Unidade</span>
-          <select value={unit?.id || ''} disabled={!units.length} onChange={e => select(e.target.value)}>
+          <select title={unit?.nome} value={unit?.id || ''} disabled={!units.length} onChange={e => select(e.target.value)}>
             {units.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
           </select>
         </label>}
@@ -313,7 +313,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
   }));
   const metrics = [
     { icon: UsersRound, label: 'Pacientes na unidade', value: String(inside), hint: 'presentes' },
-    { icon: Clock3, label: 'Espera média desde a chegada', value: average === null ? '—' : average + ' min', hint: waits.length + ' atendimentos com horário' },
+    { icon: Clock3, label: 'Espera média · chegada', value: average === null ? '—' : average + ' min', hint: waits.length + ' com horário' },
     { icon: DoorOpen, label: 'Salas em atendimento', value: occupied + '/' + rooms.length, hint: 'salas' },
     { icon: CircleCheck, label: 'Concluídos hoje', value: String(done.length), hint: 'atendimentos' },
   ];
