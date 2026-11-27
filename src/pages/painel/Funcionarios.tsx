@@ -121,6 +121,7 @@ const Funcionarios: React.FC = () => {
       if(seq!==loadSequence.current||scopeRef.current!==scope)return;
       if(error||data?.error||!Array.isArray(data?.funcionarios))throw new Error(data?.error||'Não foi possível carregar a equipe.');
       setFuncionarios(data.funcionarios);
+      setViewFuncionario(prev=>prev?data.funcionarios.find((f:FuncionarioDB)=>f.id===prev.id)||null:null);
       setLoadedScope(scope);
     } catch (err) {
       if(seq!==loadSequence.current||scopeRef.current!==scope)return;
@@ -512,11 +513,11 @@ const Funcionarios: React.FC = () => {
       <Tabs value={activeTab} onValueChange={value=>selectMetric(value)}>
         <TabsList className="w-full h-auto flex-wrap gap-1 clinical-premium p-1">
           <TabsTrigger value="internos" className="flex-1">
-            Funcionários Internos <span className="ml-2 text-xs opacity-70">({loading||loadError?'—':ativosList.length})</span>
+            Funcionários Internos <span className="ml-2 text-xs opacity-70">({dataReady?scopedActive.length:'—'})</span>
           </TabsTrigger>
           <TabsTrigger value="externos" className="flex-1"><UserCog className="w-4 h-4 mr-1" />Profissionais Externos</TabsTrigger>
           <TabsTrigger value="inativos" className="flex-1">
-            Inativos <span className="ml-2 text-xs opacity-70">({loading||loadError?'—':inativosList.length})</span>
+            Inativos <span className="ml-2 text-xs opacity-70">({dataReady?scopedInactive.length:'—'})</span>
           </TabsTrigger>
         </TabsList>
 
@@ -629,7 +630,7 @@ const Funcionarios: React.FC = () => {
           <ProfissionaisExternos />
         </TabsContent>
 
-        <TabsContent value="inativos" className="mt-4 space-y-4"><div className="clinical-premium p-3 flex flex-wrap gap-2 items-center"><div className="relative flex-1 min-w-[12rem]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"/><Input className="pl-9" placeholder="Buscar funcionário inativo..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/></div>{hasActiveFilters&&<Button variant="outline" size="sm" className="clinical-record-action" onClick={clearFilters}>Limpar filtros</Button>}</div>
+        <TabsContent value="inativos" className="mt-4 space-y-4">{isGlobalMaster&&<UnitScopeNavigator units={unidadesVisiveis} value={filterUnidade} onChange={setFilterUnidade}/>}<div className="clinical-premium p-3 flex flex-wrap gap-2 items-center"><div className="relative flex-1 min-w-[12rem]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"/><Input className="pl-9" placeholder="Buscar funcionário inativo..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/></div>{hasActiveFilters&&<Button variant="outline" size="sm" className="clinical-record-action" onClick={clearFilters}>Limpar filtros</Button>}</div>
           {loading ? (
             <LoadingState label="Carregando..." size="lg" />
           ) : loadError ? null : filteredInativos.length === 0 ? (
@@ -652,7 +653,7 @@ const Funcionarios: React.FC = () => {
         </TabsContent>
       </Tabs>
 
-          <Dialog open={dialogOpen} onOpenChange={open=>{if(!writeBusy.current)setDialogOpen(open);}}>
+          <Dialog open={dialogOpen && loadedScope===scopeKey && can('usuarios','can_view') && (editId?canManage:canCreate)} onOpenChange={open=>{if(!writeBusy.current)setDialogOpen(open);}}>
             <DialogContent className="w-[96vw] sm:max-w-3xl p-0 overflow-hidden">
               <div className="modal-shell">
                 <DialogHeader className="clinical-hub-hero m-3 shrink-0 pr-10"><DialogTitle className="clinical-hub-name font-display">{editId ? 'Editar' : 'Cadastrar'} Funcionário</DialogTitle><p className="clinical-patient-sub text-xs">Identificação, acesso, atuação profissional e vínculo.</p></DialogHeader>
@@ -900,7 +901,7 @@ const Funcionarios: React.FC = () => {
           </Dialog>
 
       {/* Profile drawer */}
-      <Sheet open={!!viewFuncionario && loadedScope===scopeKey && !loadError} onOpenChange={(o) => !o && setViewFuncionario(null)}>
+      <Sheet open={!!viewFuncionario && dataReady} onOpenChange={(o) => !o && setViewFuncionario(null)}>
         <SheetContent side="right" className="p-0 flex flex-col" style={{ width: '95vw', maxWidth: 680 }}>
           <SheetHeader className="clinical-hub-hero m-3 pr-10">
             <SheetTitle className="clinical-hub-name font-display text-lg break-words">{viewFuncionario?.nome}</SheetTitle>
