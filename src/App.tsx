@@ -182,6 +182,17 @@ const ModuleRoute: React.FC<{
   const altaAllowed = !!altaScope && (!masterOnly || user?.role?.toLowerCase().trim() === 'master') &&
     (user?.role?.toLowerCase().trim() === 'master' || can(modulo, 'can_view'));
   const lastAltaAllowed = React.useRef<string | null>(null);
+  const moduleScope = user?.id && user.ativo
+    ? JSON.stringify([modulo, user.id, user.unidadeId, user.role]) : null;
+  const lastAllowedScope = React.useRef<string | null>(null);
+  const isMasterNow = user?.role?.toLowerCase().trim() === 'master';
+  const allowedNow = !(masterOnly && !isMasterNow) && (isMasterNow ||
+    (modulo === 'avaliacao_multi' && !!user?.ativo && ['profissional', 'enfermagem'].includes(user.role)) ||
+    can(modulo, 'can_view'));
+  React.useLayoutEffect(() => {
+    if (!loading) lastAllowedScope.current = allowedNow ? moduleScope : null;
+    else if (lastAllowedScope.current !== moduleScope) lastAllowedScope.current = null;
+  }, [loading, moduleScope, allowedNow]);
   React.useLayoutEffect(() => {
     if (!loading) lastAltaAllowed.current = altaAllowed ? altaScope : null;
     else if (lastAltaAllowed.current !== altaScope) lastAltaAllowed.current = null;
@@ -196,14 +207,20 @@ const ModuleRoute: React.FC<{
     </>;
   }
 
-  // Aguarda permissões carregarem antes de decidir
-  if (loading) return <PageLoader />;
-
   const isMaster = user?.role?.toLowerCase().trim() === 'master';
-
-  if (masterOnly && !isMaster) return <AccessDenied />;
   const teamClinicalAccess = modulo === 'avaliacao_multi' && user?.ativo && ['profissional', 'enfermagem'].includes(user.role);
-  if (!isMaster && !teamClinicalAccess && !can(modulo, 'can_view')) return <AccessDenied />;
+  const moduleAllowed = !(masterOnly && !isMaster) && (isMaster || !!teamClinicalAccess || can(modulo, 'can_view'));
+
+  // Revalidação silenciosa: durante a renovação de sessão/permissões da MESMA
+  // identidade/unidade/perfil, a página já liberada continua montada (evita
+  // fechar o Prontuário e perder digitação). Revogação ou troca de contexto
+  // continua desmontando assim que a nova decisão chega.
+  if (loading) {
+    if (moduleScope && lastAllowedScope.current === moduleScope) return <>{children}</>;
+    return <PageLoader />;
+  }
+
+  if (!moduleAllowed) return <AccessDenied />;
 
   return <>{children}</>;
 };

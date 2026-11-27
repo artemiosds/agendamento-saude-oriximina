@@ -2807,18 +2807,33 @@ const ProntuarioPage: React.FC = () => {
     };
     const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (savedTextRevision.current !== textRevision.current) {
+      if (savedTextRevision.current !== textRevision.current || autosaveTimerRef.current) {
         event.preventDefault();
         event.returnValue = "";
       }
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', flush);
     return () => {
       window.removeEventListener('beforeunload', onBeforeUnload);
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', flush);
     };
   }, [dialogOpen, performAutosave, flushText, savedTextRevision, textRevision]);
+
+  // Desmontagem da página com digitação pendente: grava antes de descartar o
+  // timer do autosave (evita perder os últimos segundos digitados).
+  const flushTextRef = useRef(flushText);
+  useEffect(() => { flushTextRef.current = flushText; }, [flushText]);
+  useEffect(() => () => {
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+      try { flushTextRef.current(); } catch { /* noop */ }
+      void performAutosaveRef.current();
+    }
+  }, []);
 
   // Reset autosave indicator when dialog closes/opens
   useEffect(() => {
