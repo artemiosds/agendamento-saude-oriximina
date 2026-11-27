@@ -3,6 +3,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Escala } from '@/components/EscalaProfissionais';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useOperacional } from '@/contexts/OperacionalContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,6 +32,8 @@ const diasSemanaFull = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sex
 
 interface BlocoConfig {
   id?: string;
+  sourceSalaId?: string;
+  sourceNome?: string;
   nome: string;
   tipo: 'padrao' | 'custom';
   horaInicio: string;
@@ -107,13 +111,20 @@ const Disponibilidade: React.FC = () => {
   const [manageProfId, setManageProfId] = useState<string | null>(null);
 
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
-  const { unidadesVisiveis, isGlobalAdmin } = useUnidadeFilter();
+  const { unidadesVisiveis, isGlobalAdmin, userUnidadeId } = useUnidadeFilter();
+  const {user}=useAuth();
+  const {can,loading:permissionsLoading}=usePermissions();
+  const scopeKey=JSON.stringify([user?.id,user?.role,userUnidadeId,isGlobalAdmin]);
+  const scopeRef=useRef(scopeKey);scopeRef.current=scopeKey;
+  const may=(action:'can_create'|'can_edit'|'can_delete',unit?:string)=>!permissionsLoading&&!!user?.id&&can('disponibilidade','can_view')&&can('disponibilidade',action)&&(unit===undefined||unidadesVisiveis.some(u=>u.id===unit));
   const { unitId, setUnitId } = useOperationalUnitScope(unidadesVisiveis, isGlobalAdmin);
 
   // Mode per professional
   const [modosPorProfissional, setModosPorProfissional] = useState<Record<string, ModoDisponibilidade>>({});
   const [turnosGlobais, setTurnosGlobais] = useState<TurnoDefinition[]>([]);
   const [configLoaded, setConfigLoaded] = useState(false);
+  const [configError,setConfigError]=useState(false);
+  const configRequest=useRef(0);
 
   const [form, setForm] = useState({
     profissionalId: '', unidadeId: '', salaId: '', dataInicio: '', dataFim: '',
@@ -134,12 +145,14 @@ const Disponibilidade: React.FC = () => {
   const [daySchedules, setDaySchedules] = useState<DaySchedule[]>(defaultDaySchedules.map(d => ({ ...d })));
   const dayInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const dateParts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santarem',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const todayStr=['year','month','day'].map(type=>dateParts.find(p=>p.type===type)?.value||'').join('-');
   const isEditing = editGroupIds.length > 0;
 
   useEffect(() => {
     if (!dialogOpen || !form.profissionalId || !form.unidadeId || !form.dataInicio || !form.dataFim) {
       setQuotaReservation(null);
+      setQuotaLoading(false);
       return;
     }
     let cancelled = false;
@@ -157,33 +170,28 @@ const Disponibilidade: React.FC = () => {
       setQuotaReservation(error ? null : (data || []).reduce((sum, quota) => sum + Math.max(0, quota.vagas_total || 0), 0));
       setQuotaLoading(false);
     };
-    void read();
+    void read().catch(()=>{if(!cancelled){setQuotaReservation(null);setQuotaLoading(false);}});
     return () => { cancelled = true; };
   }, [dialogOpen, form.profissionalId, form.unidadeId, form.dataInicio, form.dataFim]);
 
-  // Load config (modes and turnos)
-  const loadConfig = useCallback(async () => {
-    const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-    const cfg = data?.configuracoes as any;
-    if (cfg?.[CONFIG_KEY_MODOS]) setModosPorProfissional(cfg[CONFIG_KEY_MODOS]);
-    if (cfg?.config_fluxo_atendimento?.turnos) setTurnosGlobais(cfg.config_fluxo_atendimento.turnos);
-    setConfigLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    loadConfig();
-  }, []);
-
-  const saveModos = async (updated: Record<string, ModoDisponibilidade>) => {
-    const { data: existing } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-    const existingConfig = (existing?.configuracoes as any) || {};
-    await supabase.from('system_config').upsert({
-      id: 'default',
-      configuracoes: { ...existingConfig, [CONFIG_KEY_MODOS]: updated },
-      updated_at: new Date().toISOString(),
-    });
-    setModosPorProfissional(updated);
-  };
+  // Mode is a draft until the atomic grade RPC confirms the write.
+  const loadConfig=useCallback(async()=>{
+    const request=++configRequest.current,scope=scopeKey;
+    setConfigLoaded(false);setConfigError(false);
+    try{
+      const {data,error}=await supabase.from('system_config').select('configuracoes').eq('id','default').maybeSingle();
+      if(request!==configRequest.current||scopeRef.current!==scope)return false;
+      if(error||!data||!data.configuracoes||typeof data.configuracoes!=='object'||Array.isArray(data.configuracoes))throw error||new Error('Configuração não confirmada.');
+      const cfg=data.configuracoes as any;
+      setModosPorProfissional(cfg[CONFIG_KEY_MODOS]||{});
+      setTurnosGlobais(Array.isArray(cfg.config_fluxo_atendimento?.turnos)?cfg.config_fluxo_atendimento.turnos:[]);
+      setConfigLoaded(true);return true;
+    }catch{
+      if(request===configRequest.current&&scopeRef.current===scope){setConfigError(true);setConfigLoaded(false);}
+      return false;
+    }
+  },[scopeKey]);
+  useEffect(()=>{setDialogOpen(false);setManageProfId(null);setEditGroupIds([]);setModosPorProfissional({});setTurnosGlobais([]);void loadConfig();return()=>{configRequest.current++;};},[loadConfig]);
 
   const activeTurnos = turnosGlobais.filter(t => t.ativo);
 
@@ -195,7 +203,7 @@ const Disponibilidade: React.FC = () => {
 
   const activeDaysCount = modo === 'por_hora'
     ? daySchedules.filter(ds => ds.ativo).length
-    : turnoDays.filter(td => td.ativo).length;
+    : configDias.filter(d=>d.ativo&&d.blocos.some(b=>b.ativo)).length;
 
   const groups = useMemo(() => {
     const map = new Map<string, typeof disponibilidades>();
@@ -213,6 +221,7 @@ const Disponibilidade: React.FC = () => {
   };
 
   const openNew = () => {
+    if(!configLoaded||!may('can_create')||gradeWriteInFlight.current)return;
     setEditGroupIds([]);
     setForm({ profissionalId: '', unidadeId: isGlobalAdmin && unitId !== 'all' ? unitId : '', salaId: '', dataInicio: '', dataFim: '', vagasPorHora: 3, vagasPorDia: 25, duracaoConsulta: 30, intervalo: 0 });
     setDaySchedules(defaultDaySchedules.map(d => ({ ...d })));
@@ -231,6 +240,12 @@ const Disponibilidade: React.FC = () => {
     const records = groups.get(groupKey);
     if (!records || records.length === 0) return;
     const first = records[0];
+    if(!configLoaded||!may('can_edit',first.unidadeId)||gradeWriteInFlight.current||first.dataFim<todayStr)return;
+    if(!profissionais.some(p=>p.id===first.profissionalId)){toast.error('Profissional ativo não localizado. Preserve a grade e confira o cadastro.');return;}
+    const mixed=records.some(r=>r.vagasPorHora===0)&&records.some(r=>r.vagasPorHora!==0);
+    const seenDays=new Set<number>();
+    const incompatible=records.some(r=>!Array.isArray(r.diasSemana)||r.diasSemana.length===0||r.diasSemana.some(d=>!Number.isInteger(d)||d<0||d>6))||(!isGroupTurno(records)&&records.some(r=>r.salaId!==first.salaId||r.vagasPorHora!==first.vagasPorHora||r.vagasPorDia!==first.vagasPorDia||r.duracaoConsulta!==first.duracaoConsulta||r.diasSemana.some(d=>{if(seenDays.has(d))return true;seenDays.add(d);return false;})));
+    if(mixed||incompatible){toast.error('Esta configuração não pode ser reconstruída com segurança pelo formulário atual. Nenhum horário foi alterado.');return;}
     setEditGroupIds(records.map(r => r.id));
 
     const profModo = modosPorProfissional[first.profissionalId] || 'por_hora';
@@ -263,6 +278,8 @@ const Disponibilidade: React.FC = () => {
             newConfigDias[dayNum].ativo = true;
             newConfigDias[dayNum].blocos.push({
               id: r.id,
+              sourceSalaId:turnoId,
+              sourceNome:turnoObj?.nome||turnoId||'Turno',
               nome: turnoObj?.nome || turnoId || 'Turno',
               tipo,
               horaInicio: r.horaInicio,
@@ -303,12 +320,8 @@ const Disponibilidade: React.FC = () => {
     setModo(savedModo);
   };
 
-  const handleModoChange = async (newModo: ModoDisponibilidade) => {
+  const handleModoChange = (newModo: ModoDisponibilidade) => {
     setModo(newModo);
-    if (form.profissionalId) {
-      const updated = { ...modosPorProfissional, [form.profissionalId]: newModo };
-      await saveModos(updated);
-    }
     // Initialize turno vagas with defaults
     if (newModo === 'por_turno') {
       const activeGlobalTurnos = turnosGlobais.filter(t => t.ativo);
@@ -344,7 +357,7 @@ const Disponibilidade: React.FC = () => {
 
   const dayErrors = getDayErrors();
   const hasDateError = form.dataInicio && form.dataFim && form.dataFim < form.dataInicio;
-  const canSave = activeDaysCount > 0 && !hasDateError && Object.keys(dayErrors).length === 0 && !saving && form.profissionalId && form.unidadeId && form.dataInicio && form.dataFim;
+  const canSave = configLoaded&&may(isEditing?'can_edit':'can_create',form.unidadeId)&&activeDaysCount > 0 && !hasDateError && Object.keys(dayErrors).length === 0 && !saving && form.profissionalId && form.unidadeId && form.dataInicio && form.dataFim;
 
   const checkOverlap = (): string | null => {
     for (const [key, records] of groups.entries()) {
@@ -367,12 +380,18 @@ const Disponibilidade: React.FC = () => {
     successMessage: string,
   ) => {
     if (gradeWriteInFlight.current) return false;
+    const action=slots.length===0?'can_delete':ids.length?'can_edit':'can_create';
+    if(!may(action,group.unidadeId)){toast.error('Sem permissão para alterar esta grade.');return false;}
+    if(ids.length){const previous=disponibilidades.filter(d=>ids.includes(d.id));if(previous.length!==ids.length||previous.some(d=>!may(action,d.unidadeId)||d.dataFim<todayStr||(slots.length===0&&d.dataInicio<=todayStr))){toast.error('Período protegido ou grade desatualizada. Atualize os dados.');return false;}}
+    const scope=scopeKey;
     gradeWriteInFlight.current = true;
     setSaving(true);
     try {
       await saveAvailabilityGroup(ids, group, slots);
+      if(scopeRef.current!==scope)return false;
+      if(slots.length)setModosPorProfissional(old=>({...old,[group.profissionalId]:slots.some(s=>s.vagasPorHora===0)?'por_turno':'por_hora'}));
       toast.success(successMessage);
-      void refreshDisponibilidades().catch(error => console.error('Erro ao atualizar a lista de disponibilidades:', error));
+      void refreshDisponibilidades().catch(error=>{console.error('Erro ao atualizar a lista de disponibilidades:',error);if(scopeRef.current===scope)toast.warning('Gravação confirmada, mas a lista não foi atualizada. Utilize Atualizar.');});
       return true;
     } catch (err) {
       const error = err as { code?: string; message?: string } | null;
@@ -389,6 +408,8 @@ const Disponibilidade: React.FC = () => {
   };
 
   const handleSave = async () => {
+    if(!configLoaded||!may(isEditing?'can_edit':'can_create',form.unidadeId)||gradeWriteInFlight.current)return;
+    if(!profissionais.some(p=>p.id===form.profissionalId)||!unidadesVisiveis.some(u=>u.id===form.unidadeId&&u.ativo)){toast.error('Confirme profissional ativo e unidade autorizada.');return;}
     if (!form.profissionalId || !form.unidadeId || !form.dataInicio || !form.dataFim) {
       toast.error('Preencha todos os campos obrigatórios.');
       return;
@@ -423,7 +444,7 @@ const Disponibilidade: React.FC = () => {
       slots = configDias.filter(dia => dia.ativo).flatMap(dia => dia.blocos.filter(bloco => bloco.ativo).map(bloco => {
         const turno = turnosGlobais.find(item => item.nome === bloco.nome);
         return {
-          salaId: bloco.tipo === 'padrao' && turno ? turno.id : bloco.nome,
+          salaId: bloco.sourceSalaId!==undefined&&bloco.sourceNome===bloco.nome ? bloco.sourceSalaId : bloco.tipo === 'padrao' && turno ? turno.id : bloco.nome,
           horaInicio: bloco.horaInicio, horaFim: bloco.horaFim,
           vagasPorHora: 0, vagasPorDia: bloco.vagas,
           diasSemana: [dia.diaSemana], duracaoConsulta: 0,
@@ -521,8 +542,7 @@ const Disponibilidade: React.FC = () => {
   const filteredSalas = salas.filter(s => s.unidadeId === form.unidadeId && s.ativo);
 
   const handleRefresh = async () => {
-    await Promise.all([refreshFuncionarios(), refreshDisponibilidades(), loadConfig()]);
-    toast.success('Dados atualizados!');
+    try{const [, ,ok]=await Promise.all([refreshFuncionarios(),refreshDisponibilidades(),loadConfig()]);if(ok)toast.success('Dados atualizados!');else toast.error('Configuração não confirmada. Tente novamente.');}catch{toast.error('Não foi possível atualizar todos os dados. Tente novamente.');}
   };
 
   // Calculate turno weekly summary
@@ -583,7 +603,9 @@ const Disponibilidade: React.FC = () => {
   const manageProfData = manageProfId ? unitProfGroups.find(([id]) => id === manageProfId) : null;
 
   const openNewForProf = (profId: string) => {
+    if(!configLoaded||!may('can_create')||gradeWriteInFlight.current)return;
     const prof = profissionais.find(p => p.id === profId);
+    if(!prof)return;
     setEditGroupIds([]);
     setForm({
       profissionalId: profId,
@@ -616,7 +638,7 @@ const Disponibilidade: React.FC = () => {
           <Button variant="outline" onClick={handleRefresh} size="sm">
             <RefreshCw className="w-4 h-4 mr-2" />Atualizar
           </Button>
-          <Button onClick={openNew} className="gradient-primary text-primary-foreground">
+          <Button onClick={openNew} disabled={!configLoaded||!may('can_create')||saving} className="gradient-primary text-primary-foreground">
             <Plus className="w-4 h-4 mr-2" />Configurar
           </Button>
         </div>
@@ -625,6 +647,7 @@ const Disponibilidade: React.FC = () => {
       <Tabs value={activeTab} onValueChange={selectTab}><TabsList><TabsTrigger value="grade">Grade de atendimento</TabsTrigger><TabsTrigger value="escala">Escala dos profissionais</TabsTrigger></TabsList>
       <TabsContent value="escala"><Escala /></TabsContent><TabsContent value="grade" className="space-y-4">
       {/* Search */}
+      {!configLoaded&&<div role={configError?'alert':'status'} className="text-sm text-muted-foreground">{configError?'Não foi possível confirmar a configuração. Use Atualizar antes de editar horários.':'Carregando configuração de horários...'}</div>}
       {isGlobalAdmin && <UnitScopeNavigator units={unidadesVisiveis} value={unitId} onChange={setUnitId} />}
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -645,9 +668,10 @@ const Disponibilidade: React.FC = () => {
       )}
 
       {/* Dialog (add/edit) */}
-      <Dialog open={dialogOpen} onOpenChange={v => { if (!saving) setDialogOpen(v); }}>
+      <Dialog open={dialogOpen} onOpenChange={v => { if (!gradeWriteInFlight.current) setDialogOpen(v); }}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-display">{isEditing ? 'Editar' : 'Configurar'} Disponibilidade</DialogTitle></DialogHeader>
+          {isEditing&&<p className="text-xs text-muted-foreground">Períodos encerrados são protegidos. Alterações em grade vigente devem ser conferidas antes de salvar; nenhum agendamento será remarcado automaticamente.</p>
           <div className="space-y-4">
             {/* Profissional + Unidade */}
             <div className="grid grid-cols-2 gap-3">
@@ -703,7 +727,7 @@ const Disponibilidade: React.FC = () => {
                       </label>
                     </div>
                   </RadioGroup>
-                  <p className="text-[11px] text-muted-foreground mt-2">Salvo por profissional — cada um pode ter um modo diferente</p>
+                  <p className="text-[11px] text-muted-foreground mt-2">Preferência salva por profissional somente após confirmar a grade</p>
                 </CardContent>
               </Card>
             )}
@@ -1015,7 +1039,7 @@ const Disponibilidade: React.FC = () => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-muted-foreground">{data.groups.length} disponibilidade(s) cadastrada(s)</p>
-                    <Button size="sm" onClick={() => openNewForProf(profId)} className="gradient-primary text-primary-foreground">
+                    <Button size="sm" disabled={!configLoaded||!may('can_create')||saving||!profissionais.some(p=>p.id===profId)} onClick={() => openNewForProf(profId)} className="gradient-primary text-primary-foreground">
                       <Plus className="w-4 h-4 mr-1" />Adicionar
                     </Button>
                   </div>
@@ -1057,12 +1081,12 @@ const Disponibilidade: React.FC = () => {
                               {unidade && <><span className="h-5 w-px bg-border" /><span className="text-sm text-muted-foreground truncate">{unidade.nome}</span></>}
                             </div>
                             <div className="flex gap-1 shrink-0">
-                              <Button size="icon" variant="ghost" className="h-8 w-8" title="Editar" onClick={() => openEditGroup(key)}><Pencil className="w-4 h-4" /></Button>
+                              <Button size="icon" variant="ghost" className="h-8 w-8" title="Editar" disabled={!configLoaded||!may('can_edit',first.unidadeId)||saving||first.dataFim<todayStr||!profissionais.some(p=>p.id===first.profissionalId)} onClick={() => openEditGroup(key)}><Pencil className="w-4 h-4" /></Button>
                               <AlertDialog>
-                                <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" title="Excluir"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
+                                <AlertDialogTrigger asChild><Button size="icon" variant="ghost" disabled={!may('can_delete',first.unidadeId)||saving||first.dataInicio<=todayStr} className="h-8 w-8 text-destructive" title="Excluir"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
                                 <AlertDialogContent>
                                   <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Todos os registros serão removidos.</AlertDialogDescription></AlertDialogHeader>
-                                  <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction disabled={saving} onClick={() => void persistGrade(records.map(r => r.id), first, [], 'Disponibilidade excluída!')}>Excluir</AlertDialogAction></AlertDialogFooter>
+                                  <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction disabled={saving||!may('can_delete',first.unidadeId)||first.dataInicio<=todayStr} onClick={() => void persistGrade(records.map(r => r.id), first, [], 'Disponibilidade excluída!')}>Excluir</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                               </AlertDialog>
                             </div>
@@ -1115,12 +1139,12 @@ const Disponibilidade: React.FC = () => {
                               <p className="text-xs text-muted-foreground"><Calendar className="w-3.5 h-3.5 inline mr-1" />{first.dataInicio} a {first.dataFim}</p>
                             </div>
                             <div className="flex gap-1">
-                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditGroup(key)}><Pencil className="w-3.5 h-3.5" /></Button>
+                              <Button size="icon" variant="ghost" className="h-8 w-8" disabled={!configLoaded||!may('can_edit',first.unidadeId)||saving||first.dataFim<todayStr||!profissionais.some(p=>p.id===first.profissionalId)} onClick={() => openEditGroup(key)}><Pencil className="w-3.5 h-3.5" /></Button>
                               <AlertDialog>
-                                <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="h-8 w-8 text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button></AlertDialogTrigger>
+                                <AlertDialogTrigger asChild><Button size="icon" variant="ghost" disabled={!may('can_delete',first.unidadeId)||saving||first.dataInicio<=todayStr} className="h-8 w-8 text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button></AlertDialogTrigger>
                                 <AlertDialogContent>
                                   <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Todos os {records.length} registro(s) serão removidos.</AlertDialogDescription></AlertDialogHeader>
-                                  <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction disabled={saving} onClick={() => void persistGrade(records.map(r => r.id), first, [], 'Disponibilidade excluída!')}>Excluir</AlertDialogAction></AlertDialogFooter>
+                                  <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction disabled={saving||!may('can_delete',first.unidadeId)||first.dataInicio<=todayStr} onClick={() => void persistGrade(records.map(r => r.id), first, [], 'Disponibilidade excluída!')}>Excluir</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                               </AlertDialog>
                             </div>
