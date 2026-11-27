@@ -142,6 +142,7 @@ export function Escala() {
   const [endDate,setEndDate]=useState('');
   const [removing, setRemoving] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [monthlyPrintLayout,setMonthlyPrintLayout]=useState<'compact'|'fortnight'>('compact');
   const [removeError, setRemoveError] = useState('');
   const listId = useId();
   const deferredName = useDeferredValue(name);
@@ -373,7 +374,7 @@ export function Escala() {
     setPrinting(true);
     try {
       const document = buildEscalaProfissionaisPrint({
-        calendar, monthly,
+        calendar, monthly, monthlyLayout:monthlyPrintLayout,
         people: selected.map(({ p }) => ({ id: p.id, profession: p.profissao,
           registration: [p.tipoConselho, p.numeroConselho, p.ufConselho].filter(Boolean).join(' / '),
           cbo: resolveProfessionalCbo(p), unit: units.get(p.unidadeId) })),
@@ -395,6 +396,7 @@ export function Escala() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div><h3 className="font-semibold">Consultar escala</h3><p className="text-xs text-muted-foreground">{period}</p></div>
         <Button type="button" variant="outline" size="sm" disabled={refreshing} onClick={()=>void refreshScale()}>{refreshing?'Atualizando…':'Atualizar escala'}</Button>
+        {monthly&&<label className="flex flex-wrap items-center gap-2 text-xs font-medium"><span>Formato da impressão</span><select className="h-9 rounded-md border border-input bg-background px-2 text-xs" aria-label="Formato da impressão mensal" disabled={printing} value={monthlyPrintLayout} onChange={e=>setMonthlyPrintLayout(e.target.value==='fortnight'?'fortnight':'compact')}><option value="compact">Mês completo (compacto)</option><option value="fortnight">Por quinzenas (mais legível)</option></select></label>}
         <Button type="button" variant="outline" size="sm" disabled={printing || refreshing || name !== deferredName || !count || !current || !!current.error || !!invalidHours || !!unidentifiedGrades} onClick={() => void print()}><Printer className="h-4 w-4" /> {printing ? 'Preparando escala…' : 'Imprimir Escala Oficial (A4)'}</Button>
       </div>
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
