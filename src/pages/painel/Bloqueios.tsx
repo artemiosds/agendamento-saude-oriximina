@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback, useSyncExtern
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/hooks/queries/queryKeys';
 import { buildBlockDirectory, blockSummary, filterBlockDirectory, emptyBlockFilter, validBlockDate, type BlockFilter, type BlockStatus } from '@/lib/blockDirectory';
+import BlockCalendar from '@/components/BlockCalendar';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useOperacional } from '@/contexts/OperacionalContext';
@@ -15,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Plus, Trash2, CalendarOff, Download, Building2, Globe, User, Search, Layers, CalendarCheck, CalendarClock, History, AlertTriangle, RefreshCw, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, CalendarOff, Download, Building2, Globe, User, Search, Layers, CalendarCheck, CalendarClock, History, AlertTriangle, RefreshCw, ChevronRight, CalendarDays, List, Clock, ShieldCheck, ClipboardList } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -142,8 +143,9 @@ const Bloqueios: React.FC = () => {
   const directoryReady=directoryState==='ready'&&!permissionsLoading&&!!user?.id&&can('feriados_bloqueios','can_view')&&(isGlobalAdmin||!!user.unidadeId);
   const mayBeLimited=bloqueios.length>=1000||funcionarios.length>=1000||unidades.length>=1000;
   const [filter,setFilter]=useState<BlockFilter>(emptyBlockFilter);
+  const [view,setView]=useState<'lista'|'calendario'>('lista');
   const [refreshing,setRefreshing]=useState(false);
-  useEffect(()=>{setFilter(emptyBlockFilter);},[scopeKey]);
+  useEffect(()=>{setFilter(emptyBlockFilter);setView('lista');},[scopeKey]);
   const entries=useMemo(()=>buildBlockDirectory(visibleBloqueios,funcionarios,unidades,todayStr,directoryReady&&funcionarios.length<1000,directoryReady&&isGlobalAdmin&&unidades.length<1000),[visibleBloqueios,funcionarios,unidades,todayStr,directoryReady,isGlobalAdmin]);
   const summary=useMemo(()=>blockSummary(entries),[entries]);
   const filtered=useMemo(()=>filterBlockDirectory(entries,filter),[entries,filter]);
@@ -306,16 +308,18 @@ const Bloqueios: React.FC = () => {
   const tipoInfo = (tipo: string) => tipoOptions.find(t => t.value === tipo) || {value:tipo,label:'Tipo a conferir',badge:'text-muted-foreground'};
 
   return (
-    <div className="space-y-4 animate-fade-in">
+    <div className="clinical-hub space-y-3 animate-fade-in min-w-0">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold font-display text-foreground">Feriados e Bloqueios</h1>
-          <p className="text-muted-foreground text-sm">Gerenciar datas bloqueadas para agendamento</p>
+      <header className="clinical-hub-hero flex flex-wrap items-center gap-3">
+        <span className="clinical-patient-avatar flex items-center justify-center shrink-0"><CalendarOff className="w-5 h-5" aria-hidden="true"/></span>
+        <div className="flex-1 min-w-[9rem]">
+          <p className="clinical-hub-eyebrow">Gestão operacional</p>
+          <h1 className="clinical-hub-name text-xl font-bold font-display">Feriados e Bloqueios</h1>
+          <p className="clinical-patient-sub text-xs mt-1">Calendário institucional e datas bloqueadas para agendamento</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {isGlobalAdmin&&canCreate && (
-            <Button variant="outline" onClick={handleImportHolidays} disabled={busy}>
+            <Button variant="outline" size="sm" className="clinical-hub-new gap-1.5" onClick={handleImportHolidays} disabled={busy}>
               <Download className="w-4 h-4 mr-2" />
               {importing ? 'Importando...' : 'Importar Feriados 2026'}
             </Button>
@@ -323,16 +327,16 @@ const Bloqueios: React.FC = () => {
           {canCreate && (
             <Dialog open={dialogOpen} onOpenChange={(open) => { if(writeInFlight.current)return; if(open&&!canCreate)return;setDialogOpen(open); if (!open) resetForm(); }}>
               <DialogTrigger asChild>
-                <Button disabled={busy} className="gradient-primary text-primary-foreground">
+                <Button disabled={busy} size="sm" className="clinical-hub-new gap-1.5">
                   <Plus className="w-4 h-4 mr-2" /> Novo Bloqueio
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle className="font-display">Bloquear Data para Agendamentos</DialogTitle>
+              <DialogContent className="w-[calc(100vw-1rem)] max-w-3xl max-h-[90dvh] overflow-y-auto gap-3">
+                <DialogHeader className="clinical-hub-hero text-left pr-9">
+                  <div className="flex gap-3 items-start"><span className="clinical-patient-avatar flex items-center justify-center shrink-0"><CalendarOff className="w-5 h-5" aria-hidden="true"/></span><div className="min-w-0"><p className="clinical-hub-eyebrow">Gestão de bloqueios</p><DialogTitle className="clinical-hub-name font-display">Bloquear Data para Agendamentos</DialogTitle><p className="clinical-patient-sub text-xs mt-1">Informe o motivo, o período e a abrangência</p></div></div>
                 </DialogHeader>
-                <fieldset disabled={busy} className="space-y-4 min-w-0">
-
+                <fieldset disabled={busy} className="space-y-3 min-w-0">
+                  <section className="clinical-premium p-3 space-y-3 min-w-0"><h3 className="triage-section-title"><ClipboardList className="w-4 h-4"/>01 · Motivo e tipo</h3>
                   {/* Motivo */}
                   <div>
                     <Label>Motivo *</Label>
@@ -356,8 +360,10 @@ const Bloqueios: React.FC = () => {
                     </Select>
                   </div>
 
+                  </section>
+                  <section className="clinical-premium p-3 space-y-3 min-w-0"><h3 className="triage-section-title"><CalendarDays className="w-4 h-4"/>02 · Período do bloqueio</h3>
                   {/* Datas */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <Label>Data Início *</Label>
                       <Input
@@ -382,7 +388,7 @@ const Bloqueios: React.FC = () => {
                   </div>
 
                   {/* Dia inteiro */}
-                  <div className="flex items-center gap-2">
+                  <div className="clinical-inset rounded-lg border p-2.5 flex items-center gap-2">
                     <input
                       type="checkbox"
                       id="dia-inteiro"
@@ -395,7 +401,7 @@ const Bloqueios: React.FC = () => {
 
                   {/* Horários parciais */}
                   {!form.diaInteiro && (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <Label>Hora Início</Label>
                         <Input type="time" value={form.horaInicio} onChange={e => setForm(p => ({ ...p, horaInicio: e.target.value }))} />
@@ -407,6 +413,8 @@ const Bloqueios: React.FC = () => {
                     </div>
                   )}
 
+                  </section>
+                  <section className="clinical-premium p-3 space-y-3 min-w-0"><h3 className="triage-section-title"><Globe className="w-4 h-4"/>03 · Abrangência</h3>
                   {/* Abrangência */}
                   <div>
                     <Label>Abrangência *</Label>
@@ -510,22 +518,25 @@ const Bloqueios: React.FC = () => {
                     </div>
                   )}
 
+                  </section>
+                  <section className="clinical-premium p-3 space-y-2"><h3 className="triage-section-title"><ShieldCheck className="w-4 h-4"/>04 · Confirmação</h3><p className="text-xs text-muted-foreground">O bloqueio impede novos agendamentos conforme a abrangência e o período. Não cancela nem remarca pacientes já agendados.</p>
                   <Button onClick={handleSave} disabled={busy||!canCreate} className="w-full gradient-primary text-primary-foreground">
                     {saving?'Salvando…':'Confirmar Bloqueio'}
                   </Button>
+                  </section>
                 </fieldset>
               </DialogContent>
             </Dialog>
           )}
         </div>
-      </div>
+      </header>
 
       {/* Info card */}
-      <Card className="shadow-card border-0 bg-info/5">
-        <CardContent className="p-4 flex items-start gap-3">
-          <CalendarOff className="w-5 h-5 text-info shrink-0 mt-0.5" />
+      <Card className="clinical-premium">
+        <CardContent className="p-3 flex items-start gap-3">
+          <span className="clinical-dock-icon clinical-tone-blue shrink-0"><ShieldCheck className="w-4 h-4" aria-hidden="true"/></span>
           <div className="text-sm text-muted-foreground">
-            <p>Datas bloqueadas são automaticamente removidas dos calendários de agendamento.</p>
+            <p className="font-medium text-foreground">Bloqueios impedem novos agendamentos no período e na abrangência configurados.</p>
             <p className="mt-1">Bloqueios <strong>não cancelam nem remarcam</strong> agendamentos existentes. A abrangência profissional acompanha seus locais de atendimento.</p>
           </div>
         </CardContent>
@@ -549,13 +560,14 @@ const Bloqueios: React.FC = () => {
             <div className="space-y-1"><Label>Mês</Label><Select value={filter.month} onValueChange={month=>setFilter(f=>({...f,month}))}><SelectTrigger aria-label="Filtrar mês"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="todos">Todos os meses</SelectItem>{months.map((m,i)=><SelectItem key={m} value={String(i+1).padStart(2,'0')}>{m}</SelectItem>)}</SelectContent></Select></div>
           </div>
           {filter.year&&(!/^\d{4}$/.test(filter.year)||filter.year==='0000')&&<p role="status" className="text-xs text-muted-foreground">Informe um ano válido com quatro dígitos ou limpe o campo.</p>}
-          <div className="flex flex-wrap justify-between items-center gap-2 border-t pt-2"><p role="status" className="text-xs text-muted-foreground">{filtered.length} de {entries.length} registros · filtros por interseção de período</p><Button type="button" size="sm" variant="outline" onClick={()=>setFilter(emptyBlockFilter)}>Limpar filtros</Button></div>
+          <div className="flex flex-wrap justify-between items-center gap-2 border-t pt-2"><p role="status" className="text-xs text-muted-foreground flex-1 min-w-[10rem]">{filtered.length} de {entries.length} registros · filtros por interseção de período</p><Button type="button" size="sm" variant="outline" onClick={()=>setFilter(emptyBlockFilter)}>Limpar filtros</Button><div className="flex gap-1 border rounded-md p-0.5" role="group" aria-label="Visualização dos bloqueios"><Button type="button" size="sm" variant={view==='lista'?'default':'ghost'} aria-pressed={view==='lista'} onClick={()=>setView('lista')} className="h-7 px-2 gap-1.5"><List className="w-3.5 h-3.5"/>Lista</Button><Button type="button" size="sm" variant={view==='calendario'?'default':'ghost'} aria-pressed={view==='calendario'} onClick={()=>setView('calendario')} className="h-7 px-2 gap-1.5"><CalendarDays className="w-3.5 h-3.5"/>Calendário</Button></div></div>
         </section>
       </>}
+      {directoryReady&&view==='calendario'&&<BlockCalendar key={JSON.stringify([scopeKey,filter.year,filter.month])} entries={filtered} today={todayStr} filter={filter} limited={mayBeLimited} onList={()=>setView('lista')}/>}
       {/* Lista de bloqueios */}
-      {directoryReady&&(filtered.length === 0 ? (
-        <Card className="shadow-card border-0">
-          <CardContent className="p-8 text-center text-muted-foreground">
+      {directoryReady&&view==='lista'&&(filtered.length === 0 ? (
+        <Card className="clinical-premium">
+          <CardContent className="p-6 text-center text-muted-foreground"><CalendarDays className="w-8 h-8 mx-auto mb-2 text-muted-foreground/60"/>
             {entries.length?'Nenhum bloqueio encontrado para os filtros selecionados.':'Nenhum bloqueio cadastrado na seleção.'}
           </CardContent>
         </Card>
@@ -571,28 +583,28 @@ const Bloqueios: React.FC = () => {
             return (
               <React.Fragment key={b.id}>
               {newSection&&<h2 className="text-sm font-semibold text-foreground pt-2">{statusLabels[status]} · {filtered.filter(e=>e.status===status).length}</h2>}
-              <Card className={cn('shadow-card border-0',isPast&&'bg-muted/20')}>
-                <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <div className="flex items-center gap-2 shrink-0">
-                    <CalendarOff className="w-4 h-4 text-destructive" />
-                    <span className="text-sm font-mono font-medium text-foreground">
+              <Card className={cn('clinical-premium min-w-0',isPast&&'bg-muted/20')}>
+                <CardContent className="p-3 flex flex-col sm:flex-row flex-wrap xl:flex-nowrap items-start sm:items-center gap-2.5">
+                  <div className="clinical-inset rounded-lg border p-2 flex items-center gap-2 shrink-0 max-w-full">
+                    <CalendarOff className="w-4 h-4 text-destructive shrink-0" />
+                    <span className="text-xs tabular-nums font-medium text-foreground break-words">
                       {formatDateRange(b.dataInicio, b.dataFim)}
                     </span>
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-foreground">{b.titulo}</p>
-                    <p className="text-xs text-muted-foreground">{b.diaInteiro?'Dia inteiro':`${b.horaInicio||'—'} — ${b.horaFim||'—'}`}</p>
+                  <div className="flex-1 min-w-0 sm:basis-52">
+                    <p className="text-sm font-semibold text-foreground break-words">{b.titulo}</p>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3.5 h-3.5 shrink-0"/>{b.diaInteiro?'Dia inteiro':`${b.horaInicio||'—'} — ${b.horaFim||'—'}`}</p>
                     {issues.length>0&&<p className="text-xs text-amber-800 dark:text-amber-300 mt-1"><AlertTriangle className="inline w-3.5 h-3.5 mr-1"/>{issues.join(' · ')}. Somente conferência.</p>}
                   </div>
 
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap min-w-0 max-w-full">
                     <Badge variant="outline" className={cn('text-xs', tipo.badge)}>
                       {tipo.label}
                     </Badge>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Badge variant="secondary" className="text-xs gap-1">
+                        <Badge variant="secondary" className="text-xs gap-1 max-w-full whitespace-normal break-words">
                           <ScopeIcon className="w-3 h-3" />
                           {b.profissionalId
                             ? person || 'Profissional não localizado'
@@ -609,7 +621,7 @@ const Bloqueios: React.FC = () => {
                   {canDelete(b) && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" disabled={busy} aria-label="Remover bloqueio" className="h-8 px-2 text-destructive shrink-0">
+                        <Button size="sm" variant="ghost" disabled={busy} aria-label="Remover bloqueio" className="h-8 px-2 text-destructive shrink-0 rounded-lg border">
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </AlertDialogTrigger>
