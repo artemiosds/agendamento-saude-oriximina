@@ -119,6 +119,7 @@ const Disponibilidade: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [quotaReservation, setQuotaReservation] = useState<number | null>(null);
   const [quotaLoading, setQuotaLoading] = useState(false);
+  const [quotaResultKey,setQuotaResultKey]=useState('');
   const [gradeFilter,setGradeFilter]=useState<GradeFilter>(emptyGradeFilter);
   const [gradeLayout,setGradeLayout]=useState<'cards'|'list'>('cards');
   const [managePeriod,setManagePeriod]=useState<'todos'|GradePeriod>('todos');
@@ -183,9 +184,12 @@ const Disponibilidade: React.FC = () => {
   const dateParts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santarem',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
   const todayStr=['year','month','day'].map(type=>dateParts.find(p=>p.type===type)?.value||'').join('-');
   const isEditing = editGroupIds.length > 0;
+  const quotaKey=JSON.stringify([scopeKey,form.profissionalId,form.unidadeId,form.dataInicio,form.dataFim]);
+  const confirmedQuota=canReviewQuotas&&quotaResultKey===quotaKey?quotaReservation:null;
 
   useEffect(() => {
-    if (!dialogOpen || !form.profissionalId || !form.unidadeId || !form.dataInicio || !form.dataFim) {
+    setQuotaResultKey('');
+    if (!dialogOpen || !canReviewQuotas || !form.profissionalId || !form.unidadeId || !form.dataInicio || !form.dataFim || form.dataInicio>form.dataFim || (!isGlobalAdmin&&form.unidadeId!==userUnidadeId) || !unidadesVisiveis.some(u=>u.id===form.unidadeId)) {
       setQuotaReservation(null);
       setQuotaLoading(false);
       return;
@@ -194,20 +198,21 @@ const Disponibilidade: React.FC = () => {
     setQuotaLoading(true);
     setQuotaReservation(null);
     const read = async () => {
-      const { data, error } = await supabase.from('quotas_externas')
-        .select('vagas_total')
+      const { data, error, count } = await supabase.from('quotas_externas')
+        .select('vagas_total',{count:'exact'})
         .eq('profissional_interno_id', form.profissionalId)
         .eq('unidade_id', form.unidadeId)
         .eq('ativo', true)
         .lte('periodo_inicio', form.dataFim)
         .gte('periodo_fim', form.dataInicio);
       if (cancelled) return;
-      setQuotaReservation(error ? null : (data || []).reduce((sum, quota) => sum + Math.max(0, quota.vagas_total || 0), 0));
+      setQuotaReservation(error||!data||count!==data.length ? null : data.reduce((sum, quota) => sum + Math.max(0, quota.vagas_total || 0), 0));
+      setQuotaResultKey(quotaKey);
       setQuotaLoading(false);
     };
     void read().catch(()=>{if(!cancelled){setQuotaReservation(null);setQuotaLoading(false);}});
     return () => { cancelled = true; };
-  }, [dialogOpen, scopeKey, form.profissionalId, form.unidadeId, form.dataInicio, form.dataFim]);
+  }, [dialogOpen, quotaKey, canReviewQuotas, isGlobalAdmin, userUnidadeId]);
 
   // Mode is a draft until the atomic grade RPC confirms the write.
   const loadConfig=useCallback(async()=>{
@@ -811,8 +816,8 @@ const Disponibilidade: React.FC = () => {
             <section className="clinical-premium p-3 space-y-2 text-sm" role="status">
               <h3 className="triage-section-title"><ShieldCheck className="w-4 h-4"/>Cotas externas</h3>
               <Label htmlFor="external-quota-reservation">Total cadastrado das cotas ativas que intersectam o período</Label>
-              <Input id="external-quota-reservation" className="mt-1 max-w-32" readOnly value={quotaLoading ? 'Carregando' : quotaReservation ?? 'Indisponível'} />
-              <p className="mt-2 text-muted-foreground">{modo === 'por_hora' ? `Recepção limitada a ${form.vagasPorDia} vagas por dia` : 'Recepção limitada às vagas de cada turno abaixo'} · Cotas externas autorizadas no período: {quotaReservation ?? 'não confirmadas'} · Master sem limite de capacidade para encaixes.</p>
+              <Input id="external-quota-reservation" className="mt-1 max-w-32" readOnly value={quotaLoading&&canReviewQuotas ? 'Carregando' : confirmedQuota ?? 'Indisponível'} />
+              <p className="mt-2 text-muted-foreground">{modo === 'por_hora' ? `Recepção limitada a ${form.vagasPorDia} vagas por dia` : 'Recepção limitada às vagas de cada turno abaixo'} · Cotas externas autorizadas no período: {confirmedQuota ?? 'não confirmadas'} · Master sem limite de capacidade para encaixes.</p>
               <p className="mt-1 text-xs text-muted-foreground">O total inclui cotas de data específica e limites de vários dias; não é reserva diária nem saldo de vagas. Consulte a conferência por data em Gerenciar. Ajuste as cotas em Funcionários → Profissionais Externos.</p>
             </section>
 
