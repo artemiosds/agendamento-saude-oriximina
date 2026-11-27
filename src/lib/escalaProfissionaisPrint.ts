@@ -168,7 +168,7 @@ export function buildEscalaProfissionaisPrint(input: EscalaPrintInput) {
   // Keep the original monthly view compact; the optional two-band version uses larger cells.
   const bands = input.monthly && input.monthlyLayout === 'fortnight' && days.length > 15
     ? [days.slice(0,15), days.slice(15)] : [days];
-  const flags = ['<span class="escala-key-inline"><b>B</b> Bloqueado</span>','<span class="escala-key-inline"><b>–</b> Sem escala</span>',hasInformational?'<span class="escala-key-inline"><b>i</b> Informativa (sem vagas)</span>':'',hasContinuation?'<span class="escala-key-inline"><b>c</b> Continuação</span>':'',notes.length?'<span class="escala-key-inline"><b>*</b> Bloqueio/ajuste</span>':'',conflictDays?'<span class="escala-key-inline"><b>!</b> Conflito</span>':''].filter(Boolean).join('');
+  const flags = ['<span class="escala-key-inline"><b>B</b> Bloqueado</span>','<span class="escala-key-inline"><b>–</b> Sem escala cadastrada</span>',hasInformational?'<span class="escala-key-inline"><b>i</b> Informativa (sem vagas)</span>':'',hasContinuation?'<span class="escala-key-inline"><b>c</b> Continuação do dia anterior</span>':'',notes.length?'<span class="escala-key-inline"><b>*</b> Bloqueio/ajuste</span>':'',conflictDays?'<span class="escala-key-inline"><b>!</b> Conflito</span>':''].filter(Boolean).join('');
   const tables = bands.map((band, bandIndex) => {
     const bandPeriod=`${format(band[0],'dd/MM/yyyy')} a ${format(band[band.length-1],'dd/MM/yyyy')}`;
     const bandKeys=new Set(band.map(dateKey));
@@ -184,7 +184,7 @@ export function buildEscalaProfissionaisPrint(input: EscalaPrintInput) {
       const local = entry.place.startsWith(unit + ' · ') ? entry.place.slice(unit.length + 3)
         : entry.place.startsWith(unit + ' - ') ? entry.place.slice(unit.length + 3) : entry.place === unit ? '' : entry.place;
       const identity = [person?.registration, `CBO ${person?.cbo || 'não informado'}`].filter(Boolean).join(' · ');
-      const modes = [...new Set([...dates.values()].flat().map(e => e.mode))].filter(Boolean).join(' / ');
+      const modes = [...new Set([...dates].filter(([key])=>bandKeys.has(key)).flatMap(([,entries])=>entries.map(e=>e.mode)))].filter(Boolean).join(' / ');
       const location = [person?.profession, local, modes].filter(Boolean).join(' · ');
       const cells = band.map(day => {
         const entries = dates.get(dateKey(day)) || [];
@@ -198,15 +198,16 @@ export function buildEscalaProfissionaisPrint(input: EscalaPrintInput) {
         return `<td class="${day.getDay() % 6 === 0 ? 'escala-weekend' : ''}">${tokens || '<span class="escala-missing">–</span>'}</td>`;
       }).join('');
       const minutes = [...dates].filter(([key])=>bandKeys.has(key)).reduce((sum, [,entries]) => sum + summarizeEscalaDay(entries).uniqueMinutes, 0);
-      return `<tr><th scope="row" class="escala-person"><strong>${escape(entry.person)}</strong><small>${escape(location)}</small><small>${escape(identity)}</small>${entry.currentInactive ? '<small>Cadastro atualmente inativo</small>' : ''}${person?.unit && person.unit !== unit ? `<small>Lotação: ${escape(person.unit)}</small>` : ''}</th>${cells}<td class="escala-total">${hoursLabel(minutes)}</td></tr>`;
+      const monthMinutes=[...dates.values()].reduce((sum,entries)=>sum+summarizeEscalaDay(entries).uniqueMinutes,0);
+      return `<tr><th scope="row" class="escala-person"><strong>${escape(entry.person)}</strong><small>${escape(location)}</small><small>${escape(identity)}</small>${entry.currentInactive ? '<small>Cadastro atualmente inativo</small>' : ''}${person?.unit && person.unit !== unit ? `<small>Lotação: ${escape(person.unit)}</small>` : ''}</th>${cells}<td class="escala-total">${hoursLabel(minutes)}</td>${bands.length>1?`<td class="escala-total escala-month-total">${hoursLabel(monthMinutes)}</td>`:''}</tr>`;
     }).join('');
     const usedHours=new Set(activeRows.flatMap(row=>[...row.dates].filter(([key])=>bandKeys.has(key)).flatMap(([,entries])=>entries.filter(e=>e.minutes>0).map(e=>e.hours))));
     const localCodes=[...codes].filter(([hours])=>usedHours.has(hours));
     // Small legends repeat with the column headers on each continuation page. Larger ones flow below the table.
     const shortLegend=localCodes.length<=8&&localCodes.every(([hours])=>hours.length<=24);
     const renderCodes=localCodes.map(([hours,{code,prefix}])=>`<span class="escala-legend-item"><span class="escala-legend-code escala-${prefix.toLowerCase()}">${escape(code)}</span>${escape(hours)}</span>`).join('');
-    const span=band.length+2;
-    return `<table class="escala-table ${band.length>16?'escala-wide':'escala-readable'}" aria-label="Escala de ${escape(unit)}"><colgroup><col style="width:56mm">${band.map(() => '<col>').join('')}<col style="width:19mm"></colgroup><thead><tr><th colspan="${span}" class="escala-group">${escape(unit)} · ${bandPeriod}</th></tr><tr class="escala-caption-row"><th colspan="${span}">${escape(title)} · ${bands.length>1?'Faixa '+(bandIndex+1)+' de '+bands.length:'Período completo'} · Carga prevista por local</th></tr><tr class="escala-key-row"><th colspan="${span}">${shortLegend?renderCodes:'Horários detalhados na legenda desta unidade, abaixo da grade.'}<div>${flags}</div></th></tr><tr class="escala-days"><th scope="col" class="escala-person">Profissional / local</th>${header}<th scope="col" class="escala-total">Carga prevista</th></tr></thead><tbody>${body}</tbody></table>${!shortLegend?`<div class="escala-legend"><strong>Horários · ${escape(unit)} · ${bandPeriod}</strong><div class="escala-legend-items">${renderCodes}</div></div>`:''}`;
+    const span=band.length+(bands.length>1?3:2);
+    return `<table class="escala-table ${band.length>16?'escala-wide':'escala-readable'}" aria-label="Escala de ${escape(unit)}"><colgroup><col style="width:56mm">${band.map(() => '<col>').join('')}<col style="width:19mm">${bands.length>1?'<col style="width:19mm">':''}</colgroup><thead><tr><th colspan="${span}" class="escala-group">${escape(unit)} · ${bandPeriod}</th></tr><tr class="escala-caption-row"><th colspan="${span}">${escape(title)} · ${bands.length>1?'Faixa '+(bandIndex+1)+' de '+bands.length:'Período completo'} · Carga prevista por local</th></tr><tr class="escala-key-row"><th colspan="${span}">${shortLegend?renderCodes:'Horários detalhados na legenda desta unidade, abaixo da grade.'}<div>${flags}</div></th></tr><tr class="escala-days"><th scope="col" class="escala-person">Profissional / local</th>${header}<th scope="col" class="escala-total">${bands.length>1?'Total faixa':'Carga prevista'}</th>${bands.length>1?'<th scope="col" class="escala-total escala-month-total">Mês (local)</th>':''}</tr></thead><tbody>${body}</tbody></table>${!shortLegend?`<div class="escala-legend"><strong>Horários · ${escape(unit)} · ${bandPeriod}</strong><div class="escala-legend-items">${renderCodes}</div></div>`:''}`;
     }).join('');
     return `<section class="escala-section">${bands.length>1?`<h2 class="escala-section-title">${bandIndex+1}ª quinzena · ${bandPeriod} · ${hoursLabel(bandMinutes)} previstos sem dupla contagem</h2>`:''}${bandTables||'<p class="escala-notes">Sem escala cadastrada nesta faixa de datas.</p>'}</section>`;
   }).join('');
@@ -214,7 +215,7 @@ export function buildEscalaProfissionaisPrint(input: EscalaPrintInput) {
   const recordCount=input.calendar.reduce((sum,day)=>sum+day.entries.length,0);
   const body = `${stylesheet}<div class="escala-print"><div class="escala-summary"><span><strong>${professionalCount}</strong> profissionais</span><span><strong>${recordCount}</strong> registros exibidos</span><span><strong>Carga prevista sem dupla contagem: ${hoursLabel(uniqueTotal)}</strong></span>${conflictDays ? `<span><strong>${conflictDays}</strong> dia(s) com sobreposição · ${hoursLabel(overlapTotal)} de registros simultâneos descontados</span>` : ''}</div>${tables}
     ${notes.length ? `<div class="escala-notes"><strong>Bloqueios e ajustes do período</strong><ul>${[...new Set(notes)].map(note => `<li>${escape(note)}</li>`).join('')}</ul></div>` : ''}
-    <p class="escala-notes">Carga prevista: união dos intervalos por profissional e dia, com descontos de bloqueio já aplicados. O total geral desconta sobreposições entre locais; os totais de cada linha são por local e não devem ser somados quando há conflitos. Registros simultâneos permanecem visíveis para conferência. Este documento não comprova frequência. Sem escala cadastrada não significa folga.</p>
+    <p class="escala-notes">Carga prevista: união dos intervalos por profissional e dia, com descontos de bloqueio já aplicados. O total geral desconta sobreposições entre locais; os totais de cada linha são por local e não devem ser somados quando há conflitos. ${bands.length>1?' Na impressão por quinzenas, a coluna Mês (local) repete o total mensal daquela linha para consulta; não some essa coluna entre faixas.':''} Registros simultâneos permanecem visíveis para conferência. Este documento não comprova frequência. Sem escala cadastrada não significa folga.</p>
     <div class="escala-signatures"><div>Assinatura do(a) Profissional<br><small>Identificação / conselho profissional</small></div><div>Chefia Imediata / Coordenação SMS<br><small>Identificação / carimbo</small></div></div></div>`;
   return { title, body, meta: {
     Período: period,
