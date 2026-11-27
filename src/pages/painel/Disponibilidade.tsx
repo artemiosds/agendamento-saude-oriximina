@@ -1,7 +1,10 @@
 import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Escala } from '@/components/EscalaProfissionais';
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useSyncExternalStore } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/hooks/queries/queryKeys';
+import { buildGradeDirectory, gradeSummary, filterGradeDirectory, gradePeriod, gradeMode, gradeProfession, type GradeFilter, type GradePeriod, type GradeMetric } from '@/lib/availabilityDirectory';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
@@ -16,7 +19,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Plus, Clock, Calendar, Pencil, Trash2, RefreshCw, Loader2, Info, ClipboardList, Search, Settings2, User, Copy, Save, X } from 'lucide-react';
+import { Plus, Clock, Calendar, Pencil, Trash2, RefreshCw, Loader2, Info, ClipboardList, Search, Settings2, User, Copy, Save, X, Users, CalendarCheck, CalendarClock, Layers, AlertTriangle, ChevronRight } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -88,6 +91,8 @@ const rangesOverlap = (a1: string, a2: string, b1: string, b2: string) => a1 <= 
 type ModoDisponibilidade = 'por_hora' | 'por_turno';
 
 const CONFIG_KEY_MODOS = 'config_modos_disponibilidade';
+const periodLabels:Record<GradePeriod,string>={vigente:'Vigente',futuro:'Futuro',encerrado:'Encerrado',invalido:'A conferir'};
+const emptyGradeFilter:GradeFilter={metric:'todos',period:'todos',mode:'todos',profession:'todos',search:''};
 
 const Disponibilidade: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -107,7 +112,8 @@ const Disponibilidade: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [quotaReservation, setQuotaReservation] = useState<number | null>(null);
   const [quotaLoading, setQuotaLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [gradeFilter,setGradeFilter]=useState<GradeFilter>(emptyGradeFilter);
+  const [managePeriod,setManagePeriod]=useState<'todos'|GradePeriod>('todos');
   const [manageProfId, setManageProfId] = useState<string | null>(null);
 
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
@@ -118,6 +124,20 @@ const Disponibilidade: React.FC = () => {
   const scopeRef=useRef(scopeKey);scopeRef.current=scopeKey;
   const may=(action:'can_create'|'can_edit'|'can_delete',unit?:string)=>!permissionsLoading&&!!user?.id&&can('disponibilidade','can_view')&&can('disponibilidade',action)&&(isGlobalAdmin||!!userUnidadeId)&&(unit===undefined||(isGlobalAdmin||unit===userUnidadeId)&&unidadesVisiveis.some(u=>u.id===unit));
   const { unitId, setUnitId } = useOperationalUnitScope(unidadesVisiveis, isGlobalAdmin);
+  const queryClient=useQueryClient();
+  // Observe existing directory cache; no additional data fetch or scheduling query.
+  const directoryScope=JSON.stringify([user?.id,user?.authUserId,user?.role,user?.usuario==='admin.sms',userUnidadeId]);
+  const subscribeDirectory=useCallback((notify:()=>void)=>queryClient.getQueryCache().subscribe(()=>notify()),[queryClient]);
+  const getDirectoryState=useCallback(()=>{
+    const states=[queryKeys.unidades.all,queryKeys.funcionarios.all,queryKeys.disponibilidades.all].map(key=>queryClient.getQueryState([...key,'operacional',directoryScope]));
+    if(states.some(s=>s?.status==='error'))return 'error';
+    if(states.every(s=>s?.status==='success'))return 'ready';
+    return 'loading';
+  },[queryClient,directoryScope]);
+  const directoryState=useSyncExternalStore(subscribeDirectory,getDirectoryState,getDirectoryState);
+  const directoryReady=directoryState==='ready'&&!permissionsLoading&&!!user?.id&&can('disponibilidade','can_view')&&(isGlobalAdmin||!!userUnidadeId);
+  const directoryMayBeLimited=funcionarios.length>=1000||disponibilidades.length>=1000||unidades.length>=1000;
+  useEffect(()=>{setGradeFilter(emptyGradeFilter);setManageProfId(null);setManagePeriod('todos');},[scopeKey,unitId]);
 
   // Mode per professional
   const [modosPorProfissional, setModosPorProfissional] = useState<Record<string, ModoDisponibilidade>>({});
@@ -564,44 +584,16 @@ const Disponibilidade: React.FC = () => {
     return { totalVagas, diasAtivos, turnosConfig: totalTurnos };
   }, [modo, configDias]);
 
-  // Group disponibilidades by professional
-  const profGroups = useMemo(() => {
-    const map = new Map<string, { prof: typeof funcionarios[0] | undefined; groups: [string, typeof disponibilidades][] }>();
-    for (const [key, records] of groups.entries()) {
-      const profId = records[0].profissionalId;
-      if (!map.has(profId)) {
-        map.set(profId, { prof: funcionarios.find(f => f.id === profId), groups: [] });
-      }
-      map.get(profId)!.groups.push([key, records]);
-    }
-    // Sort alphabetically
-    return Array.from(map.entries()).sort((a, b) => {
-      const nameA = a[1].prof?.nome || '';
-      const nameB = b[1].prof?.nome || '';
-      return nameA.localeCompare(nameB, 'pt-BR');
-    });
-  }, [groups, funcionarios]);
-
-  const unitProfGroups = useMemo(() => {
-    return unitId === 'all' ? profGroups : profGroups
-      .map(([id, data]): typeof profGroups[number] => [id, {
-        ...data,
-        groups: data.groups.filter(([, records]) => records.some(record => record.unidadeId === unitId)),
-      }])
-      .filter(([, data]) => data.groups.length > 0);
-  }, [profGroups, unitId]);
-
-  // Search only changes the visible cards, not the data in an open management panel.
-  const filteredProfGroups = useMemo(() => {
-    if (!searchTerm.trim()) return unitProfGroups;
-    const term = searchTerm.toLowerCase().trim();
-    return unitProfGroups.filter(([, data]) => {
-      const nome = data.prof?.nome?.toLowerCase() || '';
-      return nome.includes(term) || data.groups.some(([, records]) => unidades.find(u => u.id === records[0]?.unidadeId)?.nome?.toLowerCase().includes(term));
-    });
-  }, [unitProfGroups, searchTerm, unidades]);
-
-  const manageProfData = manageProfId ? unitProfGroups.find(([id]) => id === manageProfId) : null;
+  // Independent read-only projection: the original groups map remains the source for all writes.
+  const unitProfGroups=useMemo(()=>buildGradeDirectory(groups,funcionarios,unidadesVisiveis,unitId,isGlobalAdmin,userUnidadeId,todayStr),[groups,funcionarios,unidadesVisiveis,unitId,isGlobalAdmin,userUnidadeId,todayStr]);
+  const summary=useMemo(()=>gradeSummary(unitProfGroups,todayStr),[unitProfGroups,todayStr]);
+  const professions=useMemo(()=>[...new Set(unitProfGroups.map(([,e])=>gradeProfession(e.prof)))].sort((a,b)=>a.localeCompare(b,'pt-BR')),[unitProfGroups]);
+  const filteredProfGroups=useMemo(()=>filterGradeDirectory(unitProfGroups,unidadesVisiveis,gradeFilter,todayStr),[unitProfGroups,unidadesVisiveis,gradeFilter,todayStr]);
+  const manageProfData=directoryReady&&manageProfId?unitProfGroups.find(([id])=>id===manageProfId):undefined;
+  const selectMetric=(metric:GradeMetric)=>setGradeFilter({...emptyGradeFilter,metric});
+  const periodBadge=(period:GradePeriod)=><Badge variant="outline" className={cn('text-[10px]',period==='vigente'&&'text-emerald-700 dark:text-emerald-300',period==='invalido'&&'text-destructive')}>{periodLabels[period]}</Badge>;
+  const retryDirectory=()=>void Promise.allSettled([queryClient.invalidateQueries({queryKey:queryKeys.unidades.all}),refreshFuncionarios(),refreshDisponibilidades()]);
+  const openManage=(id:string)=>{setManagePeriod('todos');setManageProfId(id);};
 
   const openNewForProf = (profId: string) => {
     if(!configLoaded||!may('can_create')||gradeWriteInFlight.current)return;
@@ -633,7 +625,7 @@ const Disponibilidade: React.FC = () => {
 
           <p className="text-muted-foreground text-sm">
             Configurar horários e vagas dos profissionais
-            {profGroups.length > 0 && ` • ${profGroups.length} profissional(is) com horários`}
+            {activeTab==='grade'&&directoryReady&&` • ${summary.periodos} período(s) na seleção`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -651,23 +643,33 @@ const Disponibilidade: React.FC = () => {
       {/* Search */}
       {!configLoaded&&<div role={configError?'alert':'status'} className="text-sm text-muted-foreground">{configError?'Não foi possível confirmar a configuração. Use Atualizar antes de editar horários.':'Carregando configuração de horários...'}</div>}
       {isGlobalAdmin && <UnitScopeNavigator units={unidadesVisiveis} value={unitId} onChange={setUnitId} />}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por nome ou unidade..."
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          className="pl-9"
-        />
-      </div>
-
-      {profissionais.length === 0 && (
-        <Card className="shadow-card border-0 border-l-4 border-l-warning">
-          <CardContent className="p-4 text-sm text-warning">
-            Nenhum profissional ativo cadastrado. Cadastre profissionais na tela de Funcionários antes de configurar disponibilidades.
-          </CardContent>
-        </Card>
-      )}
+      {directoryState!=='ready'&&<div role={directoryState==='error'?'alert':'status'} className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">{directoryState==='error'?'Não foi possível confirmar os cadastros e horários.':'Carregando profissionais e períodos...'}{directoryState==='error'&&<Button size="sm" variant="outline" onClick={retryDirectory}>Tentar novamente</Button>}</div>}
+      {directoryReady&&<>
+        <section className="grid grid-cols-1 min-[380px]:grid-cols-2 xl:grid-cols-5 gap-2" aria-label="Indicadores de disponibilidade">
+          {[
+            {metric:'ativos' as const,label:'Profissionais ativos',value:summary.ativos,Icon:Users,note:'Na seleção de unidades'},
+            {metric:'vigentes' as const,label:'Com grade vigente',value:summary.vigentes,Icon:CalendarCheck,note:'Profissionais ativos'},
+            {metric:'sem_vigencia' as const,label:'Sem grade vigente',value:summary.semVigencia,Icon:CalendarClock,note:'Profissionais ativos'},
+            {metric:'periodos' as const,label:'Períodos cadastrados',value:summary.periodos,Icon:Layers,note:'Inclui histórico'},
+            {metric:'conferencia' as const,label:'Cadastros a conferir',value:summary.conferencia,Icon:AlertTriangle,note:'Sem alteração automática'}
+          ].map(({metric,label,value,Icon,note})=><button type="button" key={metric} aria-pressed={gradeFilter.metric===metric} onClick={()=>selectMetric(metric)} className={cn('clinical-premium p-3 flex items-center gap-2 text-left min-w-0 focus-visible:ring-2 focus-visible:ring-ring',gradeFilter.metric===metric&&'ring-1 ring-primary')}><span className="clinical-dock-icon clinical-tone-blue"><Icon className="w-4 h-4" aria-hidden="true"/></span><span className="flex-1 min-w-0"><strong className="block text-xl tabular-nums">{value}</strong><span className="block text-xs font-medium">{label}</span><span className="block text-[11px] text-muted-foreground">{note}</span></span><ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0"/></button>)}
+        </section>
+        <p className="text-xs text-muted-foreground">Vigência em {todayStr.split('-').reverse().join('/')} · considera as datas inicial e final, não a presença, escala ou vagas livres. Profissionais ativos: lotação na seleção ou grade vinculada à seleção.</p>
+        {directoryMayBeLimited&&<p role="alert" className="text-xs text-amber-800 dark:text-amber-300">A consulta operacional pode estar limitada pelo servidor. Os indicadores representam somente os registros carregados; não confirme ausência de grade sem conferência complementar.</p>}
+        <section className="rounded-lg border bg-card p-3 space-y-2" aria-label="Filtros de disponibilidade">
+          <div className="flex flex-wrap gap-1.5 items-center" role="group" aria-label="Filtrar por vigência">
+            <Button type="button" size="sm" variant={gradeFilter.period==='todos'?'default':'outline'} onClick={()=>setGradeFilter(f=>({...f,period:'todos'}))}>Todos os períodos</Button>
+            {(['vigente','futuro','encerrado','invalido'] as const).map(period=>(period!=='invalido'||summary.periods.invalido>0)&&<Button type="button" size="sm" key={period} aria-pressed={gradeFilter.period===period} variant={gradeFilter.period===period?'default':'outline'} onClick={()=>setGradeFilter(f=>({...f,period}))}>{periodLabels[period]} ({summary.periods[period]})</Button>)}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[12rem]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/><Input className="pl-9" value={gradeFilter.search} onChange={e=>setGradeFilter(f=>({...f,search:e.target.value}))} placeholder="Buscar nome, profissão ou unidade..." aria-label="Buscar profissional, profissão ou unidade"/></div>
+            <Select value={gradeFilter.profession} onValueChange={profession=>setGradeFilter(f=>({...f,profession}))}><SelectTrigger className="w-full sm:w-48" aria-label="Filtrar profissão"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="todos">Todas as profissões</SelectItem>{professions.map(p=><SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select>
+            <Select value={gradeFilter.mode} onValueChange={mode=>setGradeFilter(f=>({...f,mode:mode as GradeFilter['mode']}))}><SelectTrigger className="w-full sm:w-40" aria-label="Filtrar modalidade"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="todos">Todas as modalidades</SelectItem><SelectItem value="hora">Por hora</SelectItem><SelectItem value="turno">Por turno</SelectItem><SelectItem value="misto">Mista / conferir</SelectItem></SelectContent></Select>
+            <Button type="button" size="sm" variant="outline" onClick={()=>setGradeFilter(emptyGradeFilter)}>Limpar filtros</Button>
+          </div>
+          <p className="text-xs text-muted-foreground" role="status">{filteredProfGroups.length} cadastro(s) ou vínculo(s) encontrado(s). Os indicadores acima consideram toda a seleção de unidades; os filtros não alteram os dados.</p>
+        </section>
+      </>}
 
       {/* Dialog (add/edit) */}
       <Dialog open={dialogOpen} onOpenChange={v => { if (!gradeWriteInFlight.current) setDialogOpen(v); }}>
@@ -1022,7 +1024,7 @@ const Disponibilidade: React.FC = () => {
       </Dialog>
 
       {/* Management Modal */}
-      <Dialog open={!!manageProfId} onOpenChange={v => { if (!v) setManageProfId(null); }}>
+      <Dialog open={!!manageProfData} onOpenChange={v => { if (!v) setManageProfId(null); }}>
         <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           {manageProfData && (() => {
             const [profId, data] = manageProfData;
@@ -1033,7 +1035,7 @@ const Disponibilidade: React.FC = () => {
                 <DialogHeader>
                   <DialogTitle className="font-display flex items-center gap-2">
                     <User className="w-5 h-5 text-primary" />
-                    {prof?.nome || 'Profissional'}
+                    {prof?.nome || 'Cadastro de profissional não localizado'}
                     {profUnidade && <Badge variant="secondary" className="text-xs ml-2">{profUnidade.nome}</Badge>}
                   </DialogTitle>
                 </DialogHeader>
@@ -1046,12 +1048,20 @@ const Disponibilidade: React.FC = () => {
                     </Button>
                   </div>
 
-                  {data.groups.map(([key, records]) => {
+                  {data.issues.length>0&&<p role="status" className="text-xs text-amber-800 dark:text-amber-300">{data.issues.join(' · ')}. Os registros foram preservados.</p>}
+                  <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Consultar períodos do profissional">
+                    <Button type="button" size="sm" variant={managePeriod==='todos'?'default':'outline'} onClick={()=>setManagePeriod('todos')}>Todos ({data.groups.length})</Button>
+                    {(['vigente','futuro','encerrado','invalido'] as const).map(period=>{const count=data.groups.filter(([,rows])=>gradePeriod(rows[0].dataInicio,rows[0].dataFim,todayStr)===period).length;return (period!=='invalido'||count>0)&&<Button type="button" key={period} size="sm" aria-pressed={managePeriod===period} variant={managePeriod===period?'default':'outline'} onClick={()=>setManagePeriod(period)}>{periodLabels[period]} ({count})</Button>;})}
+                  </div>
+                  {!data.groups.some(([,rows])=>managePeriod==='todos'||gradePeriod(rows[0].dataInicio,rows[0].dataFim,todayStr)===managePeriod)&&<p className="text-sm text-muted-foreground">Nenhum período cadastrado para este filtro.</p>}
+                  {data.groups.filter(([,rows])=>managePeriod==='todos'||gradePeriod(rows[0].dataInicio,rows[0].dataFim,todayStr)===managePeriod).map(([key, records]) => {
                     const first = records[0];
                     const unidade = unidades.find(u => u.id === first.unidadeId);
                     const isTurno = isGroupTurno(records);
+                    const period=gradePeriod(first.dataInicio,first.dataFim,todayStr);
                     const sala = first.salaId && !isTurno ? salas.find(s => s.id === first.salaId) : null;
 
+                    if(gradeMode(records)==='misto')return <Card key={key}><CardContent className="p-3 space-y-2"><div className="flex flex-wrap gap-2 items-center"><Badge variant="outline">Modalidades misturadas</Badge>{periodBadge(period)}</div><p className="text-xs text-muted-foreground">{first.dataInicio} a {first.dataFim} · {unidade?.nome||'Unidade não localizada'}. Consulta somente leitura para evitar interpretação incorreta.</p>{records.map(r=><div key={r.id} className="text-xs border-t pt-1">{r.vagasPorHora===0?'Por turno':'Por hora'} · {r.diasSemana.map(d=>diasSemanaLabels[d]||'Dia inválido').join(', ')} · {r.horaInicio}–{r.horaFim} · {r.vagasPorDia} vagas/dia {r.vagasPorHora!==0&&`· ${r.vagasPorHora} vagas/hora`}</div>)}</CardContent></Card>;
                     if (isTurno) {
                       const turnoBlocks: { bloco: BlocoConfig; dayNum: number }[] = [];
                       records.forEach(r => {
@@ -1079,7 +1089,7 @@ const Disponibilidade: React.FC = () => {
                         <div key={key} className="rounded-xl border border-border overflow-hidden bg-card">
                           <div className="flex items-center justify-between gap-3 px-4 py-3 bg-muted/30 border-b border-border">
                             <div className="flex items-center gap-3 min-w-0">
-                              <Badge className="gap-1.5 rounded-full px-3 py-1 text-xs"><Calendar className="w-3.5 h-3.5" />Por turno</Badge>
+                              <Badge className="gap-1.5 rounded-full px-3 py-1 text-xs"><Calendar className="w-3.5 h-3.5" />Por turno</Badge>{periodBadge(period)}
                               {unidade && <><span className="h-5 w-px bg-border" /><span className="text-sm text-muted-foreground truncate">{unidade.nome}</span></>}
                             </div>
                             <div className="flex gap-1 shrink-0">
@@ -1134,7 +1144,7 @@ const Disponibilidade: React.FC = () => {
                           <div className="flex items-start justify-between mb-2">
                             <div>
                               <div className="flex items-center gap-2 mb-1">
-                                <Badge variant="secondary" className="text-[10px] gap-1"><Clock className="w-3 h-3" />Por Hora</Badge>
+                                <Badge variant="secondary" className="text-[10px] gap-1"><Clock className="w-3 h-3" />Por Hora</Badge>{periodBadge(period)}
                                 {unidade && <span className="text-xs text-muted-foreground">{unidade.nome}</span>}
                                 {sala && <span className="text-xs text-muted-foreground">• {sala.nome}</span>}
                               </div>
@@ -1185,15 +1195,10 @@ const Disponibilidade: React.FC = () => {
       </Dialog>
 
       {/* Professional Cards List */}
-      {disponibilidades.length === 0 ? (
-        <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">
-          <Clock className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
-          Nenhuma disponibilidade configurada.
-        </CardContent></Card>
-      ) : filteredProfGroups.length === 0 ? (
+      {directoryReady&&(filteredProfGroups.length === 0 ? (
         <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">
           <Search className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
-          Nenhuma disponibilidade encontrada para esta busca ou unidade.
+          Nenhum profissional ou período encontrado para os filtros selecionados.
         </CardContent></Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1201,10 +1206,11 @@ const Disponibilidade: React.FC = () => {
             const prof = data.prof;
             const totalDisp = data.groups.length;
             const firstUnidadeId = data.groups[0]?.[1]?.[0]?.unidadeId || '';
-            const unidade = unidades.find(u => u.id === firstUnidadeId);
+            const unidade = unidades.find(u => u.id === (firstUnidadeId||prof?.unidadeId));
             const unitsServed = new Set(data.groups.map(([, records]) => records[0]?.unidadeId).filter(Boolean));
-            const hasTurno = data.groups.some(([_, records]) => isGroupTurno(records));
-            const hasHora = data.groups.some(([_, records]) => !isGroupTurno(records));
+            const hasTurno = data.groups.some(([_, records]) => gradeMode(records)!=='hora');
+            const hasHora = data.groups.some(([_, records]) => gradeMode(records)!=='turno');
+            const counts={vigente:0,futuro:0,encerrado:0,invalido:0};for(const [,rows] of data.groups)counts[gradePeriod(rows[0].dataInicio,rows[0].dataFim,todayStr)]++;
 
             return (
               <Card key={profId} className="shadow-card border-0 hover:shadow-elevated transition-shadow">
@@ -1214,26 +1220,28 @@ const Disponibilidade: React.FC = () => {
                       <User className="w-5 h-5 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-foreground truncate">{prof?.nome || 'Profissional'}</h3>
+                      <h3 className="font-semibold text-foreground break-words">{prof?.nome || 'Cadastro não localizado'}</h3>
                       <p className="text-xs text-muted-foreground truncate">{prof?.profissao || prof?.cargo || ''}</p>
                       {unidade && <p className="text-xs text-muted-foreground truncate">{unitsServed.size > 1 ? `Atende em ${unitsServed.size} unidades` : unidade.nome}</p>}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 mt-3">
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
                     <Badge variant="outline" className="text-xs">
                       <Clock className="w-3 h-3 mr-1" />
-                      {totalDisp} horário{totalDisp !== 1 ? 's' : ''}
+                      {totalDisp} período{totalDisp !== 1 ? 's' : ''}
                     </Badge>
                     {hasTurno && <Badge variant="secondary" className="text-[10px]">Turno</Badge>}
                     {hasHora && <Badge variant="secondary" className="text-[10px]">Hora</Badge>}
                   </div>
 
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2 text-xs">{data.active?<span className={data.vigente?'text-emerald-700 dark:text-emerald-300':'text-amber-800 dark:text-amber-300'}>{data.vigente?'Com grade vigente':'Sem grade vigente'}</span>:<span className="text-muted-foreground">Fora do total de profissionais ativos</span>}{(['vigente','futuro','encerrado','invalido'] as const).filter(p=>counts[p]>0).map(p=><Badge key={p} variant="outline" className="text-[10px]">{counts[p]} {periodLabels[p].toLowerCase()}</Badge>)}</div>
+                  {data.issues.length>0&&<p className="text-xs text-amber-800 dark:text-amber-300 mt-2">{data.issues.join(' · ')}</p>}
                   <Button
                     variant="outline"
                     size="sm"
                     className="w-full mt-3"
-                    onClick={() => setManageProfId(profId)}
+                    onClick={() => openManage(profId)}
                   >
                     <Settings2 className="w-4 h-4 mr-1.5" />
                     Gerenciar
@@ -1243,7 +1251,7 @@ const Disponibilidade: React.FC = () => {
             );
           })}
         </div>
-      )}
+       ))}
       </TabsContent></Tabs>
     </div>
   );
