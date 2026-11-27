@@ -19,7 +19,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Plus, Clock, Calendar, Pencil, Trash2, RefreshCw, Loader2, Info, ClipboardList, Search, Settings2, User, Copy, Save, X, Users, CalendarCheck, CalendarClock, Layers, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Plus, Clock, Calendar, Pencil, Trash2, RefreshCw, Loader2, Info, ClipboardList, Search, Settings2, User, Copy, Save, X, Users, CalendarCheck, CalendarClock, Layers, AlertTriangle, ChevronRight, LayoutGrid, List, ShieldCheck } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -113,6 +113,7 @@ const Disponibilidade: React.FC = () => {
   const [quotaReservation, setQuotaReservation] = useState<number | null>(null);
   const [quotaLoading, setQuotaLoading] = useState(false);
   const [gradeFilter,setGradeFilter]=useState<GradeFilter>(emptyGradeFilter);
+  const [gradeLayout,setGradeLayout]=useState<'cards'|'list'>('cards');
   const [managePeriod,setManagePeriod]=useState<'todos'|GradePeriod>('todos');
   const [manageProfId, setManageProfId] = useState<string | null>(null);
 
@@ -617,29 +618,29 @@ const Disponibilidade: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold font-display text-foreground">Disponibilidade</h1>
-
-          <p className="text-muted-foreground text-sm">
-            Configurar horários e vagas dos profissionais
-            {activeTab==='grade'&&directoryReady&&` • ${summary.periodos} período(s) na seleção`}
-          </p>
+    <div className="clinical-hub space-y-3 animate-fade-in min-w-0">
+      <header className="clinical-hub-hero flex flex-wrap items-center gap-3">
+        <span className="clinical-patient-avatar flex items-center justify-center shrink-0"><CalendarClock className="w-5 h-5" aria-hidden="true"/></span>
+        <div className="flex-1 min-w-[9rem]">
+          <p className="clinical-hub-eyebrow">Gestão operacional</p>
+          <h1 className="clinical-hub-name text-xl font-bold font-display">Disponibilidade</h1>
+          <p className="clinical-patient-sub text-xs mt-1">Horários e vagas dos profissionais{activeTab==='grade'&&directoryReady&&` · ${summary.periodos} período(s) na seleção`}</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleRefresh} size="sm">
-            <RefreshCw className="w-4 h-4 mr-2" />Atualizar
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={handleRefresh} size="sm" className="clinical-hub-new gap-1.5">
+            <RefreshCw className="w-4 h-4" />Atualizar
           </Button>
-          <Button onClick={openNew} disabled={!configLoaded||!may('can_create')||saving} className="gradient-primary text-primary-foreground">
-            <Plus className="w-4 h-4 mr-2" />Configurar
+          <Button onClick={openNew} disabled={!configLoaded||!may('can_create')||saving} size="sm" className="clinical-hub-new gap-1.5">
+            <Plus className="w-4 h-4" />Configurar
           </Button>
         </div>
-      </div>
-
-      <Tabs value={activeTab} onValueChange={selectTab}><TabsList><TabsTrigger value="grade">Grade de atendimento</TabsTrigger><TabsTrigger value="escala">Escala dos profissionais</TabsTrigger></TabsList>
-      <TabsContent value="escala"><Escala /></TabsContent><TabsContent value="grade" className="space-y-4">
+      </header>
+      <Tabs value={activeTab} onValueChange={selectTab}>
+        <TabsList className="clinical-hub-tabs w-full h-auto p-1 bg-transparent rounded-none">
+          <TabsTrigger value="grade" className="clinical-hub-tab flex-1 gap-1.5 data-[state=active]:text-primary data-[state=active]:border-primary data-[state=active]:bg-accent data-[state=active]:shadow-none"><CalendarCheck className="w-4 h-4 shrink-0"/>Grade de atendimento</TabsTrigger>
+          <TabsTrigger value="escala" className="clinical-hub-tab flex-1 gap-1.5 data-[state=active]:text-primary data-[state=active]:border-primary data-[state=active]:bg-accent data-[state=active]:shadow-none"><Calendar className="w-4 h-4 shrink-0"/>Escala dos profissionais</TabsTrigger>
+        </TabsList>
+      <TabsContent value="escala"><Escala /></TabsContent><TabsContent value="grade" className="space-y-3">
       {/* Search */}
       {!configLoaded&&<div role={configError?'alert':'status'} className="text-sm text-muted-foreground">{configError?'Não foi possível confirmar a configuração. Use Atualizar antes de editar horários.':'Carregando configuração de horários...'}</div>}
       {isGlobalAdmin && <UnitScopeNavigator units={unidadesVisiveis} value={unitId} onChange={setUnitId} />}
@@ -647,16 +648,16 @@ const Disponibilidade: React.FC = () => {
       {directoryReady&&<>
         <section className="grid grid-cols-1 min-[380px]:grid-cols-2 xl:grid-cols-5 gap-2" aria-label="Indicadores de disponibilidade">
           {[
-            {metric:'ativos' as const,label:'Profissionais ativos',value:summary.ativos,Icon:Users,note:'Na seleção de unidades'},
-            {metric:'vigentes' as const,label:'Com grade vigente',value:summary.vigentes,Icon:CalendarCheck,note:'Profissionais ativos'},
-            {metric:'sem_vigencia' as const,label:'Sem grade vigente',value:summary.semVigencia,Icon:CalendarClock,note:'Profissionais ativos'},
-            {metric:'periodos' as const,label:'Períodos cadastrados',value:summary.periodos,Icon:Layers,note:'Inclui histórico'},
-            {metric:'conferencia' as const,label:'Cadastros a conferir',value:summary.conferencia,Icon:AlertTriangle,note:'Sem alteração automática'}
-          ].map(({metric,label,value,Icon,note})=><button type="button" key={metric} aria-pressed={gradeFilter.metric===metric} onClick={()=>selectMetric(metric)} className={cn('clinical-premium p-3 flex items-center gap-2 text-left min-w-0 focus-visible:ring-2 focus-visible:ring-ring',gradeFilter.metric===metric&&'ring-1 ring-primary')}><span className="clinical-dock-icon clinical-tone-blue"><Icon className="w-4 h-4" aria-hidden="true"/></span><span className="flex-1 min-w-0"><strong className="block text-xl tabular-nums">{value}</strong><span className="block text-xs font-medium">{label}</span><span className="block text-[11px] text-muted-foreground">{note}</span></span><ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0"/></button>)}
+            {metric:'ativos' as const,label:'Profissionais ativos',value:summary.ativos,Icon:Users,tone:'blue',note:'Na seleção de unidades'},
+            {metric:'vigentes' as const,label:'Com grade vigente',value:summary.vigentes,Icon:CalendarCheck,tone:'teal',note:'Profissionais ativos'},
+            {metric:'sem_vigencia' as const,label:'Sem grade vigente',value:summary.semVigencia,Icon:CalendarClock,tone:'violet',note:'Profissionais ativos'},
+            {metric:'periodos' as const,label:'Períodos cadastrados',value:summary.periodos,Icon:Layers,tone:'blue',note:'Inclui histórico'},
+            {metric:'conferencia' as const,label:'Cadastros a conferir',value:summary.conferencia,Icon:AlertTriangle,tone:'neutral',note:'Sem alteração automática'}
+          ].map(({metric,label,value,Icon,tone,note})=><button type="button" key={metric} aria-pressed={gradeFilter.metric===metric} onClick={()=>selectMetric(metric)} className={cn('clinical-premium p-3 flex items-center gap-2 text-left min-w-0 focus-visible:ring-2 focus-visible:ring-ring',gradeFilter.metric===metric&&'ring-1 ring-primary')}><span className={`clinical-dock-icon clinical-tone-${tone}`}><Icon className="w-4 h-4" aria-hidden="true"/></span><span className="flex-1 min-w-0"><strong className="block text-xl tabular-nums">{value}</strong><span className="block text-xs font-medium">{label}</span><span className="block text-[11px] text-muted-foreground">{note}</span></span><ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0"/></button>)}
         </section>
         <p className="text-xs text-muted-foreground">Vigência em {todayStr.split('-').reverse().join('/')} · considera as datas inicial e final, não a presença, escala ou vagas livres. Profissionais ativos: lotação na seleção ou grade vinculada à seleção.</p>
         {directoryMayBeLimited&&<p role="alert" className="text-xs text-amber-800 dark:text-amber-300">A consulta operacional pode estar limitada pelo servidor. Os indicadores representam somente os registros carregados; não confirme ausência de grade sem conferência complementar.</p>}
-        <section className="rounded-lg border bg-card p-3 space-y-2" aria-label="Filtros de disponibilidade">
+        <section className="clinical-premium p-3 space-y-2" aria-label="Filtros de disponibilidade">
           <div className="flex flex-wrap gap-1.5 items-center" role="group" aria-label="Filtrar por vigência">
             <Button type="button" size="sm" variant={gradeFilter.period==='todos'?'default':'outline'} onClick={()=>setGradeFilter(f=>({...f,period:'todos'}))}>Todos os períodos</Button>
             {(['vigente','futuro','encerrado','invalido'] as const).map(period=>(period!=='invalido'||summary.periods.invalido>0)&&<Button type="button" size="sm" key={period} aria-pressed={gradeFilter.period===period} variant={gradeFilter.period===period?'default':'outline'} onClick={()=>setGradeFilter(f=>({...f,period}))}>{periodLabels[period]} ({summary.periods[period]})</Button>)}
@@ -667,18 +668,27 @@ const Disponibilidade: React.FC = () => {
             <Select value={gradeFilter.mode} onValueChange={mode=>setGradeFilter(f=>({...f,mode:mode as GradeFilter['mode']}))}><SelectTrigger className="w-full sm:w-40" aria-label="Filtrar modalidade"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="todos">Todas as modalidades</SelectItem><SelectItem value="hora">Por hora</SelectItem><SelectItem value="turno">Por turno</SelectItem><SelectItem value="misto">Mista / conferir</SelectItem></SelectContent></Select>
             <Button type="button" size="sm" variant="outline" onClick={()=>setGradeFilter(emptyGradeFilter)}>Limpar filtros</Button>
           </div>
-          <p className="text-xs text-muted-foreground" role="status">{filteredProfGroups.length} cadastro(s) ou vínculo(s) encontrado(s). Os indicadores acima consideram toda a seleção de unidades; os filtros não alteram os dados.</p>
+          <div className="flex flex-wrap gap-2 items-center justify-between border-t pt-2">
+            <p className="text-xs text-muted-foreground flex-1 min-w-[10rem]" role="status">{filteredProfGroups.length} cadastro(s) ou vínculo(s) encontrado(s). Os indicadores consideram toda a seleção de unidades.</p>
+            <div className="flex gap-1 border rounded-md p-0.5" role="group" aria-label="Visualização dos profissionais">
+              <Button type="button" size="sm" variant={gradeLayout==='cards'?'default':'ghost'} aria-pressed={gradeLayout==='cards'} className="h-7 px-2 gap-1.5" onClick={()=>setGradeLayout('cards')}><LayoutGrid className="w-3.5 h-3.5"/>Cards</Button>
+              <Button type="button" size="sm" variant={gradeLayout==='list'?'default':'ghost'} aria-pressed={gradeLayout==='list'} className="h-7 px-2 gap-1.5" onClick={()=>setGradeLayout('list')}><List className="w-3.5 h-3.5"/>Lista</Button>
+            </div>
+          </div>
         </section>
       </>}
 
       {/* Dialog (add/edit) */}
       <Dialog open={dialogOpen} onOpenChange={v => { if (!gradeWriteInFlight.current) setDialogOpen(v); }}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="font-display">{isEditing ? 'Editar' : 'Configurar'} Disponibilidade</DialogTitle></DialogHeader>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-4xl gap-3 max-h-[90dvh] overflow-y-auto">
+          <DialogHeader className="clinical-hub-hero text-left pr-9">
+            <div className="flex gap-3 items-start"><span className="clinical-patient-avatar flex items-center justify-center shrink-0"><Settings2 className="w-5 h-5" aria-hidden="true"/></span><div className="min-w-0"><p className="clinical-hub-eyebrow">Gestão de horários</p><DialogTitle className="clinical-hub-name font-display">{isEditing ? 'Editar' : 'Configurar'} Disponibilidade</DialogTitle><p className="clinical-patient-sub text-xs mt-1">Grade de atendimento profissional · {isEditing?'Edição de período':'Novo período'}</p></div></div>
+          </DialogHeader>
           {isEditing&&<p className="text-xs text-muted-foreground">Períodos encerrados são protegidos. Alterações em grade vigente devem ser conferidas antes de salvar; nenhum agendamento será remarcado automaticamente.</p>
           <div className="space-y-4">
             {/* Profissional + Unidade */}
-            <div className="grid grid-cols-2 gap-3">
+            <section className="clinical-premium p-3 space-y-3 min-w-0"><h3 className="triage-section-title"><User className="w-4 h-4"/>Identificação profissional</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div><Label>Profissional *</Label>
                 <Select value={form.profissionalId} onValueChange={handleProfissionalChange}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -712,19 +722,20 @@ const Disponibilidade: React.FC = () => {
               </div>
             )}
 
+            </section>
             {/* Mode selector */}
             {form.profissionalId && (
-              <Card className="border border-border bg-muted/30">
-                <CardContent className="p-4">
-                  <Label className="text-sm font-semibold mb-3 block">Modo de Disponibilidade</Label>
-                  <RadioGroup value={modo} onValueChange={v => handleModoChange(v as ModoDisponibilidade)} className="flex gap-6">
-                    <div className="flex items-center gap-2">
+              <Card className="clinical-premium">
+                <CardContent className="p-3 space-y-2">
+                  <h3 className="triage-section-title"><Settings2 className="w-4 h-4"/>Modalidade de atendimento</h3>
+                  <RadioGroup value={modo} onValueChange={v => handleModoChange(v as ModoDisponibilidade)} className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className={cn("clinical-inset border rounded-lg p-3 flex items-center gap-2",modo==='por_hora'&&'ring-1 ring-primary')}>
                       <RadioGroupItem value="por_hora" id="modo_hora" />
                       <label htmlFor="modo_hora" className="text-sm font-medium flex items-center gap-1.5 cursor-pointer">
                         <Clock className="w-4 h-4 text-primary" />Por Hora
                       </label>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className={cn("clinical-inset border rounded-lg p-3 flex items-center gap-2",modo==='por_turno'&&'ring-1 ring-primary')}>
                       <RadioGroupItem value="por_turno" id="modo_turno" />
                       <label htmlFor="modo_turno" className="text-sm font-medium flex items-center gap-1.5 cursor-pointer">
                         <ClipboardList className="w-4 h-4 text-primary" />Por Turno
@@ -737,7 +748,8 @@ const Disponibilidade: React.FC = () => {
             )}
 
             {/* Date range */}
-            <div className="grid grid-cols-2 gap-3">
+            <section className="clinical-premium p-3 space-y-3"><h3 className="triage-section-title"><Calendar className="w-4 h-4"/>Período de vigência</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Data Início *</Label>
                 <Input type="date" value={form.dataInicio} onChange={e => setForm(p => ({ ...p, dataInicio: e.target.value }))} />
@@ -749,17 +761,20 @@ const Disponibilidade: React.FC = () => {
               </div>
             </div>
 
-            <div className="rounded-lg border bg-muted/30 p-3 text-sm" role="status">
+            </section>
+            <section className="clinical-premium p-3 space-y-2 text-sm" role="status">
+              <h3 className="triage-section-title"><ShieldCheck className="w-4 h-4"/>Cotas externas</h3>
               <Label htmlFor="external-quota-reservation">Reserva para Cotas Externas</Label>
               <Input id="external-quota-reservation" className="mt-1 max-w-32" readOnly value={quotaLoading ? 'Carregando' : quotaReservation ?? 'Indisponível'} />
               <p className="mt-2 text-muted-foreground">{modo === 'por_hora' ? `Recepção limitada a ${form.vagasPorDia} vagas por dia` : 'Recepção limitada às vagas de cada turno abaixo'} · Cotas externas autorizadas no período: {quotaReservation ?? 'não confirmadas'} · Master sem limite de capacidade para encaixes.</p>
               <p className="mt-1 text-xs text-muted-foreground">A reserva é a soma das cotas ativas vinculadas a este profissional e unidade. Pode variar por data e turno; ajuste as cotas em Funcionários → Profissionais Externos.</p>
-            </div>
+            </section>
 
             {/* === POR HORA mode === */}
             {modo === 'por_hora' && (
-              <>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <section className="clinical-premium p-3 space-y-3 min-w-0">
+                <h3 className="triage-section-title"><Clock className="w-4 h-4"/>Parâmetros e horários por hora</h3>
+                <div className="grid grid-cols-1 min-[380px]:grid-cols-2 lg:grid-cols-4 gap-3">
                   <div>
                     <Label>Vagas/Hora</Label>
                     <Input type="number" min={1} value={form.vagasPorHora} onChange={e => setForm(p => ({ ...p, vagasPorHora: parseInt(e.target.value) || 1 }))} />
@@ -792,7 +807,7 @@ const Disponibilidade: React.FC = () => {
                 {/* Per-day schedule grid */}
                 <div>
                   <Label className="mb-2 block">Horário por Dia da Semana</Label>
-                  <div className="rounded-lg border border-border overflow-hidden">
+                  <div className="clinical-inset rounded-lg border border-border overflow-x-auto"><div className="min-w-[360px]">
                     <div className="grid grid-cols-[1fr_auto_1fr_1fr] gap-0 bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground border-b border-border">
                       <span>Dia</span>
                       <span className="text-center px-2">Ativo</span>
@@ -842,18 +857,19 @@ const Disponibilidade: React.FC = () => {
                         </div>
                       );
                     })}
-                  </div>
+                  </div></div>
                   <p className="text-xs text-muted-foreground mt-2">{activeDaysCount} dia(s) ativo(s)</p>
                   {daySchedules.some((ds, i) => ds.ativo && (i === 0 || i === 6)) && (
                     <p className="text-xs text-orange-500 mt-1 flex items-center gap-1">⚠️ Atenção: disponibilidade em fim de semana.</p>
                   )}
                 </div>
-              </>
+              </section>
             )}
 
             {/* === POR TURNO mode === */}
             {modo === 'por_turno' && (
-              <div className="space-y-4">
+              <section className="clinical-premium p-3 space-y-3 min-w-0">
+                <h3 className="triage-section-title"><CalendarClock className="w-4 h-4"/>Turnos e blocos por dia</h3>
                 <Accordion type="multiple" className="w-full border rounded-lg overflow-hidden">
                   {configDias.map((dia, diaIndex) => {
                     const isFds = diaIndex === 0 || diaIndex === 6;
@@ -953,7 +969,7 @@ const Disponibilidade: React.FC = () => {
                                 </div>
                               ))}
                               
-                              <div className="flex justify-between pt-2">
+                              <div className="flex flex-wrap gap-2 justify-between pt-2">
                                 <Button 
                                   variant="outline" 
                                   size="sm" 
@@ -963,7 +979,7 @@ const Disponibilidade: React.FC = () => {
                                   <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar Bloco
                                 </Button>
                                 
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap gap-2">
                                   {turnosGlobais.filter(t => t.ativo).map(t => (
                                     <Button 
                                       key={t.id}
@@ -998,8 +1014,8 @@ const Disponibilidade: React.FC = () => {
                 </Accordion>
 
                 {/* Summary */}
-                <Card className="bg-muted/30 border border-border">
-                  <CardContent className="p-4">
+                <Card className="clinical-inset border border-border">
+                  <CardContent className="p-3">
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Resumo da Configuração</h4>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div className="flex flex-col">
@@ -1013,43 +1029,40 @@ const Disponibilidade: React.FC = () => {
                     </div>
                   </CardContent>
                 </Card>
-              </div>
+              </section>
             )}
 
+            <div className="clinical-premium p-3 space-y-2"><p className="text-xs text-muted-foreground flex gap-1.5 items-start"><ShieldCheck className="w-4 h-4 text-primary shrink-0"/>A configuração só é gravada após a confirmação do servidor.</p>
             <Button onClick={handleSave} disabled={!canSave} className="w-full gradient-primary text-primary-foreground">
               {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Salvando...</> : isEditing ? 'Atualizar Disponibilidade' : 'Salvar Disponibilidade'}
-            </Button>
+            </Button></div>
           </div>
         </DialogContent>
       </Dialog>
 
       {/* Management Modal */}
       <Dialog open={!!manageProfData} onOpenChange={v => { if (!v) setManageProfId(null); }}>
-        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-5xl gap-3 max-h-[90dvh] overflow-y-auto">
           {manageProfData && (() => {
             const [profId, data] = manageProfData;
             const prof = data.prof;
             const profUnidade = unidades.find(u => u.id === prof?.unidadeId);
             return (
               <>
-                <DialogHeader>
-                  <DialogTitle className="font-display flex items-center gap-2">
-                    <User className="w-5 h-5 text-primary" />
-                    {prof?.nome || 'Cadastro de profissional não localizado'}
-                    {profUnidade && <Badge variant="secondary" className="text-xs ml-2">{profUnidade.nome}</Badge>}
-                  </DialogTitle>
+                <DialogHeader className="clinical-hub-hero text-left pr-9">
+                  <div className="flex items-start gap-3"><span className="clinical-patient-avatar flex items-center justify-center shrink-0"><User className="w-5 h-5" aria-hidden="true"/></span><div className="min-w-0"><p className="clinical-hub-eyebrow">Gestão de disponibilidade</p><DialogTitle className="clinical-hub-name font-display break-words">{prof?.nome || 'Cadastro de profissional não localizado'}</DialogTitle><p className="clinical-patient-sub text-xs mt-1 break-words">{[prof?.profissao||prof?.cargo,profUnidade?.nome].filter(Boolean).join(' · ')||'Consulta dos períodos cadastrados'}</p></div></div>
                 </DialogHeader>
 
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">{data.groups.length} disponibilidade(s) cadastrada(s)</p>
+                  <div className="clinical-premium p-3 flex flex-wrap items-center justify-between gap-2">
+                    <div><h3 className="font-semibold text-sm">Períodos de atendimento</h3><p className="text-xs text-muted-foreground">{data.groups.length} disponibilidade(s) cadastrada(s)</p></div>
                     <Button size="sm" disabled={!configLoaded||!may('can_create')||saving||!profissionais.some(p=>p.id===profId)} onClick={() => openNewForProf(profId)} className="gradient-primary text-primary-foreground">
                       <Plus className="w-4 h-4 mr-1" />Adicionar
                     </Button>
                   </div>
 
                   {data.issues.length>0&&<p role="status" className="text-xs text-amber-800 dark:text-amber-300">{data.issues.join(' · ')}. Os registros foram preservados.</p>}
-                  <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Consultar períodos do profissional">
+                  <div className="clinical-premium p-2 flex flex-wrap items-center gap-1.5" role="group" aria-label="Consultar períodos do profissional">
                     <Button type="button" size="sm" variant={managePeriod==='todos'?'default':'outline'} onClick={()=>setManagePeriod('todos')}>Todos ({data.groups.length})</Button>
                     {(['vigente','futuro','encerrado','invalido'] as const).map(period=>{const count=data.groups.filter(([,rows])=>gradePeriod(rows[0].dataInicio,rows[0].dataFim,todayStr)===period).length;return (period!=='invalido'||count>0)&&<Button type="button" key={period} size="sm" aria-pressed={managePeriod===period} variant={managePeriod===period?'default':'outline'} onClick={()=>setManagePeriod(period)}>{periodLabels[period]} ({count})</Button>;})}
                   </div>
@@ -1086,11 +1099,11 @@ const Disponibilidade: React.FC = () => {
                       const periodo = first.dataInicio === first.dataFim ? fmt(first.dataInicio) : `${fmt(first.dataInicio)} a ${fmt(first.dataFim)}`;
                       const sorted = turnoBlocks.sort((a, b) => a.dayNum - b.dayNum || a.bloco.horaInicio.localeCompare(b.bloco.horaInicio));
                       return (
-                        <div key={key} className="rounded-xl border border-border overflow-hidden bg-card">
-                          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-muted/30 border-b border-border">
-                            <div className="flex items-center gap-3 min-w-0">
+                        <div key={key} className="clinical-premium overflow-hidden min-w-0">
+                          <div className="clinical-inset flex flex-wrap items-center justify-between gap-2 p-3 border-b border-border">
+                            <div className="flex flex-wrap items-center gap-2 min-w-0">
                               <Badge className="gap-1.5 rounded-full px-3 py-1 text-xs"><Calendar className="w-3.5 h-3.5" />Por turno</Badge>{periodBadge(period)}
-                              {unidade && <><span className="h-5 w-px bg-border" /><span className="text-sm text-muted-foreground truncate">{unidade.nome}</span></>}
+                              {unidade && <><span className="h-5 w-px bg-border" /><span className="text-xs text-muted-foreground break-words">{unidade.nome}</span></>}
                             </div>
                             <div className="flex gap-1 shrink-0">
                               <Button size="icon" variant="ghost" className="h-8 w-8" title="Editar" disabled={!configLoaded||!may('can_edit',first.unidadeId)||saving||first.dataFim<todayStr||!profissionais.some(p=>p.id===first.profissionalId)} onClick={() => openEditGroup(key)}><Pencil className="w-4 h-4" /></Button>
@@ -1104,7 +1117,7 @@ const Disponibilidade: React.FC = () => {
                             </div>
                           </div>
                           <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
+                            <table className="w-full min-w-[520px] text-sm">
                               <thead className="bg-muted/50 text-muted-foreground">
                                 <tr>
                                   <th className="text-left font-medium px-4 py-2.5"><span className="inline-flex items-center gap-1.5"><Calendar className="w-4 h-4" />Data</span></th>
@@ -1139,11 +1152,11 @@ const Disponibilidade: React.FC = () => {
                     const dayEntries = records.flatMap(r => r.diasSemana.map(dayNum => ({ dayNum, horaInicio: r.horaInicio, horaFim: r.horaFim }))).sort((a, b) => a.dayNum - b.dayNum);
 
                     return (
-                      <Card key={key} className="border border-border">
+                      <Card key={key} className="clinical-premium min-w-0">
                         <CardContent className="p-4">
-                          <div className="flex items-start justify-between mb-2">
+                          <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
                             <div>
-                              <div className="flex items-center gap-2 mb-1">
+                              <div className="flex flex-wrap items-center gap-2 mb-1">
                                 <Badge variant="secondary" className="text-[10px] gap-1"><Clock className="w-3 h-3" />Por Hora</Badge>{periodBadge(period)}
                                 {unidade && <span className="text-xs text-muted-foreground">{unidade.nome}</span>}
                                 {sala && <span className="text-xs text-muted-foreground">• {sala.nome}</span>}
@@ -1173,7 +1186,7 @@ const Disponibilidade: React.FC = () => {
                               </span>
                             ))}
                           </div>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <span>{first.vagasPorHora} vagas/hora</span>
                             <span>•</span>
                             <span>{first.vagasPorDia} vagas/dia</span>
@@ -1201,7 +1214,7 @@ const Disponibilidade: React.FC = () => {
           Nenhum profissional ou período encontrado para os filtros selecionados.
         </CardContent></Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className={gradeLayout==='cards'?'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2':'grid grid-cols-1 gap-2'}>
           {filteredProfGroups.map(([profId, data]) => {
             const prof = data.prof;
             const totalDisp = data.groups.length;
@@ -1213,20 +1226,20 @@ const Disponibilidade: React.FC = () => {
             const counts={vigente:0,futuro:0,encerrado:0,invalido:0};for(const [,rows] of data.groups)counts[gradePeriod(rows[0].dataInicio,rows[0].dataFim,todayStr)]++;
 
             return (
-              <Card key={profId} className="shadow-card border-0 hover:shadow-elevated transition-shadow">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <User className="w-5 h-5 text-primary" />
+              <Card key={profId} className="clinical-premium h-full min-w-0">
+                <CardContent className={cn("p-3 min-w-0",gradeLayout==='list'?'flex flex-wrap lg:flex-nowrap lg:items-center gap-3':'flex flex-col gap-2 h-full')}>
+                  <div className={cn("flex items-start gap-2.5 min-w-0",gradeLayout==='list'&&'flex-1 basis-60')}>
+                    <div className="clinical-dock-icon clinical-tone-blue shrink-0">
+                      <User className="w-4 h-4" aria-hidden="true" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-foreground break-words">{prof?.nome || 'Cadastro não localizado'}</h3>
-                      <p className="text-xs text-muted-foreground truncate">{prof?.profissao || prof?.cargo || ''}</p>
-                      {unidade && <p className="text-xs text-muted-foreground truncate">{unitsServed.size > 1 ? `Atende em ${unitsServed.size} unidades` : unidade.nome}</p>}
+                      <h3><button type="button" className="text-sm font-semibold text-left text-foreground break-words hover:underline rounded focus-visible:ring-2 focus-visible:ring-ring" onClick={()=>openManage(profId)}>{prof?.nome || 'Cadastro não localizado'}</button></h3>
+                      <p className="text-xs text-muted-foreground break-words">{prof?.profissao || prof?.cargo || ''}</p>
+                      {unidade && <p className="text-xs text-muted-foreground break-words">{unitsServed.size > 1 ? `Atende em ${unitsServed.size} unidades` : unidade.nome}</p>}
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                  <div className={cn("min-w-0",gradeLayout==='list'&&'flex-1 basis-52')}><div className="flex flex-wrap items-center gap-1.5">
                     <Badge variant="outline" className="text-xs">
                       <Clock className="w-3 h-3 mr-1" />
                       {totalDisp} período{totalDisp !== 1 ? 's' : ''}
@@ -1236,11 +1249,11 @@ const Disponibilidade: React.FC = () => {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-1.5 mt-2 text-xs">{data.active?<span className={data.vigente?'text-emerald-700 dark:text-emerald-300':'text-amber-800 dark:text-amber-300'}>{data.vigente?'Com grade vigente':'Sem grade vigente'}</span>:<span className="text-muted-foreground">Fora do total de profissionais ativos</span>}{(['vigente','futuro','encerrado','invalido'] as const).filter(p=>counts[p]>0).map(p=><Badge key={p} variant="outline" className="text-[10px]">{counts[p]} {periodLabels[p].toLowerCase()}</Badge>)}</div>
-                  {data.issues.length>0&&<p className="text-xs text-amber-800 dark:text-amber-300 mt-2">{data.issues.join(' · ')}</p>}
+                  {data.issues.length>0&&<p className="text-xs text-amber-800 dark:text-amber-300 mt-1">{data.issues.join(' · ')}</p>}</div>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full mt-3"
+                    className={cn("clinical-record-action gap-1.5",gradeLayout==='cards'?'w-full mt-auto':'shrink-0 ml-auto')}
                     onClick={() => openManage(profId)}
                   >
                     <Settings2 className="w-4 h-4 mr-1.5" />
