@@ -78,7 +78,7 @@ function RecordList({ records, empty }: { records: RecordLine[]; empty: string }
   </>;
 }
 
-function Details({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+function Details({ title, onClose, children, indicator = false }: { title: string; onClose: () => void; children: ReactNode; indicator?: boolean }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const close = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -90,7 +90,7 @@ function Details({ title, onClose, children }: { title: string; onClose: () => v
   }, []);
   return <dialog ref={dialog} className="planta-drawer" aria-labelledby="planta-detail-title" onCancel={e => { e.preventDefault(); onClose(); }}
     onClick={e => { if (e.target === e.currentTarget && e.clientX < e.currentTarget.getBoundingClientRect().left) onClose(); }}>
-    <header><small>Detalhe do setor</small><h2 id="planta-detail-title">{title}</h2>
+    <header><small>{indicator ? 'Detalhe do indicador' : 'Detalhe do setor'}</small><h2 id="planta-detail-title">{title}</h2>
       <button className="planta-control" type="button" aria-label="Fechar detalhes" ref={close} onClick={onClose}><X size={18} /></button>
     </header>
     <div className="planta-drawer-body">{children}</div>
@@ -312,10 +312,10 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     id: a.id, infusion: infusionVisit(a.tipo) || infusionVisit(roomById.get(a.sala_id)?.nome || ''),
   }));
   const metrics = [
-    { icon: UsersRound, label: 'Pacientes na unidade', value: String(inside), hint: 'presentes' },
-    { icon: Clock3, label: 'Espera média · chegada', value: average === null ? '—' : average + ' min', hint: waits.length + ' com horário' },
-    { icon: DoorOpen, label: 'Salas em atendimento', value: occupied + '/' + rooms.length, hint: 'salas' },
-    { icon: CircleCheck, label: 'Concluídos hoje', value: String(done.length), hint: 'atendimentos' },
+    { id: 'indicador:presentes', icon: UsersRound, label: 'Pacientes na unidade', value: String(inside), hint: 'presentes' },
+    { id: 'indicador:espera', icon: Clock3, label: 'Espera média · chegada', value: average === null ? '—' : average + ' min', hint: waits.length + ' com horário' },
+    { id: 'indicador:salas', icon: DoorOpen, label: 'Salas em atendimento', value: occupied + '/' + rooms.length, hint: 'salas' },
+    { id: 'indicador:concluidos', icon: CircleCheck, label: 'Concluídos hoje', value: String(done.length), hint: 'atendimentos' },
   ];
 
   const visitMinutes = (a: Item) => elapsedMinutes(a.iniciado_em || starts[a.id] || null, now);
@@ -428,7 +428,60 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
           describeTriage(itemById.get(entry.agendamento_id)!, entry))} />
       </>;
     };
-    if (zone.startsWith('alerta:')) {
+    if (zone === 'indicador:presentes') {
+      const stageLabels: Record<Item['stage'], string> = {
+        outside: 'Fora do fluxo', done: 'Concluído', reception: 'Aguardando triagem',
+        triage: 'Em classificação', ready: 'Apto para consulta', calling: 'Chamado',
+        consultation: 'Em atendimento', otherCare: 'Aguardando equipe',
+      };
+      detail = { title: 'Pacientes na unidade', body: <>
+        <span className="planta-badge">{inside} pacientes distintos</span>
+        <p>São {active.length} registros ativos da agenda do dia nesta unidade. Um paciente pode possuir mais de um atendimento; o indicador conta pessoas distintas pelo vínculo cadastrado, quando disponível.</p>
+        <RecordList empty="Nenhum paciente no fluxo ativo." records={active.map(a => asRecord(a, [
+          classifyingIds.has(a.id) ? 'Em classificação' : stageLabels[a.stage],
+          a.profissional_nome, roomById.get(a.sala_id)?.nome,
+        ].filter(Boolean).join(' · ')))} />
+      </> };
+    } else if (zone === 'indicador:espera') {
+      detail = { title: 'Espera média desde a chegada', body: <>
+        <span className="planta-badge">{average === null ? 'Média indisponível' : average + ' min de média'}</span>
+        <dl className="planta-indicator-summary">
+          <div><dt>Aguardando</dt><dd>{waiting.length}</dd></div>
+          <div><dt>Com horário válido</dt><dd>{waits.length}</dd></div>
+          <div><dt>Sem horário válido</dt><dd>{waiting.length - waits.length}</dd></div>
+          <div><dt>Maior espera</dt><dd>{longest === null ? '—' : longest + ' min'}</dd></div>
+        </dl>
+        <p>A média usa apenas horários válidos de chegada dos atendimentos aguardando triagem ou consulta. Não é uma previsão nem o tempo desde a classificação.</p>
+        <RecordList empty="Nenhum atendimento aguardando." records={waitingSorted.map(({a, minutes}) =>
+          asRecord(a, [minutes === null ? 'Chegada sem horário válido' : minutes + ' min desde a chegada',
+            a.stage === 'ready' ? 'Apto para consulta' : 'Aguardando triagem'].join(' · '), waitingTone(minutes)))} />
+      </> };
+    } else if (zone === 'indicador:salas') {
+      detail = { title: 'Salas em atendimento', body: <>
+        <span className="planta-badge">{occupied}/{rooms.length} salas em atendimento</span>
+        <p>A ocupação considera os atendimentos em andamento vinculados a salas ativas desta unidade. Sem atendimento não significa disponibilidade de agenda ou de profissionais.</p>
+        {unmapped.length > 0 && <button type="button" className="planta-action" onClick={() => setZone('sem-sala')}>{unmapped.length} em atendimento sem sala · conferir</button>}
+        <div className="planta-indicator-rooms">{roomViews.map(({map, visits}) =>
+          <button key={map.id} type="button" className="planta-indicator-room" onClick={() => setZone(map.id)}>
+            <span><strong>{map.name}</strong><small>{roomStatuses[map.state]}{visits.length > 0 ? ' · ' + visits.length + ' em atendimento' : ''}</small></span>
+            <ChevronRight size={16} aria-hidden="true"/>
+          </button>)}</div>
+        {!rooms.length && <p>Nenhuma sala ativa cadastrada.</p>}
+      </> };
+    } else if (zone === 'indicador:concluidos') {
+      const completedSorted = [...done].sort((a, b) =>
+        (Number.isFinite(Date.parse(b.concluido_em || '')) ? Date.parse(b.concluido_em!) : -Infinity) -
+        (Number.isFinite(Date.parse(a.concluido_em || '')) ? Date.parse(a.concluido_em!) : -Infinity));
+      detail = { title: 'Concluídos hoje', body: <>
+        <span className="planta-badge">{done.length} atendimentos concluídos</span>
+        <p>Registros concluídos da agenda de {dateLabel(day)} nesta unidade. O horário só é exibido quando registrado e pertencente ao dia operacional.</p>
+        <RecordList empty="Nenhum atendimento concluído na agenda do dia." records={completedSorted.map(a => {
+          const time = Date.parse(a.concluido_em || '');
+          const completion = Number.isFinite(time) && cockpitDay(time) === day ? clock(a.concluido_em) : 'Conclusão sem horário registrado hoje';
+          return asRecord(a, [completion, a.profissional_nome, roomById.get(a.sala_id)?.nome].filter(Boolean).join(' · '));
+        })} />
+      </> };
+    } else if (zone.startsWith('alerta:')) {
       const alert = alerts.find(item => `alerta:${item.id}` === zone);
       const related = alert?.appointmentIds.map(id => itemById.get(id)).filter((item): item is Item => !!item) ?? [];
       const roomLinks = alert?.zones.flatMap(id => roomViews.filter(item => item.map.id === id)) ?? [];
@@ -505,12 +558,14 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
   const syncLabel = error ? 'Dados desatualizados · falha de atualização' : !rows ? 'Carregando a unidade…'
     : online && callsOnline ? 'Ao vivo · Fluxo da unidade' : 'Sincronização parcial · reconectando' + (missingSources.length ? ' · ' + missingSources.join(', ') : '');
   return <div className="planta-page">
-    {rows && <dl className="planta-metrics" aria-label="Indicadores da unidade">
-      {metrics.map(({ icon: Icon, label, value, hint }) => <div key={label} className="planta-metric">
-        <dt>{label}</dt><span className="planta-metric-icon" aria-hidden="true"><Icon size={19} /></span>
-        <dd>{value}<small>{hint}</small></dd>
-      </div>)}
-    </dl>}
+    {rows && <section className="planta-metrics" aria-label="Indicadores da unidade">
+      {metrics.map(({ id, icon: Icon, label, value, hint }) => {
+        const content = <><span className="planta-metric-label">{label}</span><span className="planta-metric-icon" aria-hidden="true"><Icon size={19} /></span>
+          <span className="planta-metric-value"><span>{value}</span><small>{hint}</small></span>{!theater && <ChevronRight className="planta-metric-chevron" size={15} aria-hidden="true"/>}</>;
+        return theater ? <div key={id} className="planta-metric">{content}</div> :
+          <button key={id} type="button" className="planta-metric" aria-haspopup="dialog" onClick={event => openZone(id, event.currentTarget)}>{content}</button>;
+      })}
+    </section>}
     {rows && <CockpitAlerts alerts={alerts} acknowledged={acknowledged} theater={theater} stale={stale}
       onOpen={(alert, button) => openZone(`alerta:${alert.id}`, button)}
       onAcknowledge={id => setAcknowledged(previous => {
@@ -564,6 +619,8 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
       <span>{theater ? 'Modo telão · Sem nomes de pacientes' : 'Selecione um setor para abrir os detalhes.'}</span>
       <span>Salas do cadastro e ocupação pela Agenda · Disposição e mobiliário ilustrativos.</span>
     </div>}
-    {detail && <Details key={zone} title={detail.title} onClose={closeZone}>{detail.body}</Details>}
+    {detail && <Details key={zone} title={detail.title} onClose={closeZone} indicator={zone?.startsWith('indicador:')}>
+      {zone?.startsWith('indicador:') && stale && <p className="planta-indicator-stale">Dados da última leitura · atualização parcial ou indisponível.</p>}{detail.body}
+    </Details>}
   </div>;
 }
