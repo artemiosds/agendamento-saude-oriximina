@@ -54,8 +54,8 @@ const statusLabels: Record<string, { label: string; class: string }> = {
   remarcado: { label: 'Remarcado', class: 'bg-muted text-muted-foreground' },
 };
 
-type RecoveryStep = 'none' | 'verify' | 'newpass' | 'done';
-type FirstStep = 'none' | 'id' | 'senha';
+type RecoveryStep = 'none' | 'verify' | 'sent' | 'newpass' | 'done';
+type FirstStep = 'none' | 'id' | 'sent';
 
 const PortalPaciente: React.FC = () => {
   const navigate = useNavigate();
@@ -75,7 +75,8 @@ const PortalPaciente: React.FC = () => {
 
   // Recovery state
   const [recoveryStep, setRecoveryStep] = useState<RecoveryStep>('none');
-  const [recCpf, setRecCpf] = useState('');
+  const [credentialUserId, setCredentialUserId] = useState<string | null>(null);
+  const [credentialEmail, setCredentialEmail] = useState('');
   const [recEmail, setRecEmail] = useState('');
   const [recNovaSenha, setRecNovaSenha] = useState('');
   const [recConfirmar, setRecConfirmar] = useState('');
@@ -86,31 +87,47 @@ const PortalPaciente: React.FC = () => {
   const [faStep, setFaStep] = useState<FirstStep>('none');
   const [faCpf, setFaCpf] = useState('');
   const [faNasc, setFaNasc] = useState('');
-  const [faNome, setFaNome] = useState('');
-  const [faTemEmail, setFaTemEmail] = useState(false);
-  const [faEmailMask, setFaEmailMask] = useState('');
-  const [faEmail, setFaEmail] = useState('');
-  const [faSenha, setFaSenha] = useState('');
-  const [faConf, setFaConf] = useState('');
   const [faErro, setFaErro] = useState('');
   const [faLoading, setFaLoading] = useState(false);
 
-  useEffect(() => { checkSession(); }, []);
+  useEffect(() => {
+    // Supabase processes the signed recovery/confirmation link; never use the URL as authorization.
+    void checkSession();
+  }, []);
 
   const checkSession = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      // Check if portal is globally enabled and patient is not blocked
-      const accessCheck = await checkPortalAccess();
-      if (!accessCheck.allowed) {
-        await supabase.auth.signOut();
-        toast.error(accessCheck.message);
-        setIsLoading(false);
+    const credentialLink = new URLSearchParams(window.location.search).get('credencial') === '1';
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (credentialLink) {
+        // A URL flag alone cannot authorize a password change.
+        const verified = session && !error ? await supabase.auth.getUser() : null;
+        if (verified && !verified.error && verified.data.user && verified.data.user.id === session?.user.id && verified.data.user.email_confirmed_at) {
+          const accessCheck = await checkPortalAccess();
+          if (accessCheck.allowed) {
+            setCredentialUserId(verified.data.user.id);
+            setCredentialEmail(verified.data.user.email || '');
+            setRecoveryStep('newpass');
+            return;
+          }
+        }
+        setRecoveryStep('verify');
+        setRecErro('Não foi possível validar o link e a conta do portal. Solicite outro link ou procure a unidade.');
+        navigate('/portal', { replace: true });
         return;
       }
-      await loadPacienteData(session.user.id);
-    }
-    setIsLoading(false);
+      if (session?.user && !error) {
+        const accessCheck = await checkPortalAccess();
+        if (!accessCheck.allowed) {
+          await supabase.auth.signOut();
+          toast.error(accessCheck.message);
+          return;
+        }
+        await loadPacienteData(session.user.id);
+      }
+    } catch {
+      toast.error('Não foi possível verificar sua sessão. Tente novamente.');
+    } finally { setIsLoading(false); }
   };
 
   const checkPortalAccess = async (): Promise<{ allowed: boolean; message: string }> => {
@@ -316,66 +333,64 @@ const PortalPaciente: React.FC = () => {
 
   const handleVerifyRecovery = async () => {
     setRecErro('');
-    if (!recCpf.trim() || !recEmail.trim()) { setRecErro('Preencha CPF e e-mail.'); return; }
+    const email = recEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setRecErro('Informe um e-mail válido.'); return; }
     setRecLoading(true);
-    setRecoveryStep('newpass');
-    setRecLoading(false);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: new URL('/portal?credencial=1', window.location.origin).href,
+      });
+      if (error) { setRecErro('Não foi possível solicitar o link agora. Aguarde e tente novamente ou procure a unidade.'); return; }
+      setRecoveryStep('sent');
+    } catch { setRecErro('Erro ao conectar ao servidor.'); }
+    finally { setRecLoading(false); }
+  };
+
+  const cancelRecovery = async () => {
+    if (recLoading) return;
+    if (credentialUserId) await supabase.auth.signOut({ scope: 'local' });
+    setCredentialUserId(null); setCredentialEmail(''); setRecoveryStep('none'); setRecErro('');
+    setRecNovaSenha(''); setRecConfirmar(''); setRecEmail('');
+    if (new URLSearchParams(window.location.search).has('credencial')) navigate('/portal', { replace: true });
   };
 
   const handleResetPassword = async () => {
     setRecErro('');
-    if (recNovaSenha.length < 6) { setRecErro('A senha deve ter no mínimo 6 caracteres.'); return; }
+    if (!credentialUserId) { setRecErro('Abra o link recebido no e-mail cadastrado.'); return; }
+    if (recNovaSenha.length < 8 || recNovaSenha.length > 100) { setRecErro('A senha deve ter entre 8 e 100 caracteres.'); return; }
     if (recNovaSenha !== recConfirmar) { setRecErro('As senhas não conferem.'); return; }
     setRecLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('reset-password', {
-        body: { cpf: recCpf, email: recEmail, novaSenha: recNovaSenha, tipo: 'paciente' },
-      });
-      if (error || data?.error) { setRecErro(data?.error || 'Erro ao redefinir senha.'); setRecLoading(false); return; }
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user || user.id !== credentialUserId || !user.email_confirmed_at || !(await checkPortalAccess()).allowed) {
+        setRecErro('A sessão de recuperação não é válida. Solicite outro link ou procure a unidade.');
+        return;
+      }
+      const { error } = await supabase.auth.updateUser({ password: recNovaSenha });
+      if (error) { setRecErro('Não foi possível redefinir a senha. Solicite outro link ou procure a unidade.'); return; }
+      // Password was changed by the authenticated user, not by a privileged public endpoint.
+      const { error: logoutError } = await supabase.auth.signOut({ scope: 'global' });
+      setCredentialUserId(null); setCredentialEmail(''); setRecNovaSenha(''); setRecConfirmar(''); setRecEmail('');
+      navigate('/portal', { replace: true });
       setRecoveryStep('done');
-      toast.success('Senha alterada com sucesso!');
-      setTimeout(() => { setRecoveryStep('none'); setRecCpf(''); setRecEmail(''); setRecNovaSenha(''); setRecConfirmar(''); }, 3000);
+      if (logoutError) toast.warning('Senha alterada; não foi possível confirmar o encerramento das outras sessões.');
+      else toast.success('Senha alterada com sucesso!');
     } catch { setRecErro('Erro ao conectar ao servidor.'); }
-    setRecLoading(false);
+    finally { setRecLoading(false); }
   };
 
-  const resetFirst = () => { setFaStep('none'); setFaCpf(''); setFaNasc(''); setFaNome(''); setFaEmail(''); setFaSenha(''); setFaConf(''); setFaErro(''); };
-
-  const callFirst = async (payload: any) => {
-    const { data, error } = await supabase.functions.invoke('patient-first-access', { body: payload });
-    if (error && !data) throw error;
-    return data;
-  };
-
+  const resetFirst = () => { setFaStep('none'); setFaCpf(''); setFaNasc(''); setFaErro(''); };
   const handleFirstVerify = async () => {
     setFaErro('');
     if (faCpf.replace(/\D/g, '').length !== 11) { setFaErro('Informe um CPF válido.'); return; }
     if (!faNasc) { setFaErro('Informe sua data de nascimento.'); return; }
     setFaLoading(true);
     try {
-      const d = await callFirst({ action: 'verify', cpf: faCpf, dataNascimento: faNasc });
-      if (d?.error) { setFaErro(d.error); return; }
-      setFaNome(d.nome); setFaTemEmail(!!d.temEmail); setFaEmailMask(d.emailMascarado || ''); setFaStep('senha');
-    } catch { setFaErro('Erro ao conectar ao servidor.'); }
-    finally { setFaLoading(false); }
-  };
-
-  const handleFirstActivate = async () => {
-    setFaErro('');
-    if (!faTemEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(faEmail.trim())) { setFaErro('Informe um e-mail válido.'); return; }
-    if (faSenha.length < 6) { setFaErro('A senha deve ter no mínimo 6 caracteres.'); return; }
-    if (faSenha !== faConf) { setFaErro('As senhas não conferem.'); return; }
-    setFaLoading(true);
-    try {
-      const d = await callFirst({ action: 'activate', cpf: faCpf, dataNascimento: faNasc, email: faTemEmail ? undefined : faEmail.trim(), senha: faSenha });
-      if (d?.error || !d?.success) { setFaErro(d?.error || 'Erro ao ativar acesso.'); return; }
-      toast.success('Acesso ativado! Entrando...');
-      const { data: s, error } = await supabase.auth.signInWithPassword({ email: d.email, password: faSenha });
-      resetFirst();
-      if (error || !s.session) { setLoginForm({ email: d.email, senha: '' }); toast.info('Faça login com seu e-mail e a nova senha.'); return; }
-      const acc = await checkPortalAccess();
-      if (!acc.allowed) { await supabase.auth.signOut(); toast.error(acc.message); return; }
-      await loadPacienteData(s.session.user.id);
+      const { data, error } = await supabase.functions.invoke('patient-first-access', {
+        body: { action: 'request_invite', cpf: faCpf, dataNascimento: faNasc },
+      });
+      if (error || !data?.success) { setFaErro('Não foi possível solicitar o primeiro acesso. Tente novamente ou procure a unidade.'); return; }
+      setFaCpf(''); setFaNasc(''); setFaStep('sent');
     } catch { setFaErro('Erro ao conectar ao servidor.'); }
     finally { setFaLoading(false); }
   };
@@ -403,28 +418,19 @@ const PortalPaciente: React.FC = () => {
               <CardContent className="p-6 space-y-4">
                 {faStep === 'id' ? (
                   <>
-                    <p className="text-sm text-muted-foreground">Já foi atendido ou agendado na unidade? Informe seus dados para confirmar sua identidade.</p>
+                    <p className="text-sm text-muted-foreground">Informe CPF e data de nascimento para solicitar um link ao e-mail já cadastrado na unidade. Sem e-mail ou sem CPF? Procure a unidade para atendimento assistido.</p>
                     <div><Label>CPF</Label><Input value={faCpf} onChange={e => setFaCpf(e.target.value)} placeholder="000.000.000-00" inputMode="numeric" /></div>
                     <div><Label>Data de nascimento</Label><Input type="date" value={faNasc} onChange={e => setFaNasc(e.target.value)} /></div>
                     {faErro && <p className="text-sm text-destructive text-center">{faErro}</p>}
                     <Button onClick={handleFirstVerify} className="w-full gradient-primary text-primary-foreground" disabled={faLoading}>
-                      {faLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />} Continuar
+                      {faLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />} Solicitar link seguro
                     </Button>
                   </>
                 ) : (
                   <>
-                    <div className="rounded-lg bg-primary/5 p-3 text-sm">Cadastro encontrado: <strong className="text-foreground">{faNome}</strong></div>
-                    {faTemEmail ? (
-                      <p className="text-sm text-muted-foreground">Seu login será o e-mail cadastrado na unidade: <strong>{faEmailMask}</strong></p>
-                    ) : (
-                      <div><Label>Seu e-mail (será seu login)</Label><Input type="email" value={faEmail} onChange={e => setFaEmail(e.target.value)} placeholder="seu@email.com" /></div>
-                    )}
-                    <div><Label>Crie sua senha</Label><Input type="password" value={faSenha} onChange={e => setFaSenha(e.target.value)} placeholder="Mínimo 6 caracteres" /></div>
-                    <div><Label>Confirme a senha</Label><Input type="password" value={faConf} onChange={e => setFaConf(e.target.value)} placeholder="Repita a senha" /></div>
-                    {faErro && <p className="text-sm text-destructive text-center">{faErro}</p>}
-                    <Button onClick={handleFirstActivate} className="w-full gradient-primary text-primary-foreground" disabled={faLoading}>
-                      {faLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />} Ativar meu acesso
-                    </Button>
+                    <p className="text-sm font-medium">Solicitação recebida</p>
+                    <p className="text-sm text-muted-foreground">Se o cadastro estiver apto, um link será enviado ao e-mail registrado. Confira também a caixa de spam. Se já possui acesso, use a recuperação de senha. Se não recebeu o link, procure a unidade.</p>
+                    <Button onClick={resetFirst} variant="outline" className="w-full">Voltar ao login</Button>
                   </>
                 )}
               </CardContent>
@@ -440,7 +446,7 @@ const PortalPaciente: React.FC = () => {
         <div className="min-h-screen bg-background">
           <div className="gradient-hero text-primary-foreground py-8">
             <div className="container mx-auto px-4">
-              <button onClick={() => { setRecoveryStep('none'); setRecErro(''); }} className="inline-flex items-center text-sm opacity-70 hover:opacity-100 mb-4">
+              <button onClick={() => void cancelRecovery()} disabled={recLoading} className="inline-flex items-center text-sm opacity-70 hover:opacity-100 mb-4">
                 <ArrowLeft className="w-4 h-4 mr-1" />Voltar ao login
               </button>
               <h1 className="text-2xl md:text-3xl font-bold font-display">Recuperar Senha</h1>
@@ -460,23 +466,29 @@ const PortalPaciente: React.FC = () => {
                   {recoveryStep === 'done' ? (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center space-y-3">
                       <p className="text-success font-semibold">✅ Senha alterada com sucesso!</p>
-                      <p className="text-sm text-muted-foreground">Você já pode fazer login com a nova senha.</p>
+                      <p className="text-sm text-muted-foreground">Você já pode fazer login com a nova senha.</p><Button variant="outline" className="w-full" onClick={() => void cancelRecovery()}>Voltar ao login</Button>
                     </motion.div>
+                  ) : recoveryStep === 'sent' ? (
+                    <div className="space-y-3 text-center">
+                      <p className="font-medium">Confira seu e-mail</p>
+                      <p className="text-sm text-muted-foreground">Se existir uma conta para esse e-mail, você receberá um link seguro. Confira o spam. Caso não tenha acesso ao e-mail cadastrado, procure a unidade.</p>
+                      <Button variant="outline" className="w-full" onClick={() => void cancelRecovery()}>Voltar ao login</Button>
+                    </div>
                   ) : recoveryStep === 'verify' ? (
                     <div className="space-y-4">
-                      <div><Label>CPF</Label><Input value={recCpf} onChange={e => setRecCpf(e.target.value)} placeholder="000.000.000-00" /></div>
                       <div><Label>E-mail cadastrado</Label><Input type="email" value={recEmail} onChange={e => setRecEmail(e.target.value)} placeholder="seu@email.com" /></div>
                       {recErro && <p className="text-sm text-destructive text-center">{recErro}</p>}
                       <Button onClick={handleVerifyRecovery} className="w-full gradient-primary text-primary-foreground" disabled={recLoading}>
-                        {recLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />} Verificar dados
+                        {recLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />} Enviar link seguro
                       </Button>
                     </div>
                   ) : (
                     <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">Defina uma nova senha para a conta autenticada: <strong>{credentialEmail}</strong>.</p>
                       <div>
                         <Label>Nova senha</Label>
                         <div className="relative">
-                          <Input type={showNova ? 'text' : 'password'} value={recNovaSenha} onChange={e => setRecNovaSenha(e.target.value)} placeholder="Mínimo 6 caracteres" />
+                          <Input type={showNova ? 'text' : 'password'} value={recNovaSenha} onChange={e => setRecNovaSenha(e.target.value)} placeholder="Mínimo 8 caracteres" autoComplete="new-password" />
                           <button type="button" onClick={() => setShowNova(!showNova)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                             {showNova ? <EyeOff size={16} /> : <Eye size={16} />}
                           </button>
@@ -485,7 +497,7 @@ const PortalPaciente: React.FC = () => {
                       <div>
                         <Label>Confirmar nova senha</Label>
                         <div className="relative">
-                          <Input type={showConfirmar ? 'text' : 'password'} value={recConfirmar} onChange={e => setRecConfirmar(e.target.value)} placeholder="Repita a senha" />
+                          <Input type={showConfirmar ? 'text' : 'password'} value={recConfirmar} onChange={e => setRecConfirmar(e.target.value)} placeholder="Repita a senha" autoComplete="new-password" />
                           <button type="button" onClick={() => setShowConfirmar(!showConfirmar)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                             {showConfirmar ? <EyeOff size={16} /> : <Eye size={16} />}
                           </button>

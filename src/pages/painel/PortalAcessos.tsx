@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -45,14 +45,19 @@ const PortalAcessos: React.FC = () => {
   const [filtro, setFiltro] = useState<'todos' | 'ativo' | 'bloqueado' | 'sem'>('todos');
   const [dlg, setDlg] = useState<{ pac: Pac; tipo: 'reset_password' | 'create_access' } | null>(null);
   const [senha, setSenha] = useState('');
-  const [verSenha, setVerSenha] = useState(true);
+  const [verSenha, setVerSenha] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [salvando, setSalvando] = useState(false);
 
-  const restrito = !!user?.unidadeId && user?.usuario !== 'admin.sms';
+  const restrito = user?.usuario !== 'admin.sms';
+  const scope = user?.id + ':' + (user?.unidadeId || '') + ':' + restrito;
+  const [listScope, setListScope] = useState('');
+  const visibleList = listScope === scope ? lista : [];
 
   useEffect(() => {
+    let current = true;
     const t = setTimeout(async () => {
+      if (!user || (restrito && !user.unidadeId)) { setLista([]); setLoading(false); return; }
       setLoading(true);
       let q = (supabase as any).from('pacientes').select('id,nome,cpf,email,auth_user_id,unidade_id').order('nome').limit(100);
       const termo = busca.trim();
@@ -66,14 +71,18 @@ const PortalAcessos: React.FC = () => {
       if (filtro === 'bloqueado') q = q.in('id', bloqueados.length ? bloqueados : ['00000000-0000-0000-0000-000000000000']);
       if (restrito) q = q.eq('unidade_id', user!.unidadeId);
       const { data, error } = await q;
+      if (!current) return;
       if (error) toast.error('Erro ao buscar pacientes.');
       let rows: Pac[] = data || [];
       if (filtro === 'ativo') rows = rows.filter(p => !bloqueados.includes(p.id));
       setLista(rows);
+      setListScope(scope);
       setLoading(false);
     }, 300);
-    return () => clearTimeout(t);
-  }, [busca, filtro, bloqueados.join(','), restrito, user?.unidadeId]);
+    return () => { current = false; clearTimeout(t); };
+  }, [busca, filtro, bloqueados.join(','), restrito, user?.unidadeId, scope]);
+
+  useEffect(() => { setDlg(null); setSenha(''); setMotivo(''); setVerSenha(false); }, [scope]);
 
   const salvarPortal = (patch: Partial<typeof portal>) =>
     updateConfiguracoes({ portalPaciente: { ...PORTAL_DEFAULT, ...portal, ...patch } });
@@ -90,28 +99,31 @@ const PortalAcessos: React.FC = () => {
     toast.success(bloq ? 'Acesso desbloqueado.' : 'Acesso bloqueado.');
   };
 
+  const fechar = () => { setDlg(null); setSenha(''); setMotivo(''); setVerSenha(false); };
   const abrir = (pac: Pac, tipo: 'reset_password' | 'create_access') => {
-    setDlg({ pac, tipo }); setSenha(gerarSenha()); setMotivo(''); setVerSenha(true);
+    if (!user || (restrito && (!user.unidadeId || pac.unidade_id !== user.unidadeId))) return;
+    setDlg({ pac, tipo }); setSenha(gerarSenha()); setMotivo(''); setVerSenha(false);
   };
 
   const confirmar = async () => {
-    if (!dlg) return;
-    if (senha.length < 6) return toast.error('A senha deve ter no mínimo 6 caracteres.');
-    if (motivo.trim().length < 3) return toast.error('Informe o motivo da alteração.');
+    if (!dlg || salvando || !user || (restrito && (!user.unidadeId || dlg.pac.unidade_id !== user.unidadeId))) return;
+    if (senha.length < 8 || senha.length > 100) return toast.error('A senha deve ter entre 8 e 100 caracteres.');
+    if (motivo.trim().length < 3 || motivo.trim().length > 500) return toast.error('Informe um motivo entre 3 e 500 caracteres.');
     setSalvando(true);
     const { data, error } = await supabase.functions.invoke('manage-patient-portal', {
       body: { action: dlg.tipo, pacienteId: dlg.pac.id, novaSenha: senha, motivo },
     });
     setSalvando(false);
-    if (error || data?.error) return toast.error(data?.error || 'Erro ao salvar.');
+    if (error || data?.error || data?.success !== true || typeof data?.authUserId !== 'string') return toast.error(data?.error || 'Não foi possível confirmar a alteração.');
     toast.success(dlg.tipo === 'reset_password' ? 'Senha alterada. Informe a nova senha ao paciente.' : 'Acesso criado. Informe o e-mail e a senha ao paciente.');
-    if (dlg.tipo === 'create_access') setLista(l => l.map(p => p.id === dlg.pac.id ? { ...p, auth_user_id: 'ok' } : p));
-    setDlg(null);
+    if (data.auditConfirmed !== true) toast.warning('Alteração realizada, mas o registro de auditoria não foi confirmado.');
+    if (dlg.tipo === 'create_access') setLista(l => l.map(p => p.id === dlg.pac.id ? { ...p, auth_user_id: data.authUserId } : p));
+    fechar();
   };
 
   const status = (p: Pac) => !p.auth_user_id ? 'sem' : bloqueados.includes(p.id) ? 'bloqueado' : 'ativo';
 
-  const total = useMemo(() => lista.length, [lista]);
+  const total = visibleList.length;
 
   return (
     <div className="space-y-6">
@@ -145,7 +157,7 @@ const PortalAcessos: React.FC = () => {
                 <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
               ) : total === 0 ? (
                 <p className="p-8 text-center text-sm text-muted-foreground">Nenhum paciente encontrado.</p>
-              ) : lista.map(p => {
+              ) : visibleList.map(p => {
                 const st = status(p);
                 return (
                   <div key={p.id} className="p-3 flex flex-col md:flex-row md:items-center gap-2 justify-between">
@@ -202,7 +214,7 @@ const PortalAcessos: React.FC = () => {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={!!dlg} onOpenChange={o => !o && setDlg(null)}>
+      <Dialog open={!!dlg && !!user && (!restrito || (!!user.unidadeId && dlg.pac.unidade_id === user.unidadeId))} onOpenChange={o => { if (!o && !salvando) fechar(); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{dlg?.tipo === 'reset_password' ? 'Redefinir senha' : 'Criar acesso ao portal'}</DialogTitle>
@@ -220,7 +232,7 @@ const PortalAcessos: React.FC = () => {
                 </div>
                 <Button type="button" variant="outline" onClick={() => setSenha(gerarSenha())} title="Gerar senha"><Wand2 className="w-4 h-4" /></Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Mínimo 6 caracteres. Anote e entregue ao paciente.</p>
+              <p className="text-xs text-muted-foreground mt-1">Entre 8 e 100 caracteres. Entregue a senha temporária somente ao paciente identificado.</p>
             </div>
             <div>
               <Label>Motivo da alteração *</Label>
@@ -228,7 +240,7 @@ const PortalAcessos: React.FC = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDlg(null)}>Cancelar</Button>
+            <Button variant="outline" onClick={fechar} disabled={salvando}>Cancelar</Button>
             <Button onClick={confirmar} disabled={salvando}>{salvando && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Salvar</Button>
           </DialogFooter>
         </DialogContent>

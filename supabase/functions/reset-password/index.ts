@@ -107,69 +107,8 @@ serve(async (req) => {
     }
 
     if (tipo === "paciente") {
-      // Find all pacientes and match by CPF + email
-      const { data: pacs, error: pacErr } = await supabaseAdmin
-        .from("pacientes")
-        .select("id, auth_user_id, cpf, email, nome");
-
-      if (pacErr || !pacs || pacs.length === 0) {
-        return new Response(
-          JSON.stringify({ error: "CPF ou e-mail não encontrado. Verifique os dados informados." }),
-          { status: 200, headers: corsHeaders }
-        );
-      }
-
-      const match = pacs.find(
-        (p: any) =>
-          p.cpf?.replace(/\D/g, "") === cpfNorm &&
-          p.email?.trim().toLowerCase() === emailNorm
-      );
-
-      if (!match) {
-        return new Response(
-          JSON.stringify({ error: "CPF ou e-mail não encontrado. Verifique os dados informados." }),
-          { status: 200, headers: corsHeaders }
-        );
-      }
-
-      if (!match.auth_user_id) {
-        return new Response(
-          JSON.stringify({ error: "Você ainda não possui acesso ao portal. Agende uma consulta para criar seu acesso." }),
-          { status: 200, headers: corsHeaders }
-        );
-      }
-
-      // Update auth password
-      const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(
-        match.auth_user_id,
-        { password: novaSenha }
-      );
-
-      if (authErr) {
-        console.error("Auth update error:", authErr);
-        return new Response(
-          JSON.stringify({ error: "Erro ao atualizar senha: " + authErr.message }),
-          { status: 200, headers: corsHeaders }
-        );
-      }
-
-      // Log action
-      await supabaseAdmin.from("action_logs").insert({
-        user_id: match.id,
-        user_nome: match.nome || "sistema",
-        role: "sistema",
-        acao: "redefinir_senha",
-        entidade: "paciente",
-        entidade_id: match.id,
-        modulo: "autenticacao",
-        status: "sucesso",
-        detalhes: { tipo: "recuperacao_senha_paciente" },
-      });
-
-      return new Response(
-        JSON.stringify({ success: true }),
-        { headers: corsHeaders }
-      );
+      // Legacy demographic password reset is disabled. Use Auth recovery email and an authenticated session.
+      return new Response(JSON.stringify({ error: "Para recuperar sua senha, atualize o Portal do Paciente e solicite o link enviado ao e-mail cadastrado." }), { status: 200, headers: corsHeaders });
     }
 
     return new Response(
