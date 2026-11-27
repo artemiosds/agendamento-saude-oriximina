@@ -1,18 +1,19 @@
 import { avisarVideoAtualizado } from '@/lib/painelChamadas';
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/hooks/queries/queryKeys';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Building2, DoorOpen, Pencil, Tv, Copy, Video, X, Upload, Loader2 } from 'lucide-react';
-import { linkPainelTV, videoSeguro } from '@/lib/painelVideo';
+import { Plus, Building2, DoorOpen, Pencil, Tv, Copy, Video, X, Upload, Loader2, Search, Users, CalendarDays, Activity, ChevronRight, RefreshCw, Eye } from 'lucide-react';
+import { linkPainelTV, videoSeguro, playlistPainel } from '@/lib/painelVideo';
+import { buildRoomStaff, filterStructureRooms, summarizeStructure, OPEN_ROOM_APPOINTMENT_EXCLUSIONS, type RoomStaff, type RoomKind, type RoomState, type UnitMetadata } from '@/lib/structureDirectory';
 import { toast } from 'sonner';
 import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
 import { useCustomFields } from '@/hooks/useCustomFields';
@@ -22,7 +23,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Link } from 'react-router-dom';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { UnitScopeNavigator } from '@/components/operacional/UnitScopeNavigator';
 import { useOperationalUnitScope } from '@/hooks/useOperationalUnitScope';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
@@ -64,22 +64,74 @@ const UnidadesSalas: React.FC = () => {
   const [unitForm, setUnitForm] = useState({ nome: '', nomeExibicao: '', endereco: '', telefone: '', whatsapp: '', cnes: '' });
   const [roomForm, setRoomForm] = useState({ nome: '', unidadeId: '', config: { ...DEFAULT_DIAGNOSTIC_ROOM_CONFIG } as DiagnosticRoomConfig });
   const [roomConfigs, setRoomConfigs] = useState<Record<string, DiagnosticRoomConfig>>({});
-  const [roomFilter, setRoomFilter] = useState<'todas' | 'consultorios' | 'aparelhos'>('todas');
-  const visibleUnits = allowedUnits.filter(unit => unitId === 'all' || unit.id === unitId);
-  const visibleRooms = salas.filter(room=>authorizedUnit(room.unidadeId)&&(unitId==='all'||room.unidadeId===unitId));
-  const filteredRooms = visibleRooms.filter(room => roomFilter === 'todas' || (configState==='ready'&&(roomFilter === 'aparelhos' ? !!roomConfigs[room.id] : !roomConfigs[room.id])));
+  const [roomFilter,setRoomFilter]=useState<RoomKind>('todas');
+  const [roomState,setRoomState]=useState<RoomState>('all');
+  const [roomSearch,setRoomSearch]=useState('');
+  const [section,setSection]=useState<'overview'|'rooms'|'video'>('overview');
+  const [detail,setDetail]=useState<{id:string;scope:string}|null>(null);
+  const [unitMeta,setUnitMeta]=useState<Map<string,UnitMetadata>>(new Map());
+  const [configScope,setConfigScope]=useState('');
+  const metadataKey=JSON.stringify([scopeKey,unitScopeKey]);
+  const configReady=configState==='ready'&&configScope===metadataKey;
+  const visibleUnits=allowedUnits.filter(unit=>unitId==='all'||unit.id===unitId);
+  const visibleRooms=salas.filter(room=>authorizedUnit(room.unidadeId)&&(unitId==='all'||room.unidadeId===unitId));
+  const visibleUnitIds=visibleUnits.map(u=>u.id).sort();
+  const visibleScope=JSON.stringify([scopeKey,unitId,visibleUnitIds]);
+  const devices=useMemo(()=>new Set(Object.keys(roomConfigs)),[roomConfigs]);
+  const examNames=useMemo(()=>new Map(Object.entries(roomConfigs).map(([id,config])=>[id,config.exames.map(exam=>exam.tipoExame).join(' ')])),[roomConfigs]);
+  const summary=summarizeStructure(visibleUnits,visibleRooms,devices,unitMeta,configReady);
+  const filteredRooms=filterStructureRooms(visibleRooms,visibleUnits,devices,roomFilter,roomState,roomSearch,configReady,examNames);
+  const canReadStaff=!!user?.id&&!permissionsLoading&&can('unidades_salas','can_view')&&can('usuarios','can_view');
+  const canReadAgenda=!!user?.id&&!permissionsLoading&&can('unidades_salas','can_view')&&can('agenda','can_view');
+  // Read only minimal staff fields, within the chosen unit and existing RLS.
+  const staffQuery=useQuery({
+    queryKey:[...queryKeys.funcionarios.all,'estrutura-salas',visibleScope],
+    enabled:canReadStaff&&visibleUnitIds.length>0,
+    staleTime:30000,
+    queryFn:async({signal})=>{
+      const rows:RoomStaff[]=[];
+      for(let offset=0;;offset+=500){
+        const {data,error}=await supabase.from('funcionarios').select('id,nome,profissao,cargo,unidade_id,sala_id').eq('ativo',true).in('unidade_id',visibleUnitIds).not('sala_id','is',null).order('id').range(offset,offset+499).abortSignal(signal);
+        if(error||!data)throw error||new Error('Consulta de equipe não confirmada.');
+        rows.push(...data.filter(row=>!!row.unidade_id).map(row=>({...row,unidade_id:row.unidade_id!})));
+        if(data.length<500)break;
+      }
+      return rows;
+    }
+  });
+  const staffReady=canReadStaff&&staffQuery.isSuccess&&!staffQuery.isError;
+  const roomStaff=buildRoomStaff(visibleRooms,staffReady?staffQuery.data||[]:[]);
+  const selectedRoom=detail?.scope===visibleScope?visibleRooms.find(room=>room.id===detail.id):undefined;
+  const dateParts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santarem',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const today=['year','month','day'].map(type=>dateParts.find(p=>p.type===type)?.value||'').join('-');
+  const appointmentsQuery=useQuery({
+    queryKey:[...queryKeys.agendamentos.all,'estrutura-sala',visibleScope,selectedRoom?.id||'',today],
+    enabled:canReadAgenda&&!!selectedRoom,
+    staleTime:0,
+    queryFn:async({signal})=>{
+      if(!selectedRoom)throw new Error('Selecione uma sala.');
+      const {data,error,count}=await supabase.from('agendamentos').select('id,data,hora,status,profissional_nome',{count:'exact'}).eq('unidade_id',selectedRoom.unidadeId).eq('sala_id',selectedRoom.id).gte('data',today).not('status','in','('+OPEN_ROOM_APPOINTMENT_EXCLUSIONS.join(',')+')').order('data').order('hora').order('id').limit(50).abortSignal(signal);
+      if(error||!data||count===null)throw error||new Error('Consulta de agendamentos não confirmada.');
+      return {rows:data,total:count};
+    }
+  });
+  const selectMetric=(next:'overview'|'rooms'|'video',kind:RoomKind='todas')=>{setSection(next);setRoomFilter(kind);setRoomState('all');setRoomSearch('');setDetail(null);};
+  useEffect(()=>{setDetail(null);setRoomSearch('');setRoomState('all');},[visibleScope]);
 
   // Carrega as configurações persistidas por unidade para identificar os aparelhos nos cartões.
   useEffect(() => {
     let cancelled = false;
     const loadRoomConfigs = async () => {
-      setConfigState('loading');
-      if (allowedUnits.length === 0) { setRoomConfigs({});setConfigState('ready'); return; }
+      setConfigState('loading');setConfigScope('');
+      if (allowedUnits.length === 0) { setRoomConfigs({});setUnitMeta(new Map());setConfigScope(metadataKey);setConfigState('ready'); return; }
       const { data, error } = await supabase.from('unidades' as any).select('id,custom_data').in('id',allowedUnits.map(u=>u.id));
       if(cancelled)return;
-      if(error||!Array.isArray(data)||data.length!==allowedUnits.length){setRoomConfigs({});setConfigState('error');return;}
+      if(error||!Array.isArray(data)||data.length!==allowedUnits.length){setRoomConfigs({});setUnitMeta(new Map());setConfigState('error');return;}
       const next: Record<string, DiagnosticRoomConfig> = {};
+      const metadata=new Map<string,UnitMetadata>();
       (data || []).forEach((unit: any) => {
+        const cd=(unit.custom_data||{}) as Record<string,unknown>;
+        metadata.set(unit.id,{cnes:String(cd.cnes??''),videoConfigured:playlistPainel(cd).length>0});
         const configuredRooms = unit.custom_data?.salas_exames;
         if (!configuredRooms || typeof configuredRooms !== 'object') return;
         Object.entries(configuredRooms).forEach(([roomId, value]: [string, any]) => {
@@ -88,9 +140,9 @@ const UnidadesSalas: React.FC = () => {
           }
         });
       });
-      if (!cancelled) {setRoomConfigs(next);setConfigState('ready');}
+      if (!cancelled) {setRoomConfigs(next);setUnitMeta(metadata);setConfigScope(metadataKey);setConfigState('ready');}
     };
-    void loadRoomConfigs();
+    void loadRoomConfigs().catch(()=>{if(!cancelled){setRoomConfigs({});setUnitMeta(new Map());setConfigState('error');}});
     return () => { cancelled = true; };
   }, [unidades,unitScopeKey,scopeKey,configReload]);
 
@@ -264,13 +316,13 @@ const UnidadesSalas: React.FC = () => {
 
   const renderRoomCard = (room: typeof salas[number], showUnitName = true) => {
     const unit = unidades.find(item => item.id === room.unidadeId);
-    const diagnosticConfig = configState==='ready'?roomConfigs[room.id]:undefined;
+    const diagnosticConfig = configReady?roomConfigs[room.id]:undefined;
     return (
       <Card key={room.id} className="shadow-card border">
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <h3 className="font-semibold text-foreground">{room.nome}</h3>
+              <h3><button type="button" className="font-semibold text-left text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring rounded break-words" onClick={()=>setDetail({id:room.id,scope:visibleScope})}>{room.nome}</button></h3>
               {showUnitName && <p className="text-sm text-muted-foreground">{unit?.nome || 'Unidade não identificada'}</p>}
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {diagnosticConfig ? (
@@ -278,10 +330,12 @@ const UnidadesSalas: React.FC = () => {
                     <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-800">Aparelho / Exames: {diagnosticConfig.exames.length}</span>
                     <span className="text-xs text-muted-foreground">{diagnosticConfig.exames.map(exam => exam.tipoExame).join(', ')}</span>
                   </>
-                ) : <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">{configState==='ready'?'Consultório':'Finalidade não confirmada'}</span>}
+                ) : <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">{configReady?'Consultório':'Finalidade não confirmada'}</span>}
               </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs"><span className={room.ativo?'text-emerald-700 dark:text-emerald-300':'text-muted-foreground'}>{room.ativo?'Ativa':'Inativa'}</span>{canReadStaff&&<span className="text-muted-foreground">· {staffReady?(roomStaff.get(room.id)?.length||0):'—'} funcionário(s) ativo(s) vinculado(s)</span>}</div>
             </div>
             <div className="flex shrink-0 gap-1">
+              <Button type="button" size="icon" variant="ghost" title="Consultar detalhes" aria-label={`Consultar detalhes de ${room.nome}`} onClick={()=>setDetail({id:room.id,scope:visibleScope})}><Eye className="w-4 h-4"/></Button>
               {canWrite('can_edit',room.unidadeId)&&<Button size="icon" variant="ghost" disabled={saving} aria-label={`Editar sala ${room.nome}`} onClick={() => openEditRoom(room)}><Pencil className="w-4 h-4" /></Button>}
 
             </div>
@@ -296,7 +350,7 @@ const UnidadesSalas: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold font-display text-foreground flex items-center gap-2"><DoorOpen className="w-5 h-5" />Salas / Consultórios</h2>
-          <p className="text-xs text-muted-foreground mt-1">{visibleRooms.length} sala(s) cadastrada(s) • {configState==='ready'?visibleRooms.filter(room => !!roomConfigs[room.id]).length:'—'} aparelho(s) diagnóstico(s)</p>
+          <p className="text-xs text-muted-foreground mt-1">{visibleRooms.length} sala(s) cadastrada(s) • {configReady?summary.devices:'—'} aparelho(s) diagnóstico(s)</p>
         </div>
         {allowedUnits.some(u=>u.ativo&&canWrite('can_create',u.id))&&<div className="flex flex-wrap gap-2">
           <Button size="sm" disabled={saving} variant="outline" onClick={() => openNewRoom('aparelho_diagnostico')} className="border-violet-300 text-violet-700 hover:bg-violet-50"><Plus className="w-4 h-4 mr-1" />Novo Aparelho</Button>
@@ -305,9 +359,16 @@ const UnidadesSalas: React.FC = () => {
       </div>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar salas por finalidade">
         <Button size="sm" variant={roomFilter === 'todas' ? 'default' : 'outline'} aria-pressed={roomFilter === 'todas'} onClick={() => setRoomFilter('todas')}>Todas ({visibleRooms.length})</Button>
-        <Button size="sm" variant={roomFilter === 'consultorios' ? 'default' : 'outline'} aria-pressed={roomFilter === 'consultorios'} disabled={configState!=='ready'} onClick={() => setRoomFilter('consultorios')}>Consultórios ({configState==='ready'?visibleRooms.filter(room => !roomConfigs[room.id]).length:'—'})</Button>
-        <Button size="sm" variant={roomFilter === 'aparelhos' ? 'default' : 'outline'} aria-pressed={roomFilter === 'aparelhos'} disabled={configState!=='ready'} onClick={() => setRoomFilter('aparelhos')}>Aparelhos / Exames ({configState==='ready'?visibleRooms.filter(room => !!roomConfigs[room.id]).length:'—'})</Button>
+        <Button size="sm" variant={roomFilter === 'consultorios' ? 'default' : 'outline'} aria-pressed={roomFilter === 'consultorios'} disabled={!configReady} onClick={() => setRoomFilter('consultorios')}>Consultórios ({configReady?summary.consultories:'—'})</Button>
+        <Button size="sm" variant={roomFilter === 'aparelhos' ? 'default' : 'outline'} aria-pressed={roomFilter === 'aparelhos'} disabled={!configReady} onClick={() => setRoomFilter('aparelhos')}>Aparelhos / Exames ({configReady?summary.devices:'—'})</Button>
       </div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[12rem]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"/><Input className="pl-9" value={roomSearch} onChange={e=>setRoomSearch(e.target.value)} placeholder="Buscar sala, unidade ou exame..." aria-label="Buscar sala, unidade ou exame"/></div>
+        <Select value={roomState} onValueChange={v=>setRoomState(v as RoomState)}><SelectTrigger className="w-full sm:w-44" aria-label="Filtrar situação da sala"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">Todas as situações</SelectItem><SelectItem value="active">Ativas</SelectItem><SelectItem value="inactive">Inativas</SelectItem></SelectContent></Select>
+        {(roomSearch||roomFilter!=='todas'||roomState!=='all')&&<Button variant="outline" size="sm" onClick={()=>{setRoomSearch('');setRoomFilter('todas');setRoomState('all');}}>Limpar filtros</Button>}
+        <span role="status" className="text-xs text-muted-foreground">{roomFilter!=='todas'&&!configReady?'Finalidade em conferência':filteredRooms.length+' sala(s) no filtro'}</span>
+      </div>
+      {canReadStaff&&staffQuery.isError&&<div role="alert" className="text-sm text-destructive flex flex-wrap gap-2 items-center">Não foi possível confirmar os vínculos da equipe.<Button size="sm" variant="outline" onClick={()=>void staffQuery.refetch()}>Tentar novamente</Button></div>}
     </div>
   );
 
@@ -323,16 +384,30 @@ const UnidadesSalas: React.FC = () => {
 
       {configState==='error'&&<div role="alert" className="flex items-center gap-2 text-sm text-destructive">Não foi possível confirmar as configurações de exames.<Button size="sm" variant="outline" onClick={()=>setConfigReload(v=>v+1)}>Tentar novamente</Button></div>}
       {isGlobalAdmin && <UnitScopeNavigator units={allowedUnits} value={unitId} onChange={setUnitId} />}
-      {isGlobalAdmin && roomControls}
+      <section className="grid grid-cols-2 xl:grid-cols-4 gap-2" aria-label="Indicadores da estrutura física">
+        {[
+          {label:'Unidades cadastradas',value:summary.units,extra:summary.activeUnits+' ativa(s)',Icon:Building2,active:section==='overview',action:()=>selectMetric('overview'),disabled:false},
+          {label:'Salas cadastradas',value:summary.rooms,extra:summary.activeRooms+' ativa(s)',Icon:DoorOpen,active:section==='rooms'&&roomFilter==='todas',action:()=>selectMetric('rooms'),disabled:false},
+          {label:'Aparelhos / exames',value:summary.devices,extra:'Classificação cadastrada',Icon:Activity,active:section==='rooms'&&roomFilter==='aparelhos',action:()=>selectMetric('rooms','aparelhos'),disabled:!configReady},
+          {label:'Unidades com vídeo',value:summary.videoUnits,extra:'Configuração local, não status da TV',Icon:Tv,active:section==='video',action:()=>selectMetric('video'),disabled:!configReady}
+        ].map(({label,value,extra,Icon,active,action,disabled})=><button type="button" key={label} disabled={disabled} onClick={action} aria-pressed={active} className={`clinical-premium p-3 flex items-center gap-2 text-left min-w-0 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-ring ${active?'ring-1 ring-primary/60':''}`}><span className="clinical-dock-icon clinical-tone-blue"><Icon className="w-4 h-4"/></span><span className="flex-1 min-w-0"><strong className="block text-xl tabular-nums">{value??'—'}</strong><span className="block text-xs font-medium">{label}</span><span className="block text-[11px] text-muted-foreground">{extra}</span></span><ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground"/></button>)}
+      </section>
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Seções de estrutura">
+        <Button size="sm" variant={section==='overview'?'default':'outline'} onClick={()=>selectMetric('overview')}>Visão geral</Button>
+        <Button size="sm" variant={section==='rooms'&&roomFilter==='todas'?'default':'outline'} onClick={()=>selectMetric('rooms')}>Salas</Button>
+        <Button size="sm" variant={section==='rooms'&&roomFilter==='aparelhos'?'default':'outline'} disabled={!configReady} onClick={()=>selectMetric('rooms','aparelhos')}>Aparelhos</Button>
+        <Button size="sm" variant={section==='video'?'default':'outline'} disabled={!configReady} onClick={()=>selectMetric('video')}>Unidades com vídeo</Button>
+        <Button size="sm" variant="outline" className="ml-auto" disabled={saving||configState==='loading'} onClick={()=>{void refreshStructure();if(canReadStaff&&visibleUnitIds.length)void staffQuery.refetch();}}><RefreshCw className="w-4 h-4 mr-1"/>Atualizar estrutura</Button>
+      </div>
 
       {/* Unidades */}
-      <div>
+      {section!=='rooms'&&<div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold font-display text-foreground flex items-center gap-2"><Building2 className="w-5 h-5" />Unidades</h2>
           {isGlobalAdmin&&canWrite('can_create','')&&<Button size="sm" disabled={saving} onClick={openNewUnit} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nova Unidade</Button>}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {visibleUnits.map(u => (
+          {visibleUnits.filter(u=>section!=='video'||(configReady&&unitMeta.get(u.id)?.videoConfigured)).map(u => (
             <Card key={u.id} className="shadow-card border-0">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
@@ -341,17 +416,14 @@ const UnidadesSalas: React.FC = () => {
                     {u.nomeExibicao && <p className="text-xs text-primary font-medium">Exibido como: {u.nomeExibicao}</p>}
                     <p className="text-sm text-muted-foreground mt-1">{u.endereco}</p>
                     <p className="text-sm text-muted-foreground">{u.telefone} • {u.whatsapp}</p>
-                    <span className="text-xs text-muted-foreground">{salas.filter(s => s.unidadeId === u.id).length} sala(s)</span>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs"><span>{u.ativo?'Unidade ativa':'Unidade inativa'}</span><span className="text-muted-foreground">· {visibleRooms.filter(s=>s.unidadeId===u.id).length} sala(s)</span>{configReady&&<span className="text-muted-foreground">· {/^\d{7}$/.test(unitMeta.get(u.id)?.cnes||'')?'CNES informado':'CNES a conferir'}</span>}</div>
                     <div className="flex flex-wrap gap-2 mt-3">
                       <Button size="sm" variant="outline" onClick={() => window.open(linkTV(u.id), '_blank')}><Tv className="w-4 h-4 mr-1" />Painel</Button>
                       <Button size="sm" variant="outline" onClick={() => copiarLink(u.id)}><Copy className="w-4 h-4 mr-1" />Link TV</Button>
                       {canWrite('can_edit',u.id)&&<Button size="sm" variant="outline" disabled={saving} onClick={() => abrirVideo(u.id, u.nome)}><Video className="w-4 h-4 mr-1" />Vídeo</Button>}
-                      {isGlobalAdmin && (
-                        <>
-                          <Button size="sm" variant="outline" asChild><Link to={`/painel/funcionarios?unidade=${encodeURIComponent(u.id)}`}>Ver equipe</Link></Button>
-                          <Button size="sm" variant="outline" asChild><Link to={`/painel/disponibilidade?unidade=${encodeURIComponent(u.id)}`}>Ver disponibilidade</Link></Button>
-                        </>
-                      )}
+                      <Button size="sm" variant="outline" onClick={()=>{if(isGlobalAdmin)setUnitId(u.id);selectMetric('rooms');}}>Ver salas</Button>
+                      {canReadStaff&&<Button size="sm" variant="outline" asChild><Link to={`/painel/funcionarios?unidade=${encodeURIComponent(u.id)}`}>Ver equipe</Link></Button>}
+                      {can('disponibilidade','can_view')&&<Button size="sm" variant="outline" asChild><Link to={`/painel/disponibilidade?unidade=${encodeURIComponent(u.id)}`}>Ver disponibilidade</Link></Button>}
                     </div>
                   </div>
                   <div className="flex gap-1">
@@ -359,45 +431,29 @@ const UnidadesSalas: React.FC = () => {
 
                   </div>
                 </div>
-                {isGlobalAdmin && (
-                  <Accordion key={`${u.id}-${unitId}`} type="single" collapsible defaultValue={unitId === u.id ? 'salas' : undefined} className="mt-4 border-t">
-                    <AccordionItem value="salas" className="border-b-0">
-                      <AccordionTrigger className="py-3 text-left text-sm">
-                        Salas da unidade ({salas.filter(room => room.unidadeId === u.id).length})
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        {filteredRooms.some(room => room.unidadeId === u.id) ? (
-                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                            {filteredRooms.filter(room => room.unidadeId === u.id).map(room => renderRoomCard(room, false))}
-                          </div>
-                        ) : <p className="text-sm text-muted-foreground">Nenhuma sala neste filtro.</p>}
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                )}
               </CardContent>
             </Card>
           ))}
         </div>
-      </div>
+      </div>}
 
-      {/* Original grid for unit-scoped users; global management groups rooms with their units. */}
-      {!isGlobalAdmin && (
-        <div>
-          {roomControls}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-3">
-            {filteredRooms.map(room => renderRoomCard(room))}
-          </div>
-        </div>
-      )}
-      {isGlobalAdmin && unitId === 'all' && filteredRooms.some(room => !unidades.some(unit => unit.id === room.unidadeId)) && (
-        <Card className="border-dashed"><CardContent className="p-4 space-y-3">
-          <h3 className="font-semibold">Salas sem unidade identificada</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filteredRooms.filter(room => !unidades.some(unit => unit.id === room.unidadeId)).map(room => renderRoomCard(room))}
-          </div>
-        </CardContent></Card>
-      )}
+      {section==='video'&&configReady&&summary.videoUnits===0&&<Card><CardContent className="p-4 text-sm text-muted-foreground">Nenhuma unidade com vídeo configurado na seleção. Na visão geral, utilize a ação Vídeo para configurar.</CardContent></Card>}
+      {section!=='video'&&<section className="space-y-3" aria-label="Salas e consultórios">
+        {roomControls}
+        {roomFilter!=='todas'&&!configReady?<p className="text-sm text-muted-foreground">Aguarde a confirmação das configurações de exames.</p>:filteredRooms.length===0?<Card><CardContent className="p-4 text-sm text-muted-foreground">Nenhuma sala encontrada para os filtros selecionados.</CardContent></Card>:<div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">{filteredRooms.map(room=>renderRoomCard(room))}</div>}
+      </section>}
+
+      <Dialog open={!!selectedRoom&&!permissionsLoading&&can('unidades_salas','can_view')} onOpenChange={open=>{if(!open)setDetail(null);}}>
+        <DialogContent className="w-[96vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-display break-words">Detalhes da sala — {selectedRoom?.nome}</DialogTitle><DialogDescription>Consulta administrativa dos vínculos existentes, sem alterações na agenda.</DialogDescription></DialogHeader>
+          {selectedRoom&&<>
+            <div className="clinical-premium p-3 space-y-2"><p className="font-medium">{visibleUnits.find(u=>u.id===selectedRoom.unidadeId)?.nome||'Unidade não identificada'}</p><p className="text-sm text-muted-foreground">{selectedRoom.ativo?'Ativa':'Inativa'} · {configReady?(devices.has(selectedRoom.id)?'Aparelho / exame diagnóstico':'Consultório clínico'):'Finalidade não confirmada'}</p>{configReady&&roomConfigs[selectedRoom.id]&&<p className="text-sm">Exames cadastrados: {examNames.get(selectedRoom.id)||'Nenhum exame identificado'}</p>}</div>
+            {canReadStaff&&<section className="clinical-premium p-3 space-y-2"><h3 className="font-semibold flex gap-2 items-center"><Users className="w-4 h-4"/>Equipe vinculada {staffReady&&`(${roomStaff.get(selectedRoom.id)?.length||0})`}</h3><p className="text-xs text-muted-foreground">Funcionários ativos com vínculo direto à sala e à mesma unidade, nos registros acessíveis. Não indica presença ou escala.</p>{staffQuery.isError?<div role="alert" className="text-sm text-destructive">Consulta não confirmada. <Button size="sm" variant="outline" onClick={()=>void staffQuery.refetch()}>Tentar novamente</Button></div>:!staffReady?<p role="status" className="text-sm text-muted-foreground">Consultando equipe...</p>:!(roomStaff.get(selectedRoom.id)?.length)?<p className="text-sm text-muted-foreground">Nenhum funcionário ativo com esse vínculo identificado.</p>:<div className="max-h-40 overflow-y-auto divide-y">{(roomStaff.get(selectedRoom.id)||[]).map(f=><div key={f.id} className="py-2 text-sm"><strong>{f.nome}</strong><p className="text-xs text-muted-foreground">{f.profissao||f.cargo||'Função não informada'}</p></div>)}</div>}</section>}
+            {canReadAgenda&&<section className="clinical-premium p-3 space-y-2"><h3 className="font-semibold flex items-center gap-2"><CalendarDays className="w-4 h-4"/>Agendamentos vinculados</h3><p className="text-xs text-muted-foreground">De hoje em diante, excluindo cancelados, remarcados, concluídos e faltas. Somente registros acessíveis com vínculo explícito à sala; não representa ocupação, presença ou vagas livres.</p>{appointmentsQuery.isError?<div role="alert" className="text-sm text-destructive">Consulta não confirmada. <Button size="sm" variant="outline" onClick={()=>void appointmentsQuery.refetch()}>Tentar novamente</Button></div>:appointmentsQuery.isFetching?<p role="status" className="text-sm text-muted-foreground">Consultando agendamentos...</p>:appointmentsQuery.isSuccess?<><p className="text-sm font-semibold">{appointmentsQuery.data.total} registro(s) não encerrado(s)</p>{appointmentsQuery.data.rows.length>0&&<div className="max-h-60 overflow-y-auto divide-y">{appointmentsQuery.data.rows.map(item=><div key={item.id} className="py-2 flex flex-wrap gap-x-3 gap-y-1 items-start text-xs"><span className="font-medium tabular-nums">{item.data.split('-').reverse().join('/')} · {item.hora.slice(0,5)}</span><span className="flex-1 min-w-[8rem]">{item.profissional_nome||'Profissional não informado'}</span><span className="text-muted-foreground">{item.status.replaceAll('_',' ')}</span></div>)}</div>}{appointmentsQuery.data.total>appointmentsQuery.data.rows.length&&<p className="text-xs text-muted-foreground">Exibindo os primeiros {appointmentsQuery.data.rows.length} registros; consulte a Agenda para a lista completa.</p>}</>:<p className="text-sm text-muted-foreground">Consulta em preparação...</p>}<Button size="sm" variant="outline" asChild><Link to="/painel/agenda">Consultar Agenda</Link></Button></section>}
+            {(!canReadStaff||!canReadAgenda)&&<p className="text-xs text-muted-foreground">As consultas de equipe e Agenda dependem das permissões correspondentes.</p>}
+          </>}
+        </DialogContent>
+      </Dialog>
 
       {/* Dialogs */}
       <Dialog open={unitDialog} onOpenChange={o=>{if(!o)closeForm(()=>setUnitDialog(false));}}>
