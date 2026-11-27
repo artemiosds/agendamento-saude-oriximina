@@ -11,10 +11,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Building2, DoorOpen, Pencil, Tv, Copy, Video, X, Upload, Loader2, Search, Users, CalendarDays, Activity, ChevronRight, RefreshCw, Eye, LayoutGrid, List, MapPin, Phone, ShieldCheck } from 'lucide-react';
+import { Plus, Building2, DoorOpen, Pencil, Tv, Copy, Video, X, Upload, Loader2, Search, Users, CalendarDays, Activity, ChevronRight, RefreshCw, Eye, LayoutGrid, List, MapPin, Phone, ShieldCheck, Printer, ClipboardList, Image as ImageIcon } from 'lucide-react';
 import { linkPainelTV, videoSeguro, playlistPainel } from '@/lib/painelVideo';
 import { buildRoomStaff, filterStructureRooms, summarizeStructure, OPEN_ROOM_APPOINTMENT_EXCLUSIONS, type RoomStaff, type RoomKind, type RoomState, type UnitMetadata } from '@/lib/structureDirectory';
 import { toast } from 'sonner';
+import { buildUnitProfilePrint, escapeStructureHtml, safeStructureLogo } from '@/lib/structureProfilePrint';
+import { buildDocumentShell, loadDocumentConfig, printViaIframe } from '@/lib/printLayout';
 import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { supabase } from '@/integrations/supabase/client';
@@ -81,7 +83,10 @@ const UnidadesSalas: React.FC = () => {
   const [roomLayout,setRoomLayout]=useState<'cards'|'list'>('cards');
   const [section,setSection]=useState<'overview'|'rooms'|'video'>('overview');
   const [detail,setDetail]=useState<{id:string;scope:string}|null>(null);
-  const [unitMeta,setUnitMeta]=useState<Map<string,UnitMetadata>>(new Map());
+  const [unitMeta,setUnitMeta]=useState<Map<string,UnitMetadata & {logoUrl:string}>>(new Map());
+  const [unitProfile,setUnitProfile]=useState<{id:string;scope:string}|null>(null);
+  const [printing,setPrinting]=useState(false);
+  const printBusy=useRef(false);
   const [configScope,setConfigScope]=useState('');
   const metadataKey=JSON.stringify([scopeKey,unitScopeKey]);
   const configReady=directoryReady&&configState==='ready'&&configScope===metadataKey;
@@ -128,7 +133,7 @@ const UnidadesSalas: React.FC = () => {
     }
   });
   const selectMetric=(next:'overview'|'rooms'|'video',kind:RoomKind='todas')=>{setSection(next);setRoomFilter(kind);setRoomState('all');setRoomSearch('');setDetail(null);};
-  useEffect(()=>{setDetail(null);setRoomSearch('');setRoomState('all');},[visibleScope]);
+  useEffect(()=>{setDetail(null);setUnitProfile(null);setRoomSearch('');setRoomState('all');},[visibleScope]);
 
   // Carrega as configurações persistidas por unidade para identificar os aparelhos nos cartões.
   useEffect(() => {
@@ -141,10 +146,10 @@ const UnidadesSalas: React.FC = () => {
       if(cancelled)return;
       if(error||!Array.isArray(data)||data.length!==allowedUnits.length){setRoomConfigs({});setUnitMeta(new Map());setConfigState('error');return;}
       const next: Record<string, DiagnosticRoomConfig> = {};
-      const metadata=new Map<string,UnitMetadata>();
+      const metadata=new Map<string,UnitMetadata & {logoUrl:string}>();
       (data || []).forEach((unit: any) => {
         const cd=(unit.custom_data||{}) as Record<string,unknown>;
-        metadata.set(unit.id,{cnes:String(cd.cnes??''),videoConfigured:playlistPainel(cd).length>0});
+        metadata.set(unit.id,{cnes:String(cd.cnes??''),videoConfigured:playlistPainel(cd).length>0,logoUrl:safeStructureLogo(cd.logo_url)});
         const configuredRooms = unit.custom_data?.salas_exames;
         if (!configuredRooms || typeof configuredRooms !== 'object') return;
         Object.entries(configuredRooms).forEach(([roomId, value]: [string, any]) => {
@@ -327,6 +332,30 @@ const UnidadesSalas: React.FC = () => {
   const closeForm=(close:()=>void)=>{if(busy.current||enviando||enviandoLogo)return;formSequence.current++;setFormLoading(false);setFormError('');close();};
   useEffect(()=>{formSequence.current++;setUnitDialog(false);setRoomDialog(false);setVideoUnit(null);setFormError('');setFormLoading(false);},[scopeKey]);
 
+  const selectedUnit=directoryReady&&unitProfile?.scope===visibleScope?visibleUnits.find(u=>u.id===unitProfile.id):undefined;
+  const selectedMeta=selectedUnit&&configReady?unitMeta.get(selectedUnit.id):undefined;
+  const profileRooms=selectedUnit?visibleRooms.filter(r=>r.unidadeId===selectedUnit.id).sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR',{numeric:true,sensitivity:'base'})):[];
+  const canPrintProfile=!!selectedUnit&&!!selectedMeta&&!permissionsLoading&&can('unidades_salas','can_view')&&can('unidades_salas','can_execute');
+  const printGuard=useRef({scope:visibleScope,id:selectedUnit?.id,allowed:canPrintProfile});
+  printGuard.current={scope:visibleScope,id:selectedUnit?.id,allowed:canPrintProfile};
+  const handlePrintProfile=async()=>{
+    if(!selectedUnit||!selectedMeta||!canPrintProfile||printBusy.current)return;
+    const scope=visibleScope,id=selectedUnit.id;
+    const counts=staffReady?new Map(profileRooms.map(r=>[r.id,roomStaff.get(r.id)?.length||0])):undefined;
+    const body=buildUnitProfilePrint(selectedUnit,profileRooms.map(r=>({...r,examNames:examNames.get(r.id)})),devices,selectedMeta,selectedMeta.logoUrl,counts);
+    printBusy.current=true;setPrinting(true);
+    try{
+      const config=await loadDocumentConfig();
+      if(!printGuard.current.allowed||printGuard.current.id!==id||printGuard.current.scope!==scope)return;
+      // Shared template uses the logged-in unit logo on the right. Suppress that slot here;
+      // the selected unit's own verified HTTPS logo is rendered in the body instead.
+      const scopedConfig={...config,linha2:escapeStructureHtml(selectedUnit.nome),linha3:'',linha4:'',rodapeEndereco:escapeStructureHtml(selectedUnit.endereco||''),logosConfig:{...config.logosConfig,direita:{...config.logosConfig.direita,ativo:false}}};
+      const html=buildDocumentShell('Ficha de Estrutura Física',body,scopedConfig,{Finalidade:'Conferência administrativa · uso interno'});
+      if(html.length>8*1024*1024)throw new Error('Ficha muito extensa para impressão.');
+      printViaIframe(html);
+    }catch(e){toast.error(readError(e));}finally{printBusy.current=false;setPrinting(false);}
+  };
+
   const renderRoomCard = (room: typeof salas[number]) => {
     const unit = unidades.find(item => item.id === room.unidadeId);
     const diagnosticConfig = configReady ? roomConfigs[room.id] : undefined;
@@ -439,7 +468,7 @@ const UnidadesSalas: React.FC = () => {
                 <div className="flex items-start gap-3 min-w-0">
                   <span className="clinical-dock-icon clinical-tone-blue"><Building2 className="w-4 h-4" aria-hidden="true"/></span>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-base font-semibold text-foreground break-words">{u.nomeExibicao||u.nome}</h3>
+                    <h3><button type="button" className="text-base font-semibold text-left text-foreground break-words hover:underline rounded focus-visible:ring-2 focus-visible:ring-ring" onClick={()=>setUnitProfile({id:u.id,scope:visibleScope})}>{u.nomeExibicao||u.nome}</button></h3>
                     {u.nomeExibicao&&u.nomeExibicao!==u.nome&&<p className="text-xs text-muted-foreground break-words">{u.nome}</p>}
                     <p className={`text-xs mt-1 font-medium ${u.ativo?'text-emerald-700 dark:text-emerald-300':'text-muted-foreground'}`}>{u.ativo?'Unidade ativa':'Unidade inativa'}</p>
                   </div>
@@ -458,6 +487,7 @@ const UnidadesSalas: React.FC = () => {
                   <div className="clinical-inset border rounded-lg p-2.5 space-y-2">
                     <p className="text-xs font-semibold">Estrutura e equipe</p>
                     <div className="flex flex-wrap gap-1.5">
+                      <Button size="sm" variant="outline" className="clinical-record-action gap-1.5 h-8" onClick={()=>setUnitProfile({id:u.id,scope:visibleScope})}><ClipboardList className="w-3.5 h-3.5"/>Perfil da unidade</Button>
                       <Button size="sm" variant="outline" className="clinical-record-action gap-1.5 h-8" onClick={()=>{if(isGlobalAdmin)setUnitId(u.id);selectMetric('rooms');}}><DoorOpen className="w-3.5 h-3.5"/>Ver salas</Button>
                       {canReadStaff&&<Button size="sm" variant="outline" className="clinical-record-action gap-1.5 h-8" asChild><Link to={`/painel/funcionarios?unidade=${encodeURIComponent(u.id)}`}><Users className="w-3.5 h-3.5"/>Ver equipe</Link></Button>}
                       {can('disponibilidade','can_view')&&<Button size="sm" variant="outline" className="clinical-record-action gap-1.5 h-8" asChild><Link to={`/painel/disponibilidade?unidade=${encodeURIComponent(u.id)}`}><CalendarDays className="w-3.5 h-3.5"/>Disponibilidade</Link></Button>}
@@ -494,18 +524,57 @@ const UnidadesSalas: React.FC = () => {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!selectedUnit} onOpenChange={open=>{if(!open)setUnitProfile(null);}}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-3xl gap-3">
+          <DialogHeader className="clinical-hub-hero text-left pr-9"><div className="flex items-start gap-3"><span className="clinical-patient-avatar flex items-center justify-center shrink-0"><Building2 className="w-5 h-5"/></span><div className="min-w-0"><p className="clinical-hub-eyebrow">Perfil institucional</p><DialogTitle className="clinical-hub-name font-display break-words">{selectedUnit?.nomeExibicao||selectedUnit?.nome}</DialogTitle><DialogDescription className="clinical-patient-sub text-xs mt-1">Identificação, estrutura física e configurações cadastradas.</DialogDescription></div></div></DialogHeader>
+          {selectedUnit&&<>
+            <section className="clinical-premium p-3 space-y-2">
+              <h3 className="font-semibold text-sm flex items-center gap-2"><ClipboardList className="w-4 h-4 text-primary"/>Identificação e contato</h3>
+              <div className="flex flex-wrap gap-3 items-start">
+                {selectedMeta?.logoUrl&&<img src={selectedMeta.logoUrl} alt="Logo cadastrada da unidade" className="h-16 w-20 object-contain rounded-lg border bg-background" referrerPolicy="no-referrer"/>}
+                <dl className="flex-1 min-w-[12rem] grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                  {[[ 'Nome oficial',selectedUnit.nome],['Nome de exibição',selectedUnit.nomeExibicao],['CNES',selectedMeta?selectedMeta.cnes||'Não informado':'Não confirmado'],['Situação',selectedUnit.ativo?'Ativa':'Inativa'],['Endereço',selectedUnit.endereco],['Telefone',selectedUnit.telefone],['WhatsApp',selectedUnit.whatsapp]].map(([label,value])=><div key={label} className="clinical-inset border rounded-md p-2 min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="font-medium break-words">{value||'Não informado'}</dd></div>)}
+                </dl>
+              </div>
+              <p className="text-xs text-muted-foreground">CNES exibido como cadastrado. O formato não comprova validade no cadastro nacional.</p>
+            </section>
+            <section className="clinical-premium p-3 space-y-2">
+              <h3 className="font-semibold text-sm flex items-center gap-2"><DoorOpen className="w-4 h-4 text-primary"/>Estrutura física</h3>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                {[[profileRooms.length,'Salas'],[profileRooms.filter(r=>r.ativo).length,'Ativas'],[configReady?profileRooms.filter(r=>devices.has(r.id)).length:'—','Aparelhos']].map(([value,label])=><div key={label} className="clinical-inset border rounded-lg p-2"><strong className="block text-lg tabular-nums">{value}</strong><span className="text-xs text-muted-foreground">{label}</span></div>)}
+              </div>
+              {profileRooms.length===0?<p className="text-xs text-muted-foreground">Nenhuma sala cadastrada nesta unidade.</p>:<div className="divide-y max-h-64 overflow-y-auto">{profileRooms.map(r=><div key={r.id} className="flex flex-wrap items-center gap-2 py-2 text-xs"><DoorOpen className="w-4 h-4 text-primary shrink-0"/><span className="flex-1 min-w-[8rem] font-medium break-words">{r.nome}</span><span className="text-muted-foreground">{r.ativo?'Ativa':'Inativa'} · {configReady?(devices.has(r.id)?'Aparelho':'Consultório'):'Finalidade não confirmada'}</span>{staffReady&&<span className="text-muted-foreground">{roomStaff.get(r.id)?.length||0} vinculado(s)</span>}<Button type="button" size="sm" variant="outline" className="clinical-record-action h-7" onClick={()=>{setUnitProfile(null);setDetail({id:r.id,scope:visibleScope});}}>Detalhes</Button></div>)}</div>}
+              <p className="text-xs text-muted-foreground">Estrutura cadastrada, não representa ocupação, escala ou vagas disponíveis.{staffReady?' Equipe: vínculos ativos diretos às salas.':''}</p>
+            </section>
+            <section className="clinical-premium p-3 space-y-2">
+              <h3 className="font-semibold text-sm flex items-center gap-2"><Tv className="w-4 h-4 text-primary"/>Configurações institucionais</h3>
+              <p className="text-sm">{selectedMeta?(selectedMeta.videoConfigured?'Vídeo de espera local configurado':'Sem vídeo local configurado'):'Configuração ainda não confirmada'}</p>
+              <p className="text-xs text-muted-foreground">Não indica que a TV está ligada ou reproduzindo chamadas.</p>
+            </section>
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-2">
+              {canWrite('can_edit',selectedUnit.id)&&<Button type="button" variant="outline" className="gap-2" disabled={saving} onClick={()=>{setUnitProfile(null);void openEditUnit(selectedUnit);}}><Pencil className="w-4 h-4"/>Editar unidade</Button>}
+              {can('unidades_salas','can_execute')&&<Button type="button" className="gradient-primary text-primary-foreground gap-2" disabled={!canPrintProfile||printing} onClick={()=>void handlePrintProfile()}><Printer className="w-4 h-4"/>{printing?'Preparando ficha...':'Imprimir ficha'}</Button>}
+            </div>
+            {can('unidades_salas','can_execute')&&!selectedMeta&&<p className="text-xs text-muted-foreground">A impressão exige a confirmação das configurações da unidade.</p>}
+          </>}
+        </DialogContent>
+      </Dialog>
+
       {/* Dialogs */}
       <Dialog open={unitDialog} onOpenChange={o=>{if(!o)closeForm(()=>setUnitDialog(false));}}>
-        <DialogContent>
-          <DialogHeader><DialogTitle className="font-display">{editUnitId ? 'Editar' : 'Nova'} Unidade</DialogTitle></DialogHeader>
-          {formStatus}<fieldset disabled={blocked||enviandoLogo} className="space-y-3">
+        <DialogContent className="max-w-3xl gap-3">
+          <DialogHeader className="clinical-hub-hero text-left pr-9"><p className="clinical-hub-eyebrow">Cadastro institucional</p><DialogTitle className="clinical-hub-name font-display">{editUnitId ? 'Editar' : 'Nova'} Unidade</DialogTitle><DialogDescription className="clinical-patient-sub text-xs">Identificação, contatos, CNES e identidade visual.</DialogDescription></DialogHeader>
+          {formStatus}<fieldset disabled={blocked||enviandoLogo} className="clinical-premium p-3 space-y-3 min-w-0">
+            <div className="triage-section-title"><Building2 className="w-4 h-4"/>Identificação institucional</div>
             <div><Label>Nome *</Label><Input value={unitForm.nome} onChange={e => setUnitForm(p => ({ ...p, nome: e.target.value }))} /></div>
             <div><Label>Nome exibido no sistema</Label><Input value={unitForm.nomeExibicao} onChange={e => setUnitForm(p => ({ ...p, nomeExibicao: e.target.value }))} placeholder="Ex: CER II (aparece no menu lateral)" /></div>
+            <div className="triage-section-title"><MapPin className="w-4 h-4"/>Endereço e contatos</div>
             <div><Label>Endereço</Label><Input value={unitForm.endereco} onChange={e => setUnitForm(p => ({ ...p, endereco: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Telefone</Label><Input value={unitForm.telefone} onChange={e => setUnitForm(p => ({ ...p, telefone: e.target.value }))} /></div>
               <div><Label>WhatsApp</Label><Input value={unitForm.whatsapp} onChange={e => setUnitForm(p => ({ ...p, whatsapp: e.target.value }))} /></div>
             </div>
+            <div className="triage-section-title"><ShieldCheck className="w-4 h-4"/>Identificação para produção</div>
             <div>
               <Label>CNES (Cadastro Nacional de Estabelecimentos de Saúde)</Label>
               <Input
@@ -519,6 +588,7 @@ const UnidadesSalas: React.FC = () => {
                 7 dígitos. Usado na produção do BPA-I (SIA/SUS) como CNES do estabelecimento.
               </p>
             </div>
+            <div className="triage-section-title"><ImageIcon className="w-4 h-4"/>Identidade visual</div>
             <div>
               <Label>Logo da unidade (documentos impressos)</Label>
               <div className="flex items-center gap-3 mt-1">
@@ -542,6 +612,7 @@ const UnidadesSalas: React.FC = () => {
                 Sai no lado direito do cabeçalho dos documentos emitidos por profissionais desta unidade. Sem logo, usa a logo oficial do município. Clique em Salvar para gravar.
               </p>
             </div>
+            {customConfig.fields.length > 0 && <div className="triage-section-title"><ClipboardList className="w-4 h-4"/>Campos personalizados</div>}
             {customConfig.fields.length > 0 && (
               <CustomFieldsRenderer
                 fields={customConfig.fields}
@@ -555,9 +626,10 @@ const UnidadesSalas: React.FC = () => {
       </Dialog>
 
       <Dialog open={roomDialog} onOpenChange={o=>{if(!o)closeForm(()=>setRoomDialog(false));}}>
-        <DialogContent>
-          <DialogHeader><DialogTitle className="font-display">{editRoomId ? 'Editar' : 'Nova'} Sala</DialogTitle></DialogHeader>
-          {formStatus}<fieldset disabled={blocked} className="space-y-3">
+        <DialogContent className="max-w-3xl gap-3">
+          <DialogHeader className="clinical-hub-hero text-left pr-9"><p className="clinical-hub-eyebrow">Estrutura física</p><DialogTitle className="clinical-hub-name font-display">{editRoomId?'Editar':roomForm.config.finalidade==='aparelho_diagnostico'?'Novo':'Nova'} {roomForm.config.finalidade==='aparelho_diagnostico'?'Aparelho / exame':'Sala'}</DialogTitle><DialogDescription className="clinical-patient-sub text-xs">Identificação, unidade vinculada e finalidade cadastrada.</DialogDescription></DialogHeader>
+          {formStatus}<fieldset disabled={blocked} className="clinical-premium p-3 space-y-3 min-w-0">
+            <div className="triage-section-title"><DoorOpen className="w-4 h-4"/>Identificação da estrutura</div>
             <div><Label>Nome *</Label><Input value={roomForm.nome} onChange={e => setRoomForm(p => ({ ...p, nome: e.target.value }))} /></div>
             <div><Label>Unidade *</Label>
               <Select disabled={!!editRoomId||blocked} value={roomForm.unidadeId} onValueChange={v => setRoomForm(p => ({ ...p, unidadeId: v }))}>
@@ -565,6 +637,8 @@ const UnidadesSalas: React.FC = () => {
                 <SelectContent>{allowedUnits.filter(u=>u.ativo&&canWrite(editRoomId?'can_edit':'can_create',u.id)).map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            {editRoomId&&<p className="text-xs text-muted-foreground">Unidade protegida para preservar os vínculos históricos da sala.</p>}
+            <div className="triage-section-title"><Activity className="w-4 h-4"/>Finalidade e configuração</div>
             <div>
               <Label>Finalidade da Sala</Label>
               <Select value={roomForm.config.finalidade} onValueChange={v => setRoomForm(p => ({ ...p, config: { ...p.config, finalidade: v as DiagnosticRoomConfig['finalidade'] } }))}>
