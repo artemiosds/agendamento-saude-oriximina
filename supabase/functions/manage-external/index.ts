@@ -8,6 +8,12 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
+// Administrative mutations must keep the target within the caller's unit.
+function externalScopeAllowed(global:boolean,actorUnit:string|null|undefined,targetUnit:unknown){
+  return global || (!!actorUnit && targetUnit===actorUnit);
+}
+const fail=(message:string,status=200)=>new Response(JSON.stringify({error:message}),{status,headers:corsHeaders});
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -78,10 +84,10 @@ serve(async (req) => {
     if (authError || !authData.user) {
       return new Response(JSON.stringify({ error: "Sessão inválida." }), { status: 401, headers: corsHeaders });
     }
-    const { data: actor } = await supabaseAdmin.from("funcionarios")
+    const { data: actor, error:actorError } = await supabaseAdmin.from("funcionarios")
       .select("id,nome,usuario,role,unidade_id,ativo")
       .eq("auth_user_id", authData.user.id).eq("ativo", true).maybeSingle();
-    if (!actor) {
+    if (actorError || !actor) {
       return new Response(JSON.stringify({ error: "Funcionário ativo não encontrado." }), { status: 403, headers: corsHeaders });
     }
     const normalizeRole = (role: string) => {
@@ -91,7 +97,7 @@ serve(async (req) => {
       return value;
     };
     const profile = normalizeRole(actor.role);
-    const isGlobalAdmin = actor.usuario === "admin.sms";
+    const isGlobalAdmin = actor.usuario === "admin.sms" && profile === "master";
     const hasUsersPermission = async (field: "can_view" | "can_edit", unitId: string) => {
       type PermissionRow = {
         unidade_id: string;
@@ -102,16 +108,18 @@ serve(async (req) => {
       if (isGlobalAdmin) return true;
       if (!unitId || actor.unidade_id !== unitId) return false;
       if (profile === "master") return true;
-      const { data: userRows } = await supabaseAdmin.from("permissoes_usuario")
+      const { data: userRows,error:userError } = await supabaseAdmin.from("permissoes_usuario")
         .select(`unidade_id,${field}`).eq("user_id", actor.id).eq("modulo", "usuarios")
         .in("unidade_id", ["", unitId]).order("unidade_id", { ascending: false });
+      if(userError)return false;
       if (userRows?.length) {
         const exact = (userRows as PermissionRow[]).find((row) => row.unidade_id === unitId) || userRows[0];
         return exact?.[field] === true;
       }
-      const { data: roleRows } = await supabaseAdmin.from("permissoes")
+      const { data: roleRows,error:roleError } = await supabaseAdmin.from("permissoes")
         .select(`perfil,unidade_id,${field}`).in("perfil", [profile, String(actor.role || "").toLowerCase()])
         .eq("modulo", "usuarios").in("unidade_id", ["", unitId]);
+      if(roleError)return false;
       const ordered = ((roleRows || []) as PermissionRow[]).sort((a, b) =>
         Number(b.unidade_id === unitId) - Number(a.unidade_id === unitId)
         || Number(b.perfil === profile) - Number(a.perfil === profile));
@@ -128,15 +136,16 @@ serve(async (req) => {
       if (!nome || !email || !senha) {
         return new Response(JSON.stringify({ error: "Nome, e-mail e senha são obrigatórios." }), { status: 200, headers: corsHeaders });
       }
-      if (!(await hasUsersPermission("can_edit", unidade_id || actor.unidade_id || ""))) {
+      if (!externalScopeAllowed(isGlobalAdmin,actor.unidade_id,unidade_id) || !(await hasUsersPermission("can_view",unidade_id||"")) || !(await hasUsersPermission("can_edit", unidade_id || ""))) {
         return new Response(JSON.stringify({ error: "Sem permissão para criar profissional externo nesta unidade." }), { status: 403, headers: corsHeaders });
       }
-      if (senha.length < 6) {
+      if (typeof senha !== "string" || senha.length < 6) {
         return new Response(JSON.stringify({ error: "A senha deve ter no mínimo 6 caracteres." }), { status: 200, headers: corsHeaders });
       }
 
       // Check uniqueness
-      const { data: existing } = await supabaseAdmin.from("profissionais_externos").select("id").eq("email", email.trim().toLowerCase());
+      const { data: existing,error:existingError } = await supabaseAdmin.from("profissionais_externos").select("id").eq("email", email.trim().toLowerCase());
+      if(existingError)return fail("Não foi possível conferir o e-mail. Nenhum acesso foi criado.");
       if (existing && existing.length > 0) {
         return new Response(JSON.stringify({ error: "Este e-mail já está registrado." }), { status: 200, headers: corsHeaders });
       }
@@ -157,7 +166,7 @@ serve(async (req) => {
         nome,
         email: email.trim().toLowerCase(),
         unidade_id: unidade_id || "",
-        criado_por: criado_por || "",
+        criado_por: actor.id,
         telefone: telefone || null,
         documento: documento || null,
         orgao_origem: orgao_origem || null,
@@ -176,7 +185,10 @@ serve(async (req) => {
       }).select().single();
 
       if (dbErr) {
-        await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
+        const {data:linked,error:verifyError}=await supabaseAdmin.from("profissionais_externos").select("id").eq("auth_user_id",authUser.user.id).maybeSingle();
+        if(verifyError||linked)return fail("Resultado do cadastro incerto. Confira a lista antes de repetir; o acesso foi preservado.");
+        const {error:cleanupError}=await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
+        if(cleanupError)return fail("Cadastro não concluído. O acesso temporário requer conferência administrativa.");
         return new Response(JSON.stringify({ error: "Erro ao salvar: " + dbErr.message }), { status: 200, headers: corsHeaders });
       }
 
@@ -188,10 +200,12 @@ serve(async (req) => {
       const { id, senha } = body;
       if (!id) return new Response(JSON.stringify({ error: "ID obrigatório." }), { status: 200, headers: corsHeaders });
 
-      const { data: current } = await supabaseAdmin.from("profissionais_externos").select("*").eq("id", id).single();
-      if (!current) return new Response(JSON.stringify({ error: "Não encontrado." }), { status: 200, headers: corsHeaders });
-      if (!(await hasUsersPermission("can_edit", current.unidade_id || actor.unidade_id || ""))
-          || (body.unidade_id && !(await hasUsersPermission("can_edit", body.unidade_id)))) {
+      const { data: current,error:currentError } = await supabaseAdmin.from("profissionais_externos").select("*").eq("id", id).single();
+      if (currentError || !current) return new Response(JSON.stringify({ error: "Não encontrado." }), { status: 200, headers: corsHeaders });
+      if (!externalScopeAllowed(isGlobalAdmin,actor.unidade_id,current.unidade_id)
+          || (body.unidade_id!==undefined&&!externalScopeAllowed(isGlobalAdmin,actor.unidade_id,body.unidade_id))
+          || !(await hasUsersPermission("can_view",current.unidade_id||""))
+          || !(await hasUsersPermission("can_edit",current.unidade_id||""))) {
         return new Response(JSON.stringify({ error: "Sem permissão para editar este profissional externo." }), { status: 403, headers: corsHeaders });
       }
 
@@ -203,7 +217,17 @@ serve(async (req) => {
       for (const key of allowedFields) {
         if (body[key] !== undefined) dbFields[key] = body[key];
       }
-      if (dbFields.email) dbFields.email = dbFields.email.trim().toLowerCase();
+      if(dbFields.email!==undefined){
+        if(typeof dbFields.email!=="string"||!dbFields.email.trim())return fail("E-mail obrigatório.");
+        dbFields.email=dbFields.email.trim().toLowerCase();
+        if(dbFields.email!==current.email){
+          const {data:duplicate,error:duplicateError}=await supabaseAdmin.from("profissionais_externos").select("id").eq("email",dbFields.email).neq("id",id).limit(1);
+          if(duplicateError)return fail("Não foi possível conferir o e-mail.");
+          if(duplicate?.length)return fail("Este e-mail já está registrado.");
+        }
+      }
+      if(senha!==undefined&&senha!==""&&(typeof senha!=="string"||senha.length<6))return fail("A senha deve ter no mínimo 6 caracteres.");
+      let credentialsChanged=false;
 
       // Update auth if needed
       if (current.auth_user_id) {
@@ -216,25 +240,21 @@ serve(async (req) => {
         if (Object.keys(authUpdate).length > 0) {
           const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(current.auth_user_id, authUpdate);
           if (authErr) return new Response(JSON.stringify({ error: "Erro auth: " + authErr.message }), { status: 200, headers: corsHeaders });
+          credentialsChanged=true;
         }
       }
 
       const { data: updated, error: dbErr } = await supabaseAdmin.from("profissionais_externos").update(dbFields).eq("id", id).select().single();
+      if(dbErr&&credentialsChanged)return fail("Cadastro não confirmado. Credenciais podem ter sido alteradas; confira o acesso antes de repetir.");
       if (dbErr) return new Response(JSON.stringify({ error: dbErr.message }), { status: 200, headers: corsHeaders });
 
       return new Response(JSON.stringify({ success: true, profissional: updated }), { headers: corsHeaders });
     }
 
-    // ── DELETE external professional ──
+    // Preserve external appointments, quotas and authentication links.
+    // Deactivation is the existing reversible update action.
     if (action === "delete") {
-      const { id } = body;
-      const { data: ext } = await supabaseAdmin.from("profissionais_externos").select("auth_user_id,unidade_id").eq("id", id).single();
-      if (!ext || !(await hasUsersPermission("can_edit", ext.unidade_id || actor.unidade_id || ""))) {
-        return new Response(JSON.stringify({ error: "Sem permissão para excluir este profissional externo." }), { status: 403, headers: corsHeaders });
-      }
-      if (ext?.auth_user_id) await supabaseAdmin.auth.admin.deleteUser(ext.auth_user_id);
-      await supabaseAdmin.from("profissionais_externos").delete().eq("id", id);
-      return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+      return fail("Exclusão definitiva suspensa para preservar cotas e agendamentos. Utilize Desativar profissional.");
     }
 
     // ── LIST external professionals ──
@@ -245,7 +265,8 @@ serve(async (req) => {
       }
       let listQuery = supabaseAdmin.from("profissionais_externos").select("*").order("criado_em", { ascending: false });
       if (!isGlobalAdmin) listQuery = listQuery.eq("unidade_id", targetUnit);
-      const { data } = await listQuery;
+      const { data,error:listError } = await listQuery;
+      if(listError)return fail("Não foi possível consultar profissionais externos.");
       return new Response(JSON.stringify({ profissionais: data || [] }), { headers: corsHeaders });
     }
 
