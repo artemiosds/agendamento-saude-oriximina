@@ -5,7 +5,8 @@ export function moveVideoEntry(list:readonly string[],index:number,delta:number)
   const next=[...list];[next[index],next[target]]=[next[target],next[index]];return next;
 }
 export function videoEntryLabel(value:string,index:number):string{
-  const raw=value.split(/[?#]/,1)[0].split('/').pop()||'';
+  const path=value.split(/[?#]/,1)[0].replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i,'');
+  const raw=path.split('/').pop()||'';
   try{return decodeURIComponent(raw).replace(/[\u0000-\u001f\u007f]/g,'').trim().slice(0,100)||'Vídeo '+(index+1);}
   catch{return raw.slice(0,100)||'Vídeo '+(index+1);}
 }
