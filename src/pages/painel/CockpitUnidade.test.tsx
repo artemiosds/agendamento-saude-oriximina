@@ -309,3 +309,20 @@ it('não anuncia fluxo ao vivo quando o canal de chamadas está desconectado', (
   act(() => connection(true));
   expect(screen.getByRole('status')).toHaveTextContent('Ao vivo · Fluxo da unidade');
 });
+
+it('recolhe e expande os alertas sem perder contagem, detalhes ou ciência', () => {
+  const older = new Date(Date.now() - 95 * 60000).toISOString();
+  setup('em_atendimento', { rows: [{ ...a, status: 'em_atendimento', iniciado_em: older }] });
+  render(<CockpitUnidade />);
+  fireEvent.click(screen.getByRole('button', { name: 'Ciente de Sala teste' }));
+  const toggle = screen.getByRole('button', { name: 'Recolher' });
+  expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  fireEvent.click(toggle);
+  expect(screen.getByText('1 ativos · 1 críticos')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Ver detalhes de Sala teste' })).not.toBeInTheDocument();
+  const expand = screen.getByRole('button', { name: 'Expandir' });
+  expect(expand).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(expand);
+  expect(screen.getByRole('button', { name: 'Ciente de Sala teste' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Ver detalhes de Sala teste' })).toBeInTheDocument();
+});
