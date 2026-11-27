@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useRef,useState} from 'react';
+import {useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {CalendarDays,Printer,ChevronRight,ShieldCheck,AlertTriangle} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Badge} from '@/components/ui/badge';
@@ -28,8 +28,8 @@ export default function AvailabilityProfessionalProfile({person,groups,units,roo
   const counts=useMemo(()=>{const n={vigente:0,futuro:0,encerrado:0,invalido:0};for(const [,rows] of groups)n[gradePeriod(rows[0].dataInicio,rows[0].dataFim,today)]++;return n;},[groups,today]);
   const allowed=!!(canPrint&&complete&&person&&unit&&first&&week?.valid&&week.blocks>0&&first.profissionalId===person.id);
   const signature=JSON.stringify([scope,chosen?.[0],chosen?.[1],person?.id,person?.nome,person?.profissao,person?.cargo,person?.tipoConselho,person?.numeroConselho,person?.ufConselho,unit,week,emittedBy]);
-  const guard=useRef({allowed,signature});guard.current={allowed,signature};
-  useEffect(()=>()=>{guard.current.allowed=false;},[]);
+  const guard=useRef({allowed,signature});
+  useLayoutEffect(()=>{guard.current={allowed,signature};return()=>{guard.current.allowed=false;};},[allowed,signature]);
   const registration=[person?.tipoConselho,person?.numeroConselho,person?.ufConselho].filter(Boolean).join(' / ');
   const print=async()=>{
     if(!allowed||busy.current||!week||!first||!person||!unit)return;
@@ -39,7 +39,7 @@ export default function AvailabilityProfessionalProfile({person,groups,units,roo
       const config=await loadDocumentConfig();
       if(!guard.current.allowed||guard.current.signature!==signature)return;
       // Do not inherit the logged-in unit's logo or footer for a different selected unit.
-      const scopedConfig={...config,linha2:profileEscape(unit.nome),linha3:'',linha4:'',rodapeEndereco:profileEscape(unit.endereco||''),logosConfig:{...config.logosConfig,central:{...config.logosConfig.central,ativo:false},direita:{...config.logosConfig.direita,ativo:false}}};
+      const scopedConfig={...config,linha1:profileEscape(config.linha1),logoEsquerda:profileEscape(config.logoEsquerda||''),rodapeTexto:profileEscape(config.rodapeTexto||''),linha2:profileEscape(unit.nome),linha3:'',linha4:'',rodapeEndereco:profileEscape(unit.endereco||''),logosConfig:{...config.logosConfig,central:{...config.logosConfig.central,ativo:false},direita:{...config.logosConfig.direita,ativo:false}}};
       const html=buildDocumentShell('Ficha de Disponibilidade Profissional',body,scopedConfig,{Finalidade:'Consulta administrativa · grade semanal cadastrada'});
       if(html.length>8*1024*1024)throw new Error('Ficha muito extensa.');
       printViaIframe(html);
@@ -49,7 +49,7 @@ export default function AvailabilityProfessionalProfile({person,groups,units,roo
   const selectedDay=week?.days.find(d=>d.day===day);
   return <section className="clinical-premium p-3 space-y-3 min-w-0" aria-label="Perfil e grade semanal de disponibilidade">
     <div className="flex flex-wrap items-center gap-2"><span className="clinical-dock-icon clinical-tone-teal shrink-0"><CalendarDays className="w-4 h-4"/></span><div className="flex-1 min-w-0"><h3 className="text-sm font-semibold">Perfil de disponibilidade</h3><p className="text-xs text-muted-foreground">{person?(person.ativo?'Cadastro ativo':'Cadastro inativo')+(registration?' · '+registration:''):'Cadastro não localizado'} · Períodos na seleção</p></div>{canPrint&&<Button type="button" variant="outline" size="sm" className="clinical-record-action gap-1.5" disabled={!allowed||printing} onClick={()=>void print()}><Printer className="w-4 h-4"/>{printing?'Preparando…':'Imprimir ficha (A4)'}</Button>}</div>
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{(['vigente','futuro','encerrado','invalido'] as const).map(period=><button type="button" key={period} className="clinical-inset border rounded-lg p-2 text-left focus-visible:ring-2 focus-visible:ring-ring flex items-center gap-1" onClick={()=>onShowPeriod(period)}><span className="flex-1 min-w-0"><strong className="block text-xl tabular-nums">{counts[period]}</strong><span className="text-xs text-muted-foreground">{labels[period]}</span></span><ChevronRight className="w-3 h-3 text-muted-foreground shrink-0"/></button>)}</div>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{(['vigente','futuro','encerrado','invalido'] as const).map(period=><button type="button" key={period} className="clinical-inset border rounded-lg p-2 text-left focus-visible:ring-2 focus-visible:ring-ring flex items-center gap-1" onClick={()=>{const target=groups.find(([,rows])=>gradePeriod(rows[0].dataInicio,rows[0].dataFim,today)===period);if(target){setSelected(target[0]);setDay(null);}onShowPeriod(period);}}><span className="flex-1 min-w-0"><strong className="block text-xl tabular-nums">{counts[period]}</strong><span className="text-xs text-muted-foreground">{labels[period]}</span></span><ChevronRight className="w-3 h-3 text-muted-foreground shrink-0"/></button>)}</div>
     {!complete&&<p role="alert" className="text-xs text-amber-800 dark:text-amber-300">Consulta possivelmente incompleta. A ficha fica indisponível até a conferência dos dados.</p>}
     {!chosen||!week||!first?<p className="text-sm text-muted-foreground">Nenhum período cadastrado nesta seleção.</p>:<>
       <label className="block space-y-1 text-xs font-medium"><span>Período para visualizar e imprimir</span><select className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm" value={chosen[0]} onChange={e=>{setSelected(e.target.value);setDay(null);}} disabled={printing}>{groups.map(([key,rows])=>{const r=rows[0];return <option key={key} value={key}>{profileDate(r.dataInicio)} a {profileDate(r.dataFim)} · {units.find(u=>u.id===r.unidadeId)?.nome||'Unidade não localizada'} · {labels[gradePeriod(r.dataInicio,r.dataFim,today)]}</option>;})}</select></label>
