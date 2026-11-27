@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { classifyExternalQuotaForAvailabilities, isQuotaConfigurationUsable } from "@/lib/externalQuota";
 import { todayLocalStr } from "@/lib/utils";
+import { staffSearchText } from "@/lib/staffDirectoryReview";
 
 interface ExternalProf {
   id: string;
@@ -80,6 +81,10 @@ const ProfissionaisExternos: React.FC = () => {
   const [externos, setExternos] = useState<ExternalProf[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadError,setLoadError]=useState("");
+  const [agendaError,setAgendaError]=useState("");
+  const readSequence=useRef(0);
+  const agendaSequence=useRef(0);
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -163,21 +168,24 @@ const ProfissionaisExternos: React.FC = () => {
   };
 
   const loadExternos = useCallback(async () => {
-    setLoading(true);
+    const seq=++readSequence.current;
+    setLoading(true);setLoadError("");
     try {
-      const { data } = await supabase.functions.invoke("manage-external", { body: { action: "list" } });
-      setExternos(data?.profissionais || []);
+      const { data,error } = await supabase.functions.invoke("manage-external", { body: { action: "list" } });
+      if(error||data?.error||!Array.isArray(data?.profissionais))throw new Error("Não foi possível consultar profissionais externos.");
       let quotasQuery = supabase.from("quotas_externas").select("*").order('criado_em', { ascending: false });
       if (!isGlobalAdmin && userUnidadeId) quotasQuery = quotasQuery.eq("unidade_id", userUnidadeId);
-      const { data: quotasData } = await quotasQuery;
-      setQuotas(quotasData || []);
+      const { data: quotasData,error:quotaError } = await quotasQuery;
+      if(quotaError||!Array.isArray(quotasData))throw new Error("Não foi possível consultar as cotas.");
+      if(seq!==readSequence.current)return;
+      setExternos(data.profissionais);setQuotas(quotasData);
     } catch (err) {
-      console.error(err);
-    }
-    setLoading(false);
-  }, [isGlobalAdmin, userUnidadeId]);
+      if(seq!==readSequence.current)return;
+      setLoadError(err instanceof Error?err.message:"Falha ao carregar profissionais externos.");
+    } finally {if(seq===readSequence.current)setLoading(false);}
+  }, [isGlobalAdmin, userUnidadeId,user?.id]);
 
-  useEffect(() => { loadExternos(); }, [loadExternos]);
+  useEffect(() => {setExternos([]);setQuotas([]);void loadExternos();return()=>{readSequence.current++;agendaSequence.current++;};}, [loadExternos]);
 
   const openNew = () => {
     if (!canManage) { toast.error("Sem permissão para alterar profissionais externos."); return; }
@@ -489,7 +497,9 @@ const ProfissionaisExternos: React.FC = () => {
   };
 
   const handleVerAgenda = async (quota: QuotaRow) => {
+    const seq=++agendaSequence.current;
     setSelectedQuota(quota);
+    setAgendaError('');setQuotaAppointments([]);
     setLoadingAgenda(true);
     setAgendaDialogOpen(true);
     try {
@@ -506,11 +516,13 @@ const ProfissionaisExternos: React.FC = () => {
       const pacienteIds = Array.from(new Set((links || []).map((l: any) => l.paciente_id).filter(Boolean)));
       const nomes: Record<string, string> = {};
       if (pacienteIds.length) {
-        const { data: pacs } = await client.from("pacientes").select("id, nome").in("id", pacienteIds);
+        const { data: pacs,error:patientError } = await client.from("pacientes").select("id, nome").in("id", pacienteIds);
+        if(patientError)throw patientError;
         (pacs || []).forEach((p: any) => { nomes[p.id] = p.nome; });
       }
       const profNome = funcionarios.find(f => f.id === quota.profissional_interno_id)?.nome || "Profissional não identificado";
 
+      if(seq!==agendaSequence.current)return;
       setQuotaAppointments((links || []).map((a: any) => ({
         id: a.id,
         data_agendamento: a.data,
@@ -520,10 +532,11 @@ const ProfissionaisExternos: React.FC = () => {
         profissional_interno_nome: profNome,
       })));
     } catch (err) {
+      if(seq!==agendaSequence.current)return;
       console.error("Erro ao carregar agenda da cota", err);
-      setQuotaAppointments([]);
+      setAgendaError("Não foi possível confirmar os agendamentos desta cota.");setQuotaAppointments([]);
     } finally {
-      setLoadingAgenda(false);
+      if(seq===agendaSequence.current)setLoadingAgenda(false);
     }
   };
 
@@ -541,8 +554,8 @@ const ProfissionaisExternos: React.FC = () => {
 
   const filteredExternos = externos.filter(e => {
     if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase();
-    return e.nome.toLowerCase().includes(term) || e.email.toLowerCase().includes(term);
+    const term = staffSearchText(searchTerm);
+    return [e.nome,e.email,e.orgao_origem].some(value=>staffSearchText(value).includes(term));
   });
 
   const quotaConfiguredProfIds = new Set(
@@ -554,26 +567,26 @@ const ProfissionaisExternos: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold font-display text-foreground">Profissionais Externos</h1>
-          <p className="text-muted-foreground text-sm">{filteredExternos.length} de {externos.length} cadastrados</p>
+      <div className="clinical-premium p-3 flex flex-wrap items-center gap-3">
+        <span className="clinical-dock-icon clinical-tone-teal"><User className="w-4 h-4"/></span><div className="flex-1 min-w-0">
+          <h2 className="text-base font-bold font-display text-foreground">Profissionais Externos</h2>
+          <p className="text-muted-foreground text-xs">{loading||loadError?"Consulta em atualização":filteredExternos.length+" de "+externos.length+" cadastrados"}</p>
         </div>
-        {canManage && (
-          <Button onClick={openNew} className="gradient-primary text-primary-foreground">
+        {canManage && !loading && !loadError && (
+          <Button onClick={openNew} className="clinical-record-action clinical-action-main">
             <UserPlus className="w-4 h-4 mr-2" /> Novo Externo
           </Button>
         )}
       </div>
 
-      <div className="relative w-full sm:w-72">
+      <div className="clinical-premium p-3"><div className="relative w-full">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input placeholder="Buscar por nome, e-mail..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" />
-      </div>
+        <Input placeholder="Buscar nome, e-mail ou órgão de origem..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" />
+      </div></div>
 
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
-      ) : filteredExternos.length === 0 ? (
+      ) : loadError ? <div role="alert" className="clinical-premium p-3 flex flex-wrap gap-2 items-center"><p className="flex-1 text-sm text-destructive">{loadError}</p><Button variant="outline" size="sm" onClick={()=>void loadExternos()}>Tentar novamente</Button></div> : filteredExternos.length === 0 ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground">{externos.length === 0 ? "Nenhum profissional externo cadastrado." : "Nenhum resultado encontrado."}</CardContent></Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -587,22 +600,22 @@ const ProfissionaisExternos: React.FC = () => {
             const saldoVigente = vigentes.reduce((acc, curr) => acc + Math.max(0, curr.vagas_total - curr.vagas_usadas), 0);
             
             return (
-              <Card key={ext.id} className="overflow-hidden border-t-4 border-t-primary/20 hover:shadow-md transition-shadow">
+              <Card key={ext.id} className="clinical-premium overflow-hidden">
                 <CardContent className="p-0">
                   <div className="p-4 space-y-3">
                     <div className="flex items-start justify-between">
                       <div className="flex gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                        <div className="clinical-patient-avatar treatment-avatar flex items-center justify-center shrink-0">
                           <User className="w-5 h-5" />
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-bold text-foreground truncate">{ext.nome}</p>
+                            <p className="font-bold text-foreground break-words">{ext.nome}</p>
                             <Badge variant={ext.ativo ? "default" : "secondary"} className="text-[10px] h-4">
                               {ext.ativo ? "ATIVO" : "INATIVO"}
                             </Badge>
                           </div>
-                          <p className="text-xs text-muted-foreground truncate">{ext.email}</p>
+                          <p className="text-xs text-muted-foreground break-words">{ext.email}</p>
                         </div>
                       </div>
                     </div>
@@ -632,10 +645,10 @@ const ProfissionaisExternos: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="bg-muted/30 p-2 flex items-center justify-between border-t">
-                    <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { setSelectedExternoId(ext.id); setQuotaListDialogOpen(true); }} title="Gerenciar Cotas">
-                        <Ticket className="w-4 h-4" />
+                  <div className="clinical-inset p-2 flex flex-wrap gap-2 items-center justify-between border-t">
+                    <div className="flex flex-wrap gap-1">
+                      <Button size="sm" variant="outline" className="clinical-record-action h-8 gap-1" onClick={() => { setSelectedExternoId(ext.id); setQuotaListDialogOpen(true); }} title="Consultar cotas e agendamentos por cota">
+                        <Ticket className="w-4 h-4" /> Cotas e agenda
                       </Button>
                       {canManage && <>
                         <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openQuotaDialog(ext.id)} title="Adicionar Cotas">
@@ -650,9 +663,6 @@ const ProfissionaisExternos: React.FC = () => {
                       </>}
                     </div>
                     <div className="flex gap-1">
-                      <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={() => {/* TODO: Link agendamento online */}}>
-                        <Search className="w-3 h-3" /> Agenda
-                      </Button>
                       {canManage && <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive"><Trash2 className="w-4 h-4" /></Button>
@@ -1111,7 +1121,7 @@ const ProfissionaisExternos: React.FC = () => {
           <div className="space-y-4 max-h-[60vh] overflow-y-auto">
             {loadingAgenda ? (
               <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin" /></div>
-            ) : quotaAppointments.length === 0 ? (
+            ) : agendaError ? <div role="alert" className="rounded-lg border p-3 text-sm text-destructive">{agendaError}{selectedQuota&&<Button size="sm" variant="outline" className="ml-2" onClick={()=>void handleVerAgenda(selectedQuota)}>Tentar novamente</Button>}</div> : quotaAppointments.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">Nenhum agendamento vinculado a esta cota.</div>
             ) : (
               <div className="rounded-md border">
