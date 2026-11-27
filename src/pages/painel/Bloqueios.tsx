@@ -82,7 +82,7 @@ const Bloqueios: React.FC = () => {
     horaInicio:    '',
     horaFim:       '',
     scope:         (isGlobalAdmin?'global':'unidade') as 'global' | 'unidade' | 'profissional',
-    unidadeId:     '',
+    unidadeId:     isGlobalAdmin?'':user?.unidadeId||'',
     profissionalId:'',
   });
 
@@ -229,10 +229,10 @@ const Bloqueios: React.FC = () => {
     const scope=scopeKey;writeInFlight.current=true;setImporting(true);
     try {
       // Query the current server snapshot; do not trust the potentially stale directory cache.
-      const {data,error,count}=await supabase.from('bloqueios').select('data_inicio,data_fim',{count:'exact'}).eq('tipo','feriado').or('unidade_id.is.null,unidade_id.eq.').or('profissional_id.is.null,profissional_id.eq.').lte('data_inicio','2026-12-31').gte('data_fim','2026-01-01').limit(1000);
+      const {data,error,count}=await supabase.from('bloqueios').select('data_inicio,data_fim,unidade_id,profissional_id',{count:'exact'}).eq('tipo','feriado').lte('data_inicio','2026-12-31').gte('data_fim','2026-01-01').limit(1000);
       if(error||!data||count!==data.length)throw error||new Error('Lista de feriados não confirmada.');
       if(scopeRef.current!==scope)return;
-      const missing=feriadosNacionais2026.filter(f=>!data.some(b=>b.data_inicio<=f.date&&b.data_fim>=f.date));
+      const missing=feriadosNacionais2026.filter(f=>!data.some(b=>!b.unidade_id&&!b.profissional_id&&b.data_inicio<=f.date&&b.data_fim>=f.date));
       const toImport=missing.filter(f=>!f.reason.includes('meio dia'));
       const skipped=missing.length-toImport.length;
       if(!toImport.length){toast.info(skipped?'Quarta-feira de Cinzas exige conferência manual do horário parcial.':'Todas as datas da lista já estão cadastradas.');return;}
@@ -304,7 +304,7 @@ const Bloqueios: React.FC = () => {
                 <DialogHeader>
                   <DialogTitle className="font-display">Bloquear Data para Agendamentos</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
+                <fieldset disabled={busy} className="space-y-4 min-w-0">
 
                   {/* Motivo */}
                   <div>
@@ -388,7 +388,7 @@ const Bloqueios: React.FC = () => {
                       onValueChange={v => setForm(p => ({
                         ...p,
                         scope: v as any,
-                        unidadeId: '',
+                        unidadeId: v==='unidade'&&!isGlobalAdmin?user?.unidadeId||'':'',
                         profissionalId: '',
                       }))}
                     >
@@ -486,7 +486,7 @@ const Bloqueios: React.FC = () => {
                   <Button onClick={handleSave} disabled={busy||!canCreate} className="w-full gradient-primary text-primary-foreground">
                     {saving?'Salvando…':'Confirmar Bloqueio'}
                   </Button>
-                </div>
+                </fieldset>
               </DialogContent>
             </Dialog>
           )}
