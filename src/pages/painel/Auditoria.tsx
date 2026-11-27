@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
-import { useOperacional } from '@/contexts/OperacionalContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +22,7 @@ import { toast } from 'sonner';
 import { openPrintDocument } from '@/lib/printLayout';
 import { auditService } from '@/services/auditService';
 import { getAuditActorLabel } from '@/lib/auditActor';
+import { auditScope, auditDeviceLabel, auditCsvCell, auditEscapeHtml, auditSafeText, isAuditSecret, redactAuditData, maskAuditIdentifier } from '@/lib/auditSecurity';
 
 async function sha256Hex(text: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -67,21 +67,7 @@ interface LogEntry {
   created_at: string;
 }
 
-function formatDispositivo(log: Partial<LogEntry>): string {
-  const legacy = log.detalhes?.dispositivo;
-  const legacyObj = legacy && typeof legacy === 'object' ? legacy : null;
-  const browser = log.navegador || legacyObj?.browser || '';
-  const os = log.sistema_operacional || legacyObj?.os || '';
-  const device = log.dispositivo || legacyObj?.device || (typeof legacy === 'string' ? legacy : '');
-  const parts = [browser, os].filter(Boolean).join(' / ');
-  const text = [parts, device].filter(Boolean).join(' · ');
-  return text || '-';
-}
-
-
-
-
-
+function formatDispositivo(log: Partial<LogEntry>): string { return auditDeviceLabel(log); }
 
 interface ResolvedEntity {
   tipo: "paciente" | "agendamento" | "prontuario" | "profissional" | "unidade" | "documento" | "cota" | "desconhecido";
@@ -229,19 +215,7 @@ const eventoGrupos: Record<string, { label: string; acoes: string[] }> = {
   chamada: { label: 'Chamada de Paciente', acoes: ['paciente_chamado', 'paciente_rechamado', 'fila_chamada'] },
 };
 
-const maskCpf = (cpf: string) => {
-  if (!cpf || cpf.length < 11) return cpf || '-';
-  const clean = cpf.replace(/\D/g, '');
-  if (clean.length < 11) return cpf;
-  return `${clean.substring(0, 3)}.***.***-${clean.substring(9)}`;
-};
-
-const formatCpf = (cpf: string) => {
-  if (!cpf) return '-';
-  const clean = cpf.replace(/\D/g, '');
-  if (clean.length !== 11) return cpf;
-  return `${clean.substring(0, 3)}.${clean.substring(3, 6)}.${clean.substring(6, 9)}-${clean.substring(9)}`;
-};
+const maskCpf = (cpf: string) => maskAuditIdentifier(cpf, 'cpf');
 
 const formatAuditFieldLabel = (field: string): string => {
   const labels: Record<string, string> = {
@@ -276,6 +250,7 @@ const formatAuditFieldLabel = (field: string): string => {
 };
 
 const formatAuditValue = (field: string, value: any): string => {
+  if (isAuditSecret(field)) return "********";
   if (value === null || value === undefined || value === "") return "Não informado";
   
   if (field === "sexo") {
@@ -286,10 +261,9 @@ const formatAuditValue = (field: string, value: any): string => {
   }
 
   if (field === "cpf") return maskCpf(String(value));
-  if (field === "cns") {
-    const s = String(value);
-    return s.length > 8 ? `${s.substring(0, 3)}...${s.substring(s.length - 3)}` : s;
-  }
+  if (/(?:^|[._])cpf(?:$|[._])/i.test(field)) return maskAuditIdentifier(value,'cpf');
+  if (/(?:^|[._])cns(?:$|[._])/i.test(field)) return maskAuditIdentifier(value,'cns');
+  if (typeof value === 'object') return JSON.stringify(redactAuditData(value,true,field));
   
   if (field === "data" || field === "data_nascimento" || field === "data_atendimento") {
     try {
@@ -299,7 +273,7 @@ const formatAuditValue = (field: string, value: any): string => {
     }
   }
 
-  return String(value);
+  return auditSafeText(String(value));
 };
 
 const generateHumanSummary = (log: EnrichedLog) => {
@@ -334,42 +308,58 @@ const generateHumanSummary = (log: EnrichedLog) => {
 const Auditoria: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
-  const { funcionarios } = useOperacional();
+  const scope = auditScope(user, can('logs_auditoria', 'can_view'));
+  const canExport = !!user && (user.role === 'master' || can('logs_auditoria', 'can_execute'));
+  if (!scope.allowed) return <div className="flex items-center justify-center h-64"><p className="text-muted-foreground">Você não tem permissão ou unidade autorizada para acessar esta página.</p></div>;
+  return <AuditoriaContent key={JSON.stringify([user?.id,user?.authUserId,user?.role,scope.unit,scope.global,canExport])} unitId={scope.unit} canExport={canExport}/>;
+};
+
+const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({unitId,canExport}) => {
+  const { user } = useAuth();
+  const active = useRef(false);
+  const requestId = useRef(0);
+  const exportLock = useRef(false);
+  useEffect(()=>{active.current=true;return()=>{active.current=false;requestId.current++;};},[]);
+  const unitFilter = useMemo<Record<string,string>>(()=>unitId ? {unidade_id:unitId} : {},[unitId]);
   const [logs, setLogs] = useState<EnrichedLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [exportRequest, setExportRequest] = useState<'csv' | 'pdf' | null>(null);
+  const [exportRequest, setExportRequest] = useState<'csv' | 'pdf' | 'report_csv' | 'report_pdf' | null>(null);
   const [exportMotivo, setExportMotivo] = useState('');
   const [exportBusy, setExportBusy] = useState(false);
 
-  const registrarExportacao = async (formato: 'csv' | 'pdf', motivo: string, hash: string, protocolo: string) => {
+  const registrarExportacao = async (formato: 'csv' | 'pdf', motivo: string, hash: string, protocolo: string, report = false) => {
+    if (!active.current || !canExport || !user) throw Error('Exportação não autorizada.');
     await auditService.log({
       acao: 'exportar',
-      acaoLegivel: `Exportação de auditoria (${formato.toUpperCase()})`,
+      acaoLegivel: `Solicitação de exportação de auditoria (${formato.toUpperCase()})`,
       tipoEvento: 'download',
       modulo: 'auditoria',
       entidade: 'action_logs',
       entidadeId: protocolo,
       user,
       detalhes: {
-        motivo_exportacao: motivo,
+        motivo_exportacao: auditSafeText(motivo),
         formato,
         protocolo,
         sha256: hash,
-        quantidade_registros: logs.length,
-        total_filtrado: totalCount,
-        filtros: { de: filterDateFrom, ate: filterDateTo },
+        quantidade_registros: report ? reportData.length : logs.length,
+        total_filtrado: report ? undefined : totalCount,
+        abrangencia: report ? 'relatorio_profissionais_recorte_consultado' : 'pagina_atual',
+        filtros: report ? reportPeriod : { de: filterDateFrom, ate: filterDateTo, usuario:filterUser, perfil:filterRole, modulo:filterModulo, acao:filterAcao, status:filterStatus, unidade:filterUnidade, grupo:filterEventoGrupo, cpf_informado:!!filterCpf, busca_informada:!!search, pagina:page+1 },
       },
-    });
+    }, {requireConfirmation:true});
+    if (!active.current) throw Error('A sessão ou abrangência foi alterada.');
   };
   const [selectedLog, setSelectedLog] = useState<EnrichedLog | null>(null);
   const [isResolving, setIsResolving] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState<any[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
+  const [reportPeriod,setReportPeriod] = useState({de:'',ate:''});
 
 
   const cacheRef = useRef<Record<string, any>>({});
@@ -390,15 +380,15 @@ const Auditoria: React.FC = () => {
     try {
       if (entidade === 'paciente' || id?.startsWith('p')) {
         result.tipo = "paciente";
-        const { data } = await supabase.from('pacientes').select('nome, cpf, cns, telefone, data_nascimento, sexo, unidade_id').eq('id', id).maybeSingle();
+        const { data } = await supabase.from('pacientes').select('nome, cpf, cns, telefone, data_nascimento, sexo, unidade_id').eq('id', id).match(unitFilter).maybeSingle();
         if (data) {
           result.titulo = data.nome;
-          result.subtitulo = `CPF: ${maskCpf(data.cpf)} | CNS: ${data.cns || 'N/I'}`;
+          result.subtitulo = `CPF: ${maskCpf(data.cpf)} | CNS: ${maskAuditIdentifier(data.cns,'cns')}`;
           result.detalhes = data;
         }
       } else if (entidade === 'agendamento' || id?.startsWith('ag')) {
         result.tipo = "agendamento";
-        const { data: ag } = await supabase.from('agendamentos').select('data, hora, paciente_nome, profissional_nome, status, unidade_id').eq('id', id).maybeSingle();
+        const { data: ag } = await supabase.from('agendamentos').select('data, hora, paciente_nome, profissional_nome, status, unidade_id').eq('id', id).match(unitFilter).maybeSingle();
         if (ag) {
           result.titulo = ag.paciente_nome;
           result.subtitulo = `${ag.profissional_nome} | ${format(new Date(ag.data + 'T12:00:00'), 'dd/MM/yyyy')} às ${ag.hora}`;
@@ -406,7 +396,7 @@ const Auditoria: React.FC = () => {
         }
       } else if (entidade === 'prontuario') {
         result.tipo = "prontuario";
-        const { data: pr } = await supabase.from('prontuarios').select('data_atendimento, paciente_nome, profissional_nome').eq('id', id).maybeSingle();
+        const { data: pr } = await supabase.from('prontuarios').select('data_atendimento, paciente_nome, profissional_nome').eq('id', id).match(unitFilter).maybeSingle();
         if (pr) {
           result.titulo = pr.paciente_nome;
           result.subtitulo = `${pr.profissional_nome} | ${format(new Date(pr.data_atendimento + 'T12:00:00'), 'dd/MM/yyyy')}`;
@@ -415,7 +405,7 @@ const Auditoria: React.FC = () => {
 
       } else if (entidade === 'funcionario' || entidade === 'profissional') {
         result.tipo = "profissional";
-        const { data: f } = await supabase.from('funcionarios').select('nome, profissao, cargo, cpf').eq('id', id).maybeSingle();
+        const { data: f } = await supabase.from('funcionarios').select('nome, profissao, cargo, cpf').eq('id', id).match(unitFilter).maybeSingle();
         if (f) {
           result.titulo = f.nome;
           result.subtitulo = `${f.profissao || f.cargo || 'Funcionário'} | CPF: ${maskCpf(f.cpf)}`;
@@ -428,7 +418,7 @@ const Auditoria: React.FC = () => {
 
     cacheRef.current[cacheKey] = result;
     return result;
-  }, []);
+  }, [unitFilter]);
 
   // Helper to enrich a single log with names
   const enrichLog = useCallback(async (log: EnrichedLog) => {
@@ -456,13 +446,16 @@ const Auditoria: React.FC = () => {
 
   useEffect(() => {
     if (selectedLog && !selectedLog.detalhes_resolvidos) {
+      let current = true;
       const run = async () => {
         setIsResolving(true);
-        const enriched = await enrichLog(selectedLog);
-        setSelectedLog(enriched);
-        setIsResolving(false);
+        try {
+          const enriched = await enrichLog(selectedLog);
+          if(current && active.current) setSelectedLog(previous=>previous?.id===enriched.id?enriched:previous);
+        } finally { if(current && active.current) setIsResolving(false); }
       };
-      run();
+      void run();
+      return ()=>{current=false;};
     }
   }, [selectedLog, enrichLog]);
 
@@ -478,11 +471,11 @@ const Auditoria: React.FC = () => {
   const [filterCpf, setFilterCpf] = useState('');
   const [filterEventoGrupo, setFilterEventoGrupo] = useState('');
 
-  const isMaster = user?.role === 'master';
-  const canAccess = can('logs_auditoria', 'can_view') || isMaster;
 
   const loadLogs = useCallback(async () => {
-    setLoading(true);
+    if(!active.current) return;
+    const seq=++requestId.current;
+    setLoading(true); setLogs([]); setTotalCount(0);
     try {
       let query = supabase
         .from('action_logs' as any)
@@ -505,7 +498,7 @@ const Auditoria: React.FC = () => {
         // so we can also match logs where only paciente_id / entidade_id / agendamento_id are stored.
         let pacienteIds: string[] = [];
         try {
-          let pq = supabase.from('pacientes').select('id').limit(50);
+          let pq = supabase.from('pacientes').select('id').match(unitFilter).limit(50);
           if (digits.length >= 3) {
             pq = pq.or(`nome.ilike.%${term}%,cpf.ilike.%${digits}%,cns.ilike.%${digits}%,telefone.ilike.%${digits}%`);
           } else {
@@ -534,9 +527,9 @@ const Auditoria: React.FC = () => {
           let docIds: string[] = [];
           try {
             const [{ data: ags }, { data: prs }, { data: docs }] = await Promise.all([
-              supabase.from('agendamentos').select('id').in('paciente_id', pacienteIds).limit(2000),
-              supabase.from('prontuarios').select('id').in('paciente_id', pacienteIds).limit(2000),
-              supabase.from('documentos_gerados').select('id').in('paciente_id', pacienteIds).limit(2000),
+              supabase.from('agendamentos').select('id').match(unitFilter).in('paciente_id', pacienteIds).limit(2000),
+              supabase.from('prontuarios').select('id').match(unitFilter).in('paciente_id', pacienteIds).limit(2000),
+              supabase.from('documentos_gerados').select('id').match(unitFilter).in('paciente_id', pacienteIds).limit(2000),
             ]);
             agIds = (ags || []).map((r: any) => r.id).filter(Boolean);
             prIds = (prs || []).map((r: any) => r.id).filter(Boolean);
@@ -577,32 +570,24 @@ const Auditoria: React.FC = () => {
       }
 
       // Universal unit isolation (admin.sms sees all)
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-        query = query.eq('unidade_id', user.unidadeId);
-      }
+      if (unitId) query = query.eq('unidade_id', unitId);
 
       const { data, count, error } = await query;
       if (error) throw error;
 
-      let enrichedData = (data as unknown as EnrichedLog[]) || [];
-
-      // Batch enrichment for current page
-      const batchEnrich = async () => {
-        const promises = enrichedData.map(l => enrichLog(l));
-        const enriched = await Promise.all(promises);
-        setLogs(enriched);
-      };
-      
-      batchEnrich();
+      if(!active.current || seq!==requestId.current) return;
+      const enrichedData = ((data as unknown as EnrichedLog[]) || []).map(l=>redactAuditData(l) as EnrichedLog);
+      const enriched = await Promise.all(enrichedData.map(l=>enrichLog(l)));
+      if(!active.current || seq!==requestId.current) return;
+      setLogs(enriched);
       setTotalCount(filterCpf ? enrichedData.length : (count || 0));
     } catch (err) {
-      console.error('Error loading logs:', err);
-      toast.error('Erro ao carregar logs.');
+      if(active.current && seq===requestId.current) toast.error('Erro ao carregar logs.');
     } finally {
-      setLoading(false);
+      if(active.current && seq===requestId.current) setLoading(false);
     }
 
-  }, [page, filterDateFrom, filterDateTo, filterUser, filterRole, filterModulo, filterAcao, filterStatus, filterUnidade, filterCpf, filterEventoGrupo, search, user]);
+  }, [page, filterDateFrom, filterDateTo, filterUser, filterRole, filterModulo, filterAcao, filterStatus, filterUnidade, filterCpf, filterEventoGrupo, search, unitId, unitFilter, enrichLog]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
 
@@ -618,12 +603,13 @@ const Auditoria: React.FC = () => {
   const getCpfDisplay = (log: LogEntry) => {
     const cpf = String((log.detalhes as any)?.usuario_cpf || '');
     if (!cpf) return '-';
-    return isMaster ? formatCpf(cpf) : maskCpf(cpf);
+    return maskCpf(cpf);
   };
 
   // Professional activity report
   const generateReport = useCallback(async () => {
-    setReportLoading(true);
+    if(!active.current || !canExport) return;
+    setReportLoading(true); setReportData([]);
     try {
       let query = supabase
         .from('action_logs' as any)
@@ -632,14 +618,12 @@ const Auditoria: React.FC = () => {
 
       if (filterDateFrom) query = query.gte('created_at', `${filterDateFrom}T00:00:00`);
       if (filterDateTo) query = query.lte('created_at', `${filterDateTo}T23:59:59`);
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-        query = query.eq('unidade_id', user.unidadeId);
-      }
+      if (unitId) query = query.eq('unidade_id', unitId);
 
       const { data, error } = await query;
       if (error) throw error;
 
-      const allLogs = (data as unknown as LogEntry[]) || [];
+      const allLogs = ((data as unknown as LogEntry[]) || []).map(l=>redactAuditData(l) as LogEntry);
 
       // Group by user
       const byUser: Record<string, { nome: string; cpf: string; role: string; logs: LogEntry[] }> = {};
@@ -676,23 +660,23 @@ const Auditoria: React.FC = () => {
         };
       }).sort((a, b) => b.totalAcoes - a.totalAcoes);
 
-      setReportData(report);
+      if(!active.current) return;
+      setReportData(report); setReportPeriod({de:filterDateFrom,ate:filterDateTo});
       setShowReport(true);
     } catch (err) {
-      console.error('Error generating report:', err);
-      toast.error('Erro ao gerar relatório.');
+      if(active.current) toast.error('Erro ao gerar relatório.');
     } finally {
-      setReportLoading(false);
+      if(active.current) setReportLoading(false);
     }
-  }, [filterDateFrom, filterDateTo, user]);
+  }, [filterDateFrom, filterDateTo, unitId, canExport]);
 
-  const exportReportPDF = () => {
-    if (!reportData.length) return;
+  const exportReportPDF = async (motivo: string) => {
+    if (!reportData.length) throw Error('Nenhum dado disponível para exportar.');
     const rows = reportData.map(r => `
       <tr>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${r.nome}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${isMaster ? formatCpf(r.cpf) : maskCpf(r.cpf)}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${r.role}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${auditEscapeHtml(r.nome)}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${maskCpf(r.cpf)}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${auditEscapeHtml(r.role)}</td>
         <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;text-align:center">${r.logins}</td>
         <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;text-align:center">${r.atendimentosIniciados}</td>
         <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;text-align:center">${r.atendimentosFinalizados}</td>
@@ -703,8 +687,8 @@ const Auditoria: React.FC = () => {
       </tr>
     `).join('');
 
-    const periodo = filterDateFrom || filterDateTo
-      ? `${filterDateFrom ? format(new Date(filterDateFrom + 'T12:00:00'), 'dd/MM/yyyy') : '...'} a ${filterDateTo ? format(new Date(filterDateTo + 'T12:00:00'), 'dd/MM/yyyy') : '...'}`
+    const periodo = reportPeriod.de || reportPeriod.ate
+      ? `${reportPeriod.de ? format(new Date(reportPeriod.de + 'T12:00:00'), 'dd/MM/yyyy') : '...'} a ${reportPeriod.ate ? format(new Date(reportPeriod.ate + 'T12:00:00'), 'dd/MM/yyyy') : '...'}`
       : 'Todo o período';
 
     const body = `
@@ -728,20 +712,27 @@ const Auditoria: React.FC = () => {
         <tbody>${rows}</tbody>
       </table>`;
 
-    openPrintDocument('Relatório de Atividade por Profissional', body, { 'Período': periodo });
+    const hash = await sha256Hex(body);
+    const protocolo = 'AUD-'+format(new Date(),'yyyyMMddHHmmss')+'-'+hash.slice(0,8).toUpperCase();
+    await registrarExportacao('pdf',motivo,hash,protocolo,true);
+    await openPrintDocument('Relatório de Atividade por Profissional', body + `<p>Protocolo: ${protocolo} · SHA-256 do conteúdo: ${hash}</p><p>Recorte consultado; cobertura integral ainda não confirmada.</p>`, { 'Período': periodo });
   };
 
-  const exportReportCSV = () => {
-    if (!reportData.length) return;
+  const exportReportCSV = async (motivo:string) => {
+    if (!reportData.length) throw Error('Nenhum dado disponível para exportar.');
     const headers = ['Nome', 'CPF', 'Perfil', 'Logins', 'Atend. Iniciados', 'Atend. Finalizados', 'Pront. Visualizados', 'Pront. Editados', 'Pront. Criados', 'Primeiro Acesso', 'Último Acesso'];
     const rows = reportData.map(r => [
-      r.nome, isMaster ? formatCpf(r.cpf) : maskCpf(r.cpf), r.role,
+      r.nome, maskCpf(r.cpf), r.role,
       r.logins, r.atendimentosIniciados, r.atendimentosFinalizados,
       r.prontuariosVisualizados, r.prontuariosEditados, r.prontuariosCriados,
       r.primeiroAcesso ? format(new Date(r.primeiroAcesso), 'dd/MM/yyyy HH:mm') : '',
       r.ultimoAcesso ? format(new Date(r.ultimoAcesso), 'dd/MM/yyyy HH:mm') : '',
     ]);
-    const csv = [headers.join(';'), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';'))].join('\n');
+    const content = [headers.join(';'), ...rows.map(r=>r.map(auditCsvCell).join(';'))].join('\n');
+    const hash=await sha256Hex(content);
+    const protocolo='AUD-'+format(new Date(),'yyyyMMddHHmmss')+'-'+hash.slice(0,8).toUpperCase();
+    await registrarExportacao('csv',motivo,hash,protocolo,true);
+    const csv=content+'\n'+[['PROTOCOLO',protocolo],['SHA-256 (conteúdo acima)',hash],['ABRANGÊNCIA','Recorte consultado; cobertura integral não confirmada']].map(r=>r.map(auditCsvCell).join(';')).join('\n');
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -752,7 +743,7 @@ const Auditoria: React.FC = () => {
   };
 
   const exportCSV = async (motivo: string) => {
-    if (!logs.length) return;
+    if (!logs.length) throw Error('Nenhum dado disponível para exportar.');
     const headers = ['Data/Hora', 'Usuário', 'CPF', 'Perfil', 'Ação', 'Resumo', 'Módulo', 'Registro Afetado', 'Entidade', 'ID Registro', 'Unidade', 'Status', 'IP', 'Navegador', 'Erro'];
     const rows = logs.map(l => [
       format(new Date(l.created_at), 'dd/MM/yyyy HH:mm:ss'),
@@ -766,19 +757,15 @@ const Auditoria: React.FC = () => {
       l.status, l.ip, l.navegador || '',
       l.error_message || '',
     ]);
-    const content = [headers.join(';'), ...rows.map(r => r.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(';'))].join('\n');
+    const content = [headers.join(';'), ...rows.map(r=>r.map(auditCsvCell).join(';'))].join('\n');
     const geradoEm = new Date();
     const hash = await sha256Hex(content);
     const protocolo = `AUD-${format(geradoEm, 'yyyyMMddHHmmss')}-${hash.slice(0, 8).toUpperCase()}`;
     await registrarExportacao('csv', motivo, hash, protocolo);
     const rodape = [
-      '',
-      `"PROTOCOLO";"${protocolo}"`,
-      `"EMITIDO POR";"${(user?.nome || '').replace(/"/g, '""')} - CPF ${user?.cpf || ''}"`,
-      `"DATA/HORA";"${format(geradoEm, 'dd/MM/yyyy HH:mm:ss')}"`,
-      `"MOTIVO";"${motivo.replace(/"/g, '""')}"`,
-      `"SHA-256 (conteúdo acima do rodapé)";"${hash}"`,
-    ].join('\n');
+      ['PROTOCOLO',protocolo],['EMITIDO POR',user?.nome||''],['DATA/HORA',format(geradoEm,'dd/MM/yyyy HH:mm:ss')],
+      ['MOTIVO',auditSafeText(motivo)],['ABRANGÊNCIA','Página atual'],['SHA-256 (conteúdo acima do rodapé)',hash],
+    ].map(r=>r.map(auditCsvCell).join(';')).join('\n');
     const csv = content + '\n' + rodape;
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -792,8 +779,8 @@ const Auditoria: React.FC = () => {
 
 
   const exportPDF = async (motivo: string) => {
-    if (!logs.length) return;
-    const esc = (s: any) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
+    if (!logs.length) throw Error('Nenhum dado disponível para exportar.');
+    const esc = auditEscapeHtml;
     const tableRows = logs.map(l => `
       <tr>
         <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${format(new Date(l.created_at), 'dd/MM/yy HH:mm:ss')}</td>
@@ -827,27 +814,20 @@ const Auditoria: React.FC = () => {
     const body = `
       <div style="font-size:11px;margin:10px 0;padding:8px;border:1px solid #999">
         <div><strong>Protocolo:</strong> ${protocolo}</div>
-        <div><strong>Emitido por:</strong> ${esc(user?.nome)} — CPF ${esc(user?.cpf)} — perfil ${esc(user?.role)}</div>
+        <div><strong>Emitido por:</strong> ${esc(user?.nome)} — CPF ${esc(maskCpf(user?.cpf || ''))} — perfil ${esc(user?.role)}</div>
         <div><strong>Data/hora da emissão:</strong> ${format(geradoEm, 'dd/MM/yyyy HH:mm:ss')}</div>
-        <div><strong>Motivo:</strong> ${esc(motivo)}</div>
+        <div><strong>Motivo:</strong> ${esc(auditSafeText(motivo))}</div>
         <div><strong>Registros:</strong> ${logs.length} de ${totalCount} encontrados</div>
       </div>
       ${tableHtml}
       <div style="font-size:10px;margin-top:12px;padding:8px;border-top:1px solid #999;word-break:break-all">
         <strong>Selo de integridade (SHA-256 da tabela):</strong> ${hash}<br/>
-        Esta exportação foi registrada de forma imutável na auditoria do sistema sob o protocolo acima.
+        A solicitação de exportação foi registrada sob o protocolo acima. O hash corresponde à tabela, não comprova autoria ou imutabilidade.
       </div>`;
 
-    openPrintDocument('Relatório de Auditoria', body, {});
+    await openPrintDocument('Relatório de Auditoria', body, {});
   };
 
-  if (!canAccess) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Você não tem permissão para acessar esta página.</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">
@@ -864,44 +844,49 @@ const Auditoria: React.FC = () => {
           <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
             <Filter className="w-4 h-4 mr-1" /> Filtros
           </Button>
-          <Button variant="outline" size="sm" onClick={generateReport} disabled={reportLoading}>
+          <Button variant="outline" size="sm" onClick={generateReport} disabled={reportLoading || !canExport}>
             <BarChart3 className="w-4 h-4 mr-1" /> {reportLoading ? 'Gerando...' : 'Relatório por Profissional'}
           </Button>
-          <Button variant="outline" size="sm" onClick={() => logs.length && setExportRequest('csv')}>
+          <Button variant="outline" size="sm" disabled={!canExport || loading || !logs.length || exportBusy} onClick={() => logs.length && setExportRequest('csv')}>
             <Download className="w-4 h-4 mr-1" /> CSV
           </Button>
-          <Button variant="outline" size="sm" onClick={() => logs.length && setExportRequest('pdf')}>
+          <Button variant="outline" size="sm" disabled={!canExport || loading || !logs.length || exportBusy} onClick={() => logs.length && setExportRequest('pdf')}>
             <FileText className="w-4 h-4 mr-1" /> PDF
           </Button>
         </div>
       </div>
 
-      <Dialog open={!!exportRequest} onOpenChange={(o) => { if (!o) { setExportRequest(null); setExportMotivo(''); } }}>
+      <Dialog open={!!exportRequest} onOpenChange={(o) => { if (!o && !exportLock.current) { setExportRequest(null); setExportMotivo(''); } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Exportação probatória ({exportRequest?.toUpperCase()})</DialogTitle>
+            <DialogTitle>Exportação com registro ({exportRequest?.endsWith('csv') ? 'CSV' : 'PDF'})</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
-              Informe o motivo da exportação (ex.: "Atendimento ao Ofício Judicial nº 045/2026"). O motivo, o emissor e o selo de integridade SHA-256 ficarão registrados na própria auditoria.
+              Informe o motivo da exportação (ex.: "Atendimento ao Ofício Judicial nº 045/2026"). O motivo, o emissor e o hash SHA-256 serão enviados à auditoria. A emissão exige confirmação de gravação. A listagem exporta somente a página atual; o relatório por profissional usa o recorte consultado.
             </p>
             <textarea
               className="w-full min-h-[90px] rounded-md border border-input bg-background p-2 text-sm"
-              value={exportMotivo}
+              value={exportMotivo} maxLength={500} disabled={exportBusy}
               onChange={(e) => setExportMotivo(e.target.value)}
               placeholder="Motivo da exportação (mínimo 10 caracteres)"
             />
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => { setExportRequest(null); setExportMotivo(''); }}>Cancelar</Button>
+              <Button variant="outline" disabled={exportBusy} onClick={() => { setExportRequest(null); setExportMotivo(''); }}>Cancelar</Button>
               <Button
-                disabled={exportMotivo.trim().length < 10 || exportBusy}
+                disabled={!canExport || exportMotivo.trim().length < 10 || exportMotivo.trim().length > 500 || exportBusy || (!exportRequest?.startsWith('report_') && (loading || !logs.length))}
                 onClick={async () => {
-                  setExportBusy(true);
+                  if(!active.current || !canExport || exportLock.current || !exportRequest) return;
+                  exportLock.current=true; setExportBusy(true);
                   try {
-                    if (exportRequest === 'csv') await exportCSV(exportMotivo.trim());
-                    else await exportPDF(exportMotivo.trim());
-                    setExportRequest(null); setExportMotivo('');
-                  } finally { setExportBusy(false); }
+                    const reason=exportMotivo.trim();
+                    if (exportRequest === 'csv') await exportCSV(reason);
+                    else if (exportRequest === 'pdf') await exportPDF(reason);
+                    else if (exportRequest === 'report_csv') await exportReportCSV(reason);
+                    else await exportReportPDF(reason);
+                    if(active.current){setExportRequest(null); setExportMotivo('');}
+                  } catch { if(active.current) toast.error('Exportação não concluída. Confira a auditoria antes de repetir.'); }
+                  finally { exportLock.current=false; if(active.current)setExportBusy(false); }
                 }}
               >
                 {exportBusy ? 'Gerando...' : 'Gerar exportação'}
@@ -1078,7 +1063,7 @@ const Auditoria: React.FC = () => {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-[10px] text-muted-foreground max-w-[100px] truncate">
-                        {String(log.detalhes?.dispositivo || '-')}
+                        {formatDispositivo(log)}
                       </TableCell>
                       <TableCell>
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-full hover:bg-primary/10">
@@ -1259,11 +1244,11 @@ const Auditoria: React.FC = () => {
                                 <div className="grid grid-cols-1 gap-2">
                                   <div className="flex items-center gap-2">
                                     <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
-                                    <span className="text-xs text-muted-foreground line-through">{formatAuditValue(key, vals.from ?? vals.before ?? vals.anterior ?? vals.old)}</span>
+                                    <span className="text-xs text-muted-foreground line-through">{formatAuditValue(key, vals?.from ?? vals?.before ?? vals?.anterior ?? vals?.old)}</span>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
-                                    <span className="text-xs font-medium text-foreground">{formatAuditValue(key, vals.to ?? vals.after ?? vals.novo ?? vals.new)}</span>
+                                    <span className="text-xs font-medium text-foreground">{formatAuditValue(key, vals?.to ?? vals?.after ?? vals?.novo ?? vals?.new)}</span>
                                   </div>
                                 </div>
                               </div>
@@ -1316,11 +1301,11 @@ const Auditoria: React.FC = () => {
                                 <div className="grid grid-cols-1 gap-2">
                                   <div className="flex items-center gap-2">
                                     <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
-                                    <span className="text-xs text-muted-foreground">{String(vals.anterior || vals.old || '(vazio)')}</span>
+                                    <span className="text-xs text-muted-foreground">{formatAuditValue(campo, vals?.anterior ?? vals?.old)}</span>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
-                                    <span className="text-xs font-medium text-foreground">{String(vals.novo || vals.new || '(vazio)')}</span>
+                                    <span className="text-xs font-medium text-foreground">{formatAuditValue(campo, vals?.novo ?? vals?.new)}</span>
                                   </div>
                                 </div>
                               </div>
@@ -1351,11 +1336,11 @@ const Auditoria: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Navegador</p>
-                    <p className="text-xs truncate">{String(selectedLog.detalhes?.dispositivo || selectedLog.detalhes?.user_agent || '-')}</p>
+                    <p className="text-xs truncate">{formatDispositivo(selectedLog)}</p>
                   </div>
                   <div className="col-span-2">
                     <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Rota / Origem</p>
-                    <p className="text-[11px] font-mono text-muted-foreground truncate">{String(selectedLog.detalhes?.rota || selectedLog.detalhes?.origin || '-')}</p>
+                    <p className="text-[11px] font-mono text-muted-foreground truncate">{auditSafeText(String(selectedLog.rota || selectedLog.detalhes?.rota || selectedLog.detalhes?.origin || '-'))}</p>
                   </div>
                 </div>
               </section>
@@ -1369,21 +1354,15 @@ const Auditoria: React.FC = () => {
                   <AccordionContent className="pt-2">
                     <div className="relative">
                       <pre className="text-[10px] bg-slate-950 text-slate-300 p-4 rounded-xl overflow-auto max-h-[300px] font-mono leading-relaxed">
-                        {JSON.stringify(selectedLog.detalhes, (key, value) => {
-                          // Mask sensitive data in technical view too
-                          if (['token', 'password', 'senha', 'authorization', 'bearer'].some(s => key.toLowerCase().includes(s))) {
-                            return '********';
-                          }
-                          return value;
-                        }, 2)}
+                        {JSON.stringify(redactAuditData(selectedLog.detalhes,true),null,2)}
                       </pre>
                       <Button 
                         size="icon" 
                         variant="ghost" 
                         className="absolute top-2 right-2 text-slate-400 hover:text-white hover:bg-white/10"
-                        onClick={() => {
-                          navigator.clipboard.writeText(JSON.stringify(selectedLog.detalhes, null, 2));
-                          toast.success('JSON copiado!');
+                        onClick={async () => {
+                          try { await navigator.clipboard.writeText(JSON.stringify(redactAuditData(selectedLog.detalhes,true),null,2)); if(active.current)toast.success('JSON protegido copiado!'); }
+                          catch { if(active.current)toast.error('Não foi possível copiar o JSON.'); }
                         }}
                       >
                         <FileText className="w-4 h-4" />
@@ -1398,7 +1377,7 @@ const Auditoria: React.FC = () => {
       </Sheet>
 
       {/* Professional Activity Report Dialog */}
-      <Dialog open={showReport} onOpenChange={setShowReport}>
+      <Dialog open={showReport && !exportRequest} onOpenChange={open=>{if(!exportRequest)setShowReport(open);}}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1407,11 +1386,12 @@ const Auditoria: React.FC = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">Relatório do recorte consultado. A cobertura integral do período será tratada na revisão de relatórios.</p>
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" onClick={exportReportCSV}>
+              <Button variant="outline" size="sm" disabled={!canExport || !reportData.length || exportBusy} onClick={()=>setExportRequest('report_csv')}>
                 <Download className="w-4 h-4 mr-1" /> CSV
               </Button>
-              <Button variant="outline" size="sm" onClick={exportReportPDF}>
+              <Button variant="outline" size="sm" disabled={!canExport || !reportData.length || exportBusy} onClick={()=>setExportRequest('report_pdf')}>
                 <FileText className="w-4 h-4 mr-1" /> PDF
               </Button>
             </div>
@@ -1439,7 +1419,7 @@ const Auditoria: React.FC = () => {
                     {reportData.map((r) => (
                       <TableRow key={r.userId}>
                         <TableCell className="font-medium text-sm">{r.nome}</TableCell>
-                        <TableCell className="text-xs font-mono">{isMaster ? formatCpf(r.cpf) : maskCpf(r.cpf)}</TableCell>
+                        <TableCell className="text-xs font-mono">{maskCpf(r.cpf)}</TableCell>
                         <TableCell><Badge variant="outline" className="text-xs">{r.role}</Badge></TableCell>
                         <TableCell className="text-center">{r.logins}</TableCell>
                         <TableCell className="text-center">{r.atendimentosIniciados}</TableCell>

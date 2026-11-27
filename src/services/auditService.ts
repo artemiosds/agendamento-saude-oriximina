@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getPublicIp, getDeviceInfo } from '@/lib/clientInfo';
+import { redactAuditData, auditSafeText } from '@/lib/auditSecurity';
 
 export interface AuditParams {
   acao: string;
@@ -102,12 +103,12 @@ export const auditService = {
     return data;
   },
 
-  async log(params: AuditParams) {
+  async log(params: AuditParams, options?: { requireConfirmation?: boolean }) {
     try {
       const ip = await getPublicIp();
       const device = getDeviceInfo();
       const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : '';
-      const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+      const currentUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : '';
       
       // Calculate changes if before/after provided
       let changes = null;
@@ -154,23 +155,26 @@ export const auditService = {
         rota: params.rota || (typeof window !== 'undefined' ? window.location.pathname : ''),
         origem: params.origem || 'frontend',
         status: params.status || 'sucesso',
-        error_message: params.errorMessage,
+        error_message: params.errorMessage ? auditSafeText(params.errorMessage) : undefined,
         error_code: params.errorCode,
-        before: safeBefore,
-        after: safeAfter,
-        changes: changes,
+        before: redactAuditData(safeBefore),
+        after: redactAuditData(safeAfter),
+        changes: redactAuditData(changes),
         campos_alterados: camposAlterados,
         detalhes: {
-          ...safeDetalhes,
+          ...redactAuditData(safeDetalhes),
           usuario_cpf: params.user?.cpf,
           usuario_email: params.user?.email,
           url: currentUrl
         }
       };
 
-      await supabase.from('action_logs').insert(payload);
+      const { error } = await supabase.from('action_logs').insert(payload);
+      if (error) throw error;
     } catch (err) {
-      console.error('Audit log error:', err);
+      // Keep existing clinical operations best-effort. Only explicit strict callers fail closed.
+      console.error('Audit log write not confirmed');
+      if (options?.requireConfirmation) throw new Error('Registro de auditoria não confirmado pelo servidor.');
     }
   },
 
