@@ -94,7 +94,6 @@ const menuGroups: MenuGroup[] = [
     title: 'Gestão e Escalas',
     icon: CalendarClock,
     items: [
-      { to: '/painel/disponibilidade', search: '?aba=escala', label: 'Escala dos Profissionais', icon: Calendar, modulo: 'disponibilidade' },
       { to: '/painel/funcionarios', label: 'Funcionários', icon: UserCog, modulo: 'usuarios' },
       { to: '/painel/unidades', label: 'Unidades e Salas', icon: Building2, modulo: 'unidades_salas' },
       { to: '/painel/disponibilidade', label: 'Disponibilidade', icon: CalendarClock, modulo: 'disponibilidade' },
@@ -215,10 +214,9 @@ const PainelLayout: React.FC = () => {
   );
 
   const searchPaths = new Set(filteredGroups.flatMap(group => group.items.flatMap(item => [item.to, ...(item.alternateTo || [])])));
-  const showingSchedule = new URLSearchParams(location.search).get('aba') === 'escala';
   const matchesItem = (item: MenuItem) => {
     if (![item.to, ...(item.alternateTo || [])].some(path => matchPath({ path, end: path === '/painel' }, location.pathname))) return false;
-    return item.to !== '/painel/disponibilidade' || Boolean(item.search) === showingSchedule;
+    return true;
   };
   const currentGroup = filteredGroups.find(group => group.items.some(matchesItem));
   const activeGroup = currentGroup?.title ? currentGroup.id : undefined;
@@ -241,12 +239,13 @@ const PainelLayout: React.FC = () => {
   React.useEffect(() => setModuleSearch(''), [favoritesKey, location.key]);
 
   // Search and favorites only use the existing, permission- and license-filtered menu.
-  // Destinations include query strings to distinguish Escala from Disponibilidade.
+  // O atalho antigo da escala é tratado como favorito da mesma página de Disponibilidade.
   const visibleItems = filteredGroups.flatMap(group => group.items);
   const visibleByDestination = new Map(visibleItems.map(item => [itemDestination(item), item]));
   const suggestedFavorites = (defaultGroup?.items || []).slice(0, 3).map(itemDestination);
   // Reaproveita a estrela antiga de SIGTAP no atalho unificado, sem duplicar favoritos.
   const favoriteAliases = new Map(visibleItems.flatMap(item => (item.alternateTo || []).map(path => [path, itemDestination(item)] as const)));
+  if (visibleByDestination.has('/painel/disponibilidade')) favoriteAliases.set('/painel/disponibilidade?aba=escala', '/painel/disponibilidade');
   const favoriteDestinations = Array.from(new Set((savedFavorites[favoritesKey] ?? suggestedFavorites)
     .map(destination => favoriteAliases.get(destination) ?? destination)));
   const favorites = permLoading || licenseLoading ? [] : favoriteDestinations
@@ -259,6 +258,7 @@ const PainelLayout: React.FC = () => {
         ...group,
         items: group.items.filter(item =>
           normalizeModuleSearch(item.label).includes(searchTerm) ||
+          (item.to === '/painel/disponibilidade' && normalizeModuleSearch('Escala dos Profissionais Grade de atendimento').includes(searchTerm)) ||
           normalizeModuleSearch(group.title || '').includes(searchTerm)),
       })).filter(group => group.items.length > 0)
     : filteredGroups;
