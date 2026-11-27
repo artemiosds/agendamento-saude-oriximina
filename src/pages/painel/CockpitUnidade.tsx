@@ -562,7 +562,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
       delayed={active.filter(item => item.stage === 'consultation' && (visitMinutes(item) ?? 0) > VISIT_LIMIT).length} />}
     {rows && <div className="planta-caption">
       <span>{theater ? 'Modo telão · Sem nomes de pacientes' : 'Selecione um setor para abrir os detalhes.'}</span>
-      <span>Salas do cadastro e ocupação pela Agenda · Disposição ilustrativa.</span>
+      <span>Salas do cadastro e ocupação pela Agenda · Disposição e mobiliário ilustrativos.</span>
     </div>}
     {detail && <Details key={zone} title={detail.title} onClose={closeZone}>{detail.body}</Details>}
   </div>;
