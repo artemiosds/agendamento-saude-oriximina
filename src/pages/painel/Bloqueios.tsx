@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/hooks/queries/queryKeys';
-import { buildBlockDirectory, blockSummary, filterBlockDirectory, emptyBlockFilter, validBlockDate, type BlockFilter, type BlockStatus } from '@/lib/blockDirectory';
+import { buildBlockDirectory, blockSummary, filterBlockDirectory, emptyBlockFilter, validBlockDate, normalizeBlock, type BlockFilter, type BlockStatus } from '@/lib/blockDirectory';
 import BlockCalendar from '@/components/BlockCalendar';
+import BlockAppointmentReview from '@/components/BlockAppointmentReview';
+import {blockPreset,blockDraftDays,validBlockDraft,blockDraftOverlap} from '@/lib/blockDraft';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useOperacional } from '@/contexts/OperacionalContext';
@@ -114,14 +116,13 @@ const Bloqueios: React.FC = () => {
   const profissionaisFiltrados = useMemo(() => {
     const base=isGlobalAdmin?todosProfissionais:todosProfissionais.filter(p=>!!user?.unidadeId&&p.unidadeId===user.unidadeId);
 
-    if (!buscaProfissional.trim()) return base;
-    const termo = buscaProfissional.toLowerCase();
-    return base.filter(p =>
-      p.nome?.toLowerCase().includes(termo) ||
-      p.cargo?.toLowerCase().includes(termo) ||
-      p.profissao?.toLowerCase().includes(termo)
-    );
-  }, [todosProfissionais, buscaProfissional, isGlobalAdmin, user?.unidadeId]);
+    const terms=normalizeBlock(buscaProfissional).split(/\s+/).filter(Boolean);
+    return base.filter(p=>{
+      const unit=unidades.find(u=>u.id===p.unidadeId);
+      const label=normalizeBlock([p.nome,p.cargo,p.profissao,unit?.nome].join(' '));
+      return terms.every(term=>label.includes(term));
+    }).sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR')||a.id.localeCompare(b.id));
+  }, [todosProfissionais, buscaProfissional, isGlobalAdmin, user?.unidadeId,unidades]);
 
   const visibleBloqueios = useMemo(() => {
     if (isGlobalAdmin) return bloqueios;
@@ -175,6 +176,19 @@ const Bloqueios: React.FC = () => {
     return Globe;
   };
 
+  const draft=useMemo(()=>({dataInicio:form.dataInicio,dataFim:form.dataFim,diaInteiro:form.diaInteiro,horaInicio:form.diaInteiro?'':form.horaInicio,horaFim:form.diaInteiro?'':form.horaFim,scope:form.scope,unidadeId:form.scope==='unidade'?form.unidadeId:'',profissionalId:form.scope==='profissional'?form.profissionalId:''}),[form.dataInicio,form.dataFim,form.diaInteiro,form.horaInicio,form.horaFim,form.scope,form.unidadeId,form.profissionalId]);
+  const draftDays=blockDraftDays(draft.dataInicio,draft.dataFim);
+  const selectedProfessional=todosProfissionais.find(f=>f.id===draft.profissionalId);
+  const draftScopeAllowed= draft.scope==='global'?isGlobalAdmin:draft.scope==='unidade'?allowedUnit(draft.unidadeId):!!selectedProfessional&&(isGlobalAdmin||allowedUnit(selectedProfessional.unidadeId))&&(!selectedProfessional.unidadeId||allowedUnit(selectedProfessional.unidadeId));
+  const draftScopeLabel=draft.scope==='global'?'Todo o sistema (todas as unidades)':draft.scope==='unidade'?(unidades.find(u=>u.id===draft.unidadeId)?.nome||'Selecione uma unidade'):(selectedProfessional?.nome||'Selecione um profissional')+' · todos os seus locais de atendimento';
+  const draftValid=validBlockDraft(draft)&&draftScopeAllowed;
+  const overlaps=useMemo(()=>dialogOpen&&draftValid&&directoryReady?visibleBloqueios.flatMap(b=>{const match=blockDraftOverlap(draft,b);return match?[{block:b,match}]:[];}):[],[dialogOpen,draft,draftValid,directoryReady,visibleBloqueios]);
+  const reviewKey=JSON.stringify([scopeKey,draft]);
+  const applyPreset=(preset:'today'|'tomorrow'|'seven'|'month')=>{
+    if(writeInFlight.current)return;
+    const period=blockPreset(todayStr,preset);if(period)setForm(p=>({...p,...period}));
+  };
+
   const resetForm = () => {
     setForm({
       titulo: '', tipo: 'feriado', dataInicio: '', dataFim: '',
@@ -192,7 +206,7 @@ const Bloqueios: React.FC = () => {
       toast.error('Informe o motivo do bloqueio.');
       return;
     }
-    if (!form.dataInicio || !form.dataFim) {
+    if (!validBlockDate(form.dataInicio) || !validBlockDate(form.dataFim)) {
       toast.error('Informe as datas de início e fim.');
       return;
     }
@@ -221,6 +235,9 @@ const Bloqueios: React.FC = () => {
     const profSelecionado = todosProfissionais.find(f => f.id === form.profissionalId);
     if(form.scope==='unidade'&&!allowedUnit(form.unidadeId)){toast.error('Selecione uma unidade ativa autorizada.');return;}
     if(form.scope==='profissional'&&(!profSelecionado||(!isGlobalAdmin&&!allowedUnit(profSelecionado.unidadeId))||(!!profSelecionado.unidadeId&&!allowedUnit(profSelecionado.unidadeId)))){toast.error('Profissional ou unidade não confirmados.');return;}
+    const periodText=form.dataInicio.split('-').reverse().join('/')+' a '+form.dataFim.split('-').reverse().join('/');
+    const overlapText=directoryReady&&!mayBeLimited?'Registros sobrepostos ou potencialmente relacionados na lista visível: '+overlaps.length+'.':'Sobreposições não confirmadas na lista carregada.';
+    if(!window.confirm('Confirmar bloqueio?\n\nMotivo: '+form.titulo.trim()+'\nTipo: '+(tipoOptions.find(t=>t.value===form.tipo)?.label||form.tipo)+'\nPeríodo: '+periodText+' ('+draftDays+' dia(s))\nHorário: '+(form.diaInteiro?'Dia inteiro':form.horaInicio+'–'+form.horaFim)+'\nAbrangência: '+draftScopeLabel+'\n'+overlapText+'\n\nA conferência é informativa. Agendamentos existentes não serão cancelados ou remarcados.'))return;
     const scope=scopeKey;writeInFlight.current=true;setSaving(true);
     try {
       await addBloqueio({
@@ -362,6 +379,7 @@ const Bloqueios: React.FC = () => {
 
                   </section>
                   <section className="clinical-premium p-3 space-y-3 min-w-0"><h3 className="triage-section-title"><CalendarDays className="w-4 h-4"/>02 · Período do bloqueio</h3>
+                  <div className="flex flex-wrap gap-1.5" role="group" aria-label="Seleção rápida de período">{([['Hoje','today'],['Amanhã','tomorrow'],['Próximos 7 dias','seven'],['Até o fim do mês','month']] as const).map(([label,preset])=><Button key={preset} type="button" size="sm" variant="outline" disabled={busy} onClick={()=>applyPreset(preset)}>{label}</Button>)}</div>
                   {/* Datas */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
@@ -464,7 +482,7 @@ const Bloqueios: React.FC = () => {
                         <Input
                           value={buscaProfissional}
                           onChange={e => setBuscaProfissional(e.target.value)}
-                          placeholder="Buscar profissional..."
+                          placeholder="Buscar nome, profissão ou unidade..."
                           className="pl-9"
                         />
                       </div>
@@ -482,6 +500,8 @@ const Bloqueios: React.FC = () => {
                             <button
                               key={p.id}
                               type="button"
+                              disabled={busy}
+                              aria-pressed={form.profissionalId===p.id}
                               onClick={() => setForm(prev => ({ ...prev, profissionalId: p.id }))}
                               className={cn(
                                 'w-full text-left px-3 py-2.5 text-sm hover:bg-muted transition-colors',
@@ -489,11 +509,7 @@ const Bloqueios: React.FC = () => {
                               )}
                             >
                               <div className="font-medium">{p.nome}</div>
-                              {(p.cargo || p.profissao) && (
-                                <div className="text-xs text-muted-foreground">
-                                  {p.cargo || p.profissao}
-                                </div>
-                              )}
+                              <div className="text-xs text-muted-foreground break-words">{[p.profissao||p.cargo,unidades.find(u=>u.id===p.unidadeId)?.nome||'Lotação não informada na consulta'].filter(Boolean).join(' · ')}</div>
                             </button>
                           ))}
                         </div>
@@ -520,6 +536,23 @@ const Bloqueios: React.FC = () => {
 
                   </section>
                   <section className="clinical-premium p-3 space-y-2"><h3 className="triage-section-title"><ShieldCheck className="w-4 h-4"/>04 · Confirmação</h3><p className="text-xs text-muted-foreground">O bloqueio impede novos agendamentos conforme a abrangência e o período. Não cancela nem remarca pacientes já agendados.</p>
+                  <div className="clinical-inset border rounded-lg p-3 space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><div><p className="text-xs text-muted-foreground">Duração inclusiva</p><strong className="text-lg tabular-nums">{draftDays===null?'—':draftDays+' dia(s)'}</strong></div><div><p className="text-xs text-muted-foreground">Horário diário</p><strong className="text-sm">{form.diaInteiro?'Dia inteiro':(form.horaInicio||'—')+' – '+(form.horaFim||'—')}</strong></div></div>
+                    <p className="text-xs break-words"><strong>Abrangência:</strong> {draftScopeLabel}</p>
+                    {form.scope==='profissional'&&<p className="text-xs text-muted-foreground">O bloqueio acompanha o profissional nos locais onde atende, não apenas na lotação.</p>}
+                    {form.dataInicio&&form.dataFim&&draftDays===null&&<p role="alert" className="text-xs text-destructive">Confira as datas de início e término.</p>}
+                    {!form.diaInteiro&&form.horaInicio&&form.horaFim&&form.horaFim<=form.horaInicio&&<p role="alert" className="text-xs text-destructive">O horário final deve ser posterior ao inicial.</p>}
+                  </div>
+                  <div className="clinical-inset border rounded-lg p-3 space-y-2">
+                    <h4 className="text-sm font-semibold flex items-center gap-1.5"><AlertTriangle className="w-4 h-4 text-primary"/>Conferência de sobreposições</h4>
+                    {!draftValid?<p className="text-xs text-muted-foreground">Preencha período e abrangência válidos.</p>:!directoryReady?<p className="text-xs text-muted-foreground">Lista de bloqueios não confirmada.</p>:<>
+                      <p className="text-xs text-muted-foreground">{overlaps.filter(x=>x.match==='direct').length} sobreposição(ões) de período, horário e abrangência · {overlaps.filter(x=>x.match==='possible').length} possível(is) relação(ões) a conferir.</p>
+                      {overlaps.slice(0,5).map(({block:b,match})=><p key={b.id} className="text-xs border-t pt-1 break-words"><strong>{b.titulo}</strong> · {formatDateRange(b.dataInicio,b.dataFim)} · {b.diaInteiro?'Dia inteiro':b.horaInicio+'–'+b.horaFim} · {match==='direct'?'Sobreposição':'Possível interseção entre locais ou horário a conferir'}</p>)}
+                      {overlaps.length>5&&<p className="text-xs text-muted-foreground">Mais {overlaps.length-5} registro(s). Consulte a lista para detalhes.</p>}
+                      <p className="text-[11px] text-muted-foreground">Somente lista visível carregada; não confirma conflito em toda a rede. {mayBeLimited?'Consulta possivelmente limitada. ':''}Nenhum bloqueio anterior será alterado.</p>
+                    </>}
+                  </div>
+                  {draftScopeAllowed&&<BlockAppointmentReview key={reviewKey} draft={draft} scope={scopeKey} localUnit={isGlobalAdmin?null:user?.unidadeId||''} canRead={directoryReady&&can('agenda','can_view')}/>}
                   <Button onClick={handleSave} disabled={busy||!canCreate} className="w-full gradient-primary text-primary-foreground">
                     {saving?'Salvando…':'Confirmar Bloqueio'}
                   </Button>
