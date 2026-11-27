@@ -154,13 +154,13 @@ const DadosSection: React.FC = () => {
               <Button variant="outline" size="sm" onClick={() => exportCSV("notification_logs", "notificacoes.csv")} disabled={!canBulkExport||!!exporting}><FileDown className="mr-1 h-3.5 w-3.5" /> {exporting === "notification_logs" ? "Exportando..." : "Notificações"}</Button>
             </div>
           </div>
-          <Button variant="outline" disabled><FileDown className="mr-2 h-4 w-4" />Exportação auxiliar em revisão de segurança</Button>
-          <p className="text-xs text-muted-foreground">Temporariamente suspensa: a rotina antiga pode omitir registros e arquivos. Use a exportação nativa do Lovable Cloud. A montagem e a conferência local do pacote continuam disponíveis.</p>
+          <div className="clinical-inset rounded-xl border p-3 space-y-1"><h4 className="font-semibold text-sm">Exportador auxiliar legado desativado</h4><p className="text-xs text-muted-foreground">Não use o ZIP antigo como backup. O código do endpoint foi desativado; a implantação no servidor deve ser confirmada separadamente. Use o backup nativo e a montagem local com manifesto e inventário opcional.</p></div>
           </TabsContent>
           <TabsContent value="verificar"><RecoveryPackageBuilder mode="verify" /></TabsContent>
           <TabsContent value="recuperar">
             <div className="clinical-inset space-y-3 rounded-xl border p-3 sm:p-4">
               <h4 className="font-semibold">1. Recuperar no Lovable Cloud</h4>
+              <div className="rounded-lg border p-3 space-y-1"><strong className="text-sm">Checklist antes de qualquer restauração</strong><p className="text-xs text-muted-foreground">Preservar estado atual · confirmar ponto de recuperação · testar pacote em ambiente isolado · validar autenticação, permissões, vínculos e arquivos · obter autorização formal. Nenhuma ação nesta página restaura o banco.</p></div>
               <p className="text-sm text-muted-foreground">No editor do Lovable, siga <strong>More → Database → Manage → Backups</strong> e escolha um backup diário anterior ao problema. A restauração substitui o banco atual, inclusive os registros de autenticação; contas e senhas armazenadas acompanham o banco daquele dia. Alterações e usuários criados depois desse ponto são perdidos. Provedores externos e sessões de login exigem conferência separada.</p>
               <p className="text-sm text-muted-foreground">O backup diário <strong>não restaura arquivos do Storage</strong>. Se houver arquivos perdidos, recupere-os da cópia externa e reenvie aos mesmos buckets e caminhos em More → Storage; confira permissões, vínculos e abertura dos documentos. Caso a estrutura restaurada contenha metadados de arquivos ausentes, planeje a reposição com suporte técnico antes de sobrescrever algo.</p>
               <p className="text-xs text-muted-foreground">Antes de restaurar, preserve uma exportação do estado atual e confirme a data do backup. O link do projeto abre o editor; o Lovable não documenta um link direto estável para a aba Backups.</p>
