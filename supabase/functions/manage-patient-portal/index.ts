@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { canManagePortalPatient, portalEmail, portalAccountExclusive } from "../_shared/portal-credentials.ts";
+import { parsePortalChange, readPortalConfig, applyPortalChange, persistPortalChange } from "../_shared/portal-admin-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,6 +32,77 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const { action, pacienteId, novaSenha, motivo } = body || {};
+    if (action === "read_settings" || action === "update_settings") {
+      const global = actor.usuario === "admin.sms";
+      if (!global && !actor.unidade_id) return json({ error: "Unidade não autorizada." }, 403);
+      const read = async () => {
+        const { data, error } = await admin.from("system_config").select("configuracoes,updated_at").eq("id", "default").maybeSingle();
+        if (error || !data || typeof data.updated_at !== "string" || !Number.isFinite(Date.parse(data.updated_at))) throw Error("portal_config_unavailable");
+        return { config: data.configuracoes, version: data.updated_at };
+      };
+      if (action === "read_settings") {
+        try {
+          const current = readPortalConfig((await read()).config);
+          let blocked = [...new Set(current.blocked)];
+          if (!global) {
+            // Only disclose blocked identifiers belonging to this administrator's unit.
+            const scoped: string[] = [];
+            for (let i = 0; i < blocked.length; i += 100) {
+              const { data, error } = await admin.from("pacientes").select("id").eq("unidade_id", actor.unidade_id).in("id", blocked.slice(i, i + 100));
+              if (error || !data) throw Error("portal_scope_unavailable");
+              scoped.push(...data.map(p => p.id));
+            }
+            blocked = scoped;
+          }
+          return json({ success: true, settings: { enabled: current.enabled, permissions: current.permissions, blocked }, canEditInstitutional: global });
+        } catch { return json({ error: "Não foi possível confirmar as configurações do portal." }, 503); }
+      }
+      const change = parsePortalChange(body.change);
+      if (!change || typeof motivo !== "string" || motivo.trim().length < 3 || motivo.trim().length > 500) return json({ error: "Informe uma alteração válida e seu motivo." }, 400);
+      if (change.kind !== "block" && !global) return json({ error: "Somente o Master Global pode alterar as regras institucionais." }, 403);
+      const checkPatient = async () => {
+        if (change.kind !== "block") return;
+        const { data, error } = await admin.from("pacientes").select("id,unidade_id,auth_user_id").eq("id", change.patientId).maybeSingle();
+        if (error) throw Error("portal_scope_unavailable");
+        if (!data || !canManagePortalPatient(actor, data) || !data.auth_user_id) throw Error("portal_scope_denied");
+      };
+      try {
+        await checkPatient();
+        const result = await persistPortalChange(change, read, async (snapshot, next) => {
+          await checkPatient();
+          // Explicit monotonic version, including when two requests arrive in the same millisecond.
+          const version = new Date(Math.max(Date.now(), Date.parse(snapshot.version) + 1)).toISOString();
+          const { data, error } = await admin.from("system_config").update({ configuracoes: next, updated_at: version })
+            .eq("id", "default").eq("updated_at", snapshot.version).select("id,configuracoes,updated_at").maybeSingle();
+          if (error) throw Error("portal_write_unconfirmed");
+          if (!data) return false;
+          if (data.id !== "default" || !data.updated_at || data.updated_at === snapshot.version ||
+              applyPortalChange(data.configuracoes, change).changed) throw Error("portal_write_unconfirmed");
+          return true;
+        });
+        if (!result.changed) return json({ success: true, changed: false, value: change.value, auditConfirmed: true });
+        let auditConfirmed = false;
+        try {
+          const { error: auditError } = await admin.from("action_logs").insert({
+          user_id: actor.id, user_nome: actor.nome, role: actor.role, unidade_id: actor.unidade_id || "",
+          acao: change.kind === "block" ? (change.value ? "portal_bloquear" : "portal_desbloquear") : "portal_alterar_regra",
+          entidade: change.kind === "block" ? "paciente" : "system_config",
+          entidade_id: change.kind === "block" ? change.patientId : "default",
+          modulo: "portal_paciente", status: "sucesso",
+          detalhes: { campo: change.kind === "permission" ? change.key : change.kind, anterior: result.previous, novo: change.value, motivo_alteracao: motivo.trim() },
+          });
+          auditConfirmed = !auditError;
+        } catch { /* The setting was committed; do not repeat the write. */ }
+        if (!auditConfirmed) console.error("portal settings audit unconfirmed", { actorId: actor.id });
+        return json({ success: true, changed: true, value: change.value, auditConfirmed });
+      } catch (e) {
+        const reason = e instanceof Error ? e.message : "";
+        if (reason === "portal_scope_denied") return json({ error: "Paciente sem acesso vinculado ou fora da unidade autorizada." }, 403);
+        if (reason === "portal_config_conflict") return json({ error: "Configuração alterada simultaneamente. Atualize e confira antes de tentar novamente." }, 409);
+        return json({ error: "Não foi possível confirmar a alteração. Atualize os dados antes de tentar novamente." }, 503);
+      }
+    }
+
     if (typeof pacienteId !== "string" || !pacienteId) return json({ error: "Paciente não informado." }, 400);
     if (typeof motivo !== "string" || motivo.trim().length < 3 || motivo.trim().length > 500) return json({ error: "Informe o motivo da alteração." }, 400);
     if (!["reset_password", "create_access"].includes(action)) return json({ error: "Ação inválida." }, 400);
