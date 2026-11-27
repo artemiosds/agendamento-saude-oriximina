@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { eachDayOfInterval, endOfMonth, format, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -26,8 +26,9 @@ const shifts = [
   { id: 'plantao24', label: 'Plantão de 24h · 07:00–07:00 do dia seguinte', start: '07:00', end: '07:00' },
 ] as const;
 
-export function CadastroEscala({ date, entries, onSavedDate }: {
-  date: string; entries: RegistroEscala[]; onSavedDate: (date: string) => void;
+export type EscalaEditRequest={recordId:string;date:string;token:number};
+export function CadastroEscala({ date, entries, onSavedDate, editRequest }: {
+  date: string; entries: RegistroEscala[]; onSavedDate: (date: string) => void; editRequest?:EscalaEditRequest;
 }) {
   const { user } = useAuth();
   const { disponibilidades }=useOperacional();
@@ -40,6 +41,7 @@ export function CadastroEscala({ date, entries, onSavedDate }: {
   const placesId = useId();
   const placeHintId = useId();
   const saving = useRef(false);
+  const handledEdit=useRef<number|undefined>(undefined);
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<{ text: string; error?: boolean }>();
   const [busy, setBusy] = useState(false);
@@ -86,6 +88,20 @@ export function CadastroEscala({ date, entries, onSavedDate }: {
   const selectionLabel = mode === 'semanal'
     ? weeklyDays + (weeklyDays === 1 ? ' dia por semana' : ' dias por semana')
     : dates.length + (dates.length === 1 ? ' data' : ' datas');
+  useEffect(()=>{
+    if(!editRequest||handledEdit.current===editRequest.token||saving.current)return;
+    handledEdit.current=editRequest.token;
+    if(!canEdit)return;
+    const record=entries.find(r=>r.id===editRequest.recordId);
+    const original=record&&entries.find(r=>r.id===(record.origem||record.id)&&r.semanal&&r.profissional===record.profissional);
+    const staffMember=record&&staff.find(p=>p.id===record.profissional);
+    if(!record||!original||!staffMember||editRequest.date<original.data||(original.fim_recorrencia&&editRequest.date>original.fim_recorrencia)||weekdayEscala(editRequest.date)!==weekdayEscala(original.data))return;
+    if(open&&(dates.length||personName||placeName||startTime||endTime)&&!window.confirm('Abrir esta ocorrência no formulário? Os campos ainda não salvos serão substituídos.'))return;
+    setOpen(true);setMode('excecao');setPersonName(staffMember.label);setSource(original.id);
+    setPlaceName(record.local||'');setSector(record.setor||'');setStartTime(record.inicio);setEndTime(record.fim);setShift(record.duracao===1440?'plantao24':'');
+    setDates([toDate(editRequest.date)]);setMonth(toDate(editRequest.date));setRangeStart('');setRangeEnd('');setStatus(undefined);
+    requestAnimationFrame(()=>document.getElementById(formId)?.scrollIntoView({behavior:'smooth',block:'start'}));
+  },[editRequest,entries,staff,canEdit,open,dates.length,personName,placeName,startTime,endTime,formId,busy]);
   if (!user || !['master', 'gestao', 'coordenador'].includes(user.role) || (!isGlobalAdmin && !userUnidadeId) || (!canCreate&&!canEdit)) return null;
 
   const isDisabled = (d: Date) => mode === 'excecao' && (!chosenSource || dateKeyEscala(d) < chosenSource.data || (!!chosenSource.fim_recorrencia&&dateKeyEscala(d)>chosenSource.fim_recorrencia) || d.getDay() !== weekdayEscala(chosenSource.data));
