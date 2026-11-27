@@ -1,9 +1,21 @@
 import {describe,it,expect} from 'vitest';
-import {parseAuditOrigin,auditOriginLocation,shouldCaptureAuditOrigin,auditRouteLabel,plausibleIp} from './auditOrigin';
+import {parseAuditOrigin,auditOriginLocation,shouldCaptureAuditOrigin,auditRouteLabel,plausibleIp,auditOriginEndpoint,allowedAuditOrigin,AUDIT_ORIGIN_PREVIEW,AUDIT_ORIGIN_PRODUCTION} from './auditOrigin';
 import {buildAuditOrigin,matchInstitutionalNetwork} from '../../api/audit-origin';
 const now=new Date('2026-11-27T15:00:00Z');
 const headers={'x-vercel-forwarded-for':'203.0.113.10','x-vercel-ip-city':'Oriximin%C3%A1','x-vercel-ip-country-region':'PA','x-vercel-ip-country':'BR'};
 describe('origem de auditoria',()=>{
+ it('usa somente a prévia cadastrada para consultar a API de produção',()=>{
+   expect(auditOriginEndpoint(AUDIT_ORIGIN_PREVIEW)).toBe(AUDIT_ORIGIN_PRODUCTION+'/api/audit-origin');
+   expect(auditOriginEndpoint(AUDIT_ORIGIN_PRODUCTION)).toBe('/api/audit-origin');
+   expect(auditOriginEndpoint('https://outra.lovable.app')).toBe('/api/audit-origin');
+   expect(allowedAuditOrigin(AUDIT_ORIGIN_PREVIEW)).toBe(true);
+   expect(allowedAuditOrigin('https://outra.lovable.app')).toBe(false);
+ });
+ it('usa IP alternativo da infraestrutura somente quando o principal está ausente',()=>{
+   expect(buildAuditOrigin({'x-real-ip':'203.0.113.10'},true)?.ip).toBe('203.0.113.10');
+   expect(buildAuditOrigin({'x-real-ip':'203.0.113.10'},false)).toBeNull();
+   expect(buildAuditOrigin({'x-real-ip':'203.0.113.10','x-vercel-forwarded-for':'invalid'},true)).toBeNull();
+ });
  it('decodifica cidade e preserva a captura da infraestrutura',()=>{
    const result=buildAuditOrigin(headers,true,undefined,now);
    expect(result?.city).toBe('Oriximiná');

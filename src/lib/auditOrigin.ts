@@ -3,6 +3,10 @@ export type AuditOrigin = {
   city?:string; region?:string; country?:string;
   network:'matched'|'unrecognized'|'not_configured'; networkLabel?:string;
 };
+export const AUDIT_ORIGIN_PRODUCTION='https://agendamento-saude-sms-oriximina.site';
+export const AUDIT_ORIGIN_PREVIEW='https://id-preview--b31da743-ec3e-4875-9ddb-7d95bdbcdbae.lovable.app';
+export const auditOriginEndpoint=(origin:string)=>origin===AUDIT_ORIGIN_PREVIEW?AUDIT_ORIGIN_PRODUCTION+'/api/audit-origin':'/api/audit-origin';
+export const allowedAuditOrigin=(origin:string)=>origin===AUDIT_ORIGIN_PRODUCTION||origin===AUDIT_ORIGIN_PREVIEW;
 export const ORIGIN_CACHE_MS=5*60_000;
 export const ORIGIN_RETRY_MS=15_000;
 const STAFF_ROLES=['master','coordenador','recepcao','profissional','gestao','tecnico','enfermagem'];

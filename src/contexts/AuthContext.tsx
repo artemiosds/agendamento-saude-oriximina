@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { User, UserRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { getPublicIp, getDeviceInfo } from '@/lib/clientInfo';
+import { shouldCaptureAuditOrigin,type AuditOrigin } from '@/lib/auditOrigin';
 
 interface AuthContextType {
   user: User | null;
@@ -108,7 +109,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logAuthAction = useCallback(async (acao: string, userData?: User | null, extra?: Record<string, unknown>) => {
     try {
-      const ip = await getPublicIp();
+      let originContext:AuditOrigin|null=null;
+      const ip = await getPublicIp(userData?.id&&shouldCaptureAuditOrigin(userData.role)?context=>{originContext=context;}:undefined);
       const dispositivo = getDeviceInfo();
       await supabase.from('action_logs').insert({
         user_id: userData?.id || '',
@@ -118,7 +120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         acao,
         entidade: 'auth',
         entidade_id: '',
-        detalhes: { ...extra, usuario_cpf: userData?.cpf || '', dispositivo },
+        detalhes: { ...extra, usuario_cpf: userData?.cpf || '', dispositivo, contexto_rede: originContext || undefined },
         modulo: 'auth',
         status: acao.includes('falha') ? 'erro' : 'sucesso',
         erro: '',

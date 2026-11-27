@@ -1,4 +1,4 @@
-import {ORIGIN_CACHE_MS,ORIGIN_RETRY_MS,parseAuditOrigin,plausibleIp,type AuditOrigin} from './auditOrigin';
+import {ORIGIN_CACHE_MS,ORIGIN_RETRY_MS,parseAuditOrigin,plausibleIp,auditOriginEndpoint,type AuditOrigin} from './auditOrigin';
 
 // Separate cached staff context from ordinary IP lookup. No location request for
 // callers that only use the existing getPublicIp() contract.
@@ -9,7 +9,7 @@ const now=()=>Date.now();
 async function readSnapshot(withOrigin:boolean):Promise<Snapshot>{
   if(withOrigin&&typeof window!=='undefined'){
     try{
-      const res=await fetch('/api/audit-origin',{signal:AbortSignal.timeout(650),cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer'});
+      const res=await fetch(auditOriginEndpoint(window.location.origin),{signal:AbortSignal.timeout(1100),cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer'});
       if(res.ok&&(res.headers.get('content-type')||'').includes('application/json')){
         const context=parseAuditOrigin(await res.json());
         if(context?.source==='vercel_geoip')return {ip:context.ip,context,expires:now()+ORIGIN_CACHE_MS};
@@ -17,7 +17,7 @@ async function readSnapshot(withOrigin:boolean):Promise<Snapshot>{
     }catch{/* Hosting without the endpoint keeps the existing IP-only flow. */}
   }
   try{
-    const res=await fetch('https://api.ipify.org?format=json',{signal:AbortSignal.timeout(withOrigin?750:1500),cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer'});
+    const res=await fetch('https://api.ipify.org?format=json',{signal:AbortSignal.timeout(withOrigin?650:1500),cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer'});
     if(!res.ok)throw Error('IP indisponível');
     const data=await res.json();
     if(!plausibleIp(data.ip))throw Error('IP inválido');

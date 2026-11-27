@@ -1,6 +1,6 @@
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import {isIP} from 'node:net';
-import {originText,type AuditOrigin} from '../src/lib/auditOrigin';
+import {originText,allowedAuditOrigin,type AuditOrigin} from '../src/lib/auditOrigin';
 
 type Headers=IncomingMessage['headers'];
 const one=(headers:Headers,key:string)=>typeof headers[key]==='string'?headers[key] as string:'';
@@ -24,8 +24,11 @@ export function matchInstitutionalNetwork(ip:string,raw?:string):Pick<AuditOrigi
 export function buildAuditOrigin(headers:Headers,enabled:boolean,networks?:string,now=new Date()):AuditOrigin|null{
   if(!enabled)return null;
   // Vercel-provided request IP, not a query parameter or a caller-provided body.
-  const ip=one(headers,'x-vercel-forwarded-for').trim();
-  if(!isIP(ip))return null; // Reject ambiguous forwarding chains.
+  const forwarded=one(headers,'x-vercel-forwarded-for').trim();
+  // x-real-ip is documented by Vercel as the request IP. Only use it when
+  // the primary header is absent; never recover from a malformed chain.
+  const ip=forwarded||one(headers,'x-real-ip').trim();
+  if(!isIP(ip))return null;
   const country=one(headers,'x-vercel-ip-country').trim().toUpperCase();
   const region=one(headers,'x-vercel-ip-country-region').trim();
   return {version:1,ip,source:'vercel_geoip',capturedAt:now.toISOString(),
@@ -39,6 +42,12 @@ export default function handler(req:IncomingMessage,res:ServerResponse){
   res.setHeader('Vercel-CDN-Cache-Control','no-store');
   res.setHeader('Content-Type','application/json; charset=utf-8');
   res.setHeader('X-Content-Type-Options','nosniff');
+  const originHeader=one(req.headers,'origin');
+  res.setHeader('Vary','Origin');
+  if(originHeader){
+    if(!allowedAuditOrigin(originHeader)){res.statusCode=403;res.end(JSON.stringify({error:'origin_not_allowed'}));return;}
+    res.setHeader('Access-Control-Allow-Origin',originHeader);
+  }
   if(req.method!=='GET'){res.setHeader('Allow','GET');res.statusCode=405;res.end(JSON.stringify({error:'method'}));return;}
   // Do not disclose configuration to other origins or accept arbitrary IP queries.
   const origin=buildAuditOrigin(req.headers,process.env.VERCEL==='1',process.env.AUDIT_INSTITUTIONAL_NETWORKS);
