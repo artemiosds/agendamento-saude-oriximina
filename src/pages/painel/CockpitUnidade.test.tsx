@@ -326,3 +326,20 @@ it('recolhe e expande os alertas sem perder contagem, detalhes ou ciência', () 
   expect(screen.getByRole('button', { name: 'Ciente de Sala teste' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: 'Ver detalhes de Sala teste' })).toBeInTheDocument();
 });
+
+it('diferencia os ambientes ilustrados sem alterar vínculo, ocupação ou abertura de detalhes', () => {
+  fixture.salas.push({ id: 'fisio', nome: 'Ginásio de Fisioterapia', ativo: true, unidadeId: 'local' },
+    { id: 'fono', nome: 'Fonoaudiologia 2', ativo: true, unidadeId: 'local' },
+    { id: 'odonto', nome: 'Odontologia', ativo: true, unidadeId: 'local' });
+  setup('em_atendimento', { rows: [{ ...a, sala_id: 'fisio', status: 'em_atendimento' }] });
+  const { container } = render(<CockpitUnidade />);
+  const physio = container.querySelector('[data-map-zone="fisio"]') as SVGElement;
+  expect(physio.querySelector('[data-room-layout="physio"]')).toBeInTheDocument();
+  expect(physio).toHaveAttribute('data-state', 'occupied');
+  expect(physio.querySelectorAll('[data-papel="paciente"]')).toHaveLength(1);
+  expect(container.querySelector('[data-map-zone="fono"] [data-room-layout="speech"]')).toBeInTheDocument();
+  expect(container.querySelector('[data-map-zone="odonto"] [data-room-layout="dental"]')).toBeInTheDocument();
+  expect(container.querySelector('[data-map-zone="fono"]')).toHaveAttribute('data-state', 'free');
+  fireEvent.click(physio);
+  expect(within(screen.getByRole('dialog')).getByText('Paciente teste')).toBeInTheDocument();
+});
