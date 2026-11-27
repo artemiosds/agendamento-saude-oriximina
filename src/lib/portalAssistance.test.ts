@@ -39,7 +39,7 @@ describe('inclusão digital orientada no portal', () => {
     for (const route of ['unknown','disabled','blocked','review','contact','pending','login'] as const) expect(canContinueAssistedCreate(route,checks)).toBe(false);
   });
   it('gera somente instruções públicas sem dados do paciente nem credenciais no endereço', () => {
-    expect(PORTAL_PUBLIC_URL).toBe('https://agendamento-saude-oriximina.lovable.app/portal');
+    expect(PORTAL_PUBLIC_URL).toBe('https://agendamento-saude-sms-oriximina.site/portal');
     expect(PORTAL_PUBLIC_URL.startsWith('https://')).toBe(true);
     expect(PORTAL_PUBLIC_URL.endsWith('/portal')).toBe(true);
     expect(/[?#]/.test(PORTAL_PUBLIC_URL)).toBe(false);

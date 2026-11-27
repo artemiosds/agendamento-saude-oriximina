@@ -1,6 +1,6 @@
-// Public portal address already used by the first-access flow. Never include a
+// Public institutional portal address, aligned with patientPortalLink.ts. Never include a
 // patient identifier, token, query parameter or administrative preview in the guide.
-export const PORTAL_PUBLIC_URL = 'https://agendamento-saude-oriximina.lovable.app/portal';
+export const PORTAL_PUBLIC_URL = 'https://agendamento-saude-sms-oriximina.site/portal';
 export const PORTAL_GUIDE_STEPS = [
   { title: 'Abra o portal', text: 'Use a câmera do celular para ler o QR Code ou digite o endereço indicado.' },
   { title: 'Se for seu primeiro acesso', text: 'Selecione Primeiro acesso, informe seu CPF e data de nascimento e confira o e-mail cadastrado, inclusive a caixa de spam.' },
