@@ -24,7 +24,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
-import { SlotInfoBadge } from '@/components/SlotInfoBadge';
+import AvailabilityCapacityReview from '@/components/AvailabilityCapacityReview';
+import { draftWindowIssues } from '@/lib/availabilityReview';
 import type { TurnoDefinition } from '@/components/config/ConfigFluxoAtendimento';
 import { UnitScopeNavigator } from '@/components/operacional/UnitScopeNavigator';
 import { saveAvailabilityGroup, type AvailabilitySlot } from '@/services/availabilityGroupService';
@@ -107,7 +108,7 @@ const Disponibilidade: React.FC = () => {
       return next;
     }, { replace: true });
   };
-  const { disponibilidades, funcionarios, unidades, salas, refreshFuncionarios, refreshDisponibilidades } = useOperacional();
+  const { disponibilidades, funcionarios, unidades, salas, bloqueios, refreshFuncionarios, refreshDisponibilidades } = useOperacional();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editGroupIds, setEditGroupIds] = useState<string[]>([]);
   const [renewal,setRenewal]=useState<{key:string;profissionalId:string;unidadeId:string;end:string;signature:string}|null>(null);
@@ -122,6 +123,8 @@ const Disponibilidade: React.FC = () => {
   const [gradeLayout,setGradeLayout]=useState<'cards'|'list'>('cards');
   const [managePeriod,setManagePeriod]=useState<'todos'|GradePeriod>('todos');
   const [manageProfId, setManageProfId] = useState<string | null>(null);
+  const [reviewGroupKey,setReviewGroupKey]=useState<string|null>(null);
+  useEffect(()=>{setReviewGroupKey(null);},[manageProfId,managePeriod]);
 
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
   const { unidadesVisiveis, isGlobalAdmin, userUnidadeId } = useUnidadeFilter();
@@ -144,6 +147,11 @@ const Disponibilidade: React.FC = () => {
   const directoryState=useSyncExternalStore(subscribeDirectory,getDirectoryState,getDirectoryState);
   const directoryReady=directoryState==='ready'&&!permissionsLoading&&!!user?.id&&can('disponibilidade','can_view')&&(isGlobalAdmin||!!userUnidadeId);
   const directoryMayBeLimited=funcionarios.length>=1000||disponibilidades.length>=1000||unidades.length>=1000;
+  const getBlockState=useCallback(()=>queryClient.getQueryState([...queryKeys.bloqueios.all,'operacional',directoryScope])?.status==='success',[queryClient,directoryScope]);
+  const blocksReady=useSyncExternalStore(subscribeDirectory,getBlockState,getBlockState)&&bloqueios.length<1000;
+  const canReviewAgenda=directoryReady&&can('agenda','can_view');
+  const canReviewQuotas=directoryReady&&can('usuarios','can_view');
+  const canReviewBlocks=directoryReady&&can('feriados_bloqueios','can_view');
   useEffect(()=>{setGradeFilter(emptyGradeFilter);setManageProfId(null);setManagePeriod('todos');},[scopeKey,unitId]);
 
   // Mode per professional
@@ -589,6 +597,7 @@ const Disponibilidade: React.FC = () => {
     setCopySource(null);setCopyTargets([]);toast.success('Configuração copiada no formulário. Confira antes de salvar.');
   };
   const draftSummary=nominalWeek(modo,daySchedules,configDias,form.vagasPorDia);
+  const draftIssues=draftWindowIssues(draftSummary.days);
   const draftOverlap=dialogOpen&&form.profissionalId&&form.unidadeId&&form.dataInicio&&form.dataFim&&!hasDateError?checkOverlap():null;
 
   const filteredSalas = salas.filter(s => s.unidadeId === form.unidadeId && s.ativo);
@@ -624,7 +633,12 @@ const Disponibilidade: React.FC = () => {
   const selectMetric=(metric:GradeMetric)=>setGradeFilter({...emptyGradeFilter,metric});
   const periodBadge=(period:GradePeriod)=><Badge variant="outline" className={cn('text-[10px]',period==='vigente'&&'text-emerald-700 dark:text-emerald-300',period==='invalido'&&'text-destructive')}>{periodLabels[period]}</Badge>;
   const retryDirectory=()=>void Promise.allSettled([queryClient.invalidateQueries({queryKey:queryKeys.unidades.all}),refreshFuncionarios(),refreshDisponibilidades()]);
-  const openManage=(id:string)=>{setManagePeriod('todos');setManageProfId(id);};
+  const openManage=(id:string)=>{setReviewGroupKey(null);setManagePeriod('todos');setManageProfId(id);};
+  const reviewControl=(key:string,first:(typeof disponibilidades)[number])=>{
+    if(!directoryReady||gradePeriod(first.dataInicio,first.dataFim,todayStr)==='invalido'||(!isGlobalAdmin&&first.unidadeId!==userUnidadeId))return null;
+    const expanded=reviewGroupKey===key&&!dialogOpen;
+    return <div className="border-t pt-2 space-y-2"><Button type="button" size="sm" variant="outline" aria-expanded={expanded} className="clinical-record-action gap-1.5" onClick={()=>setReviewGroupKey(expanded?null:key)}><CalendarCheck className="w-4 h-4"/>{expanded?'Fechar conferência':'Conferir capacidade e bloqueios'}</Button>{expanded&&<AvailabilityCapacityReview key={scopeKey+key} profissionalId={first.profissionalId} unidadeId={first.unidadeId} inicio={first.dataInicio} fim={first.dataFim} today={todayStr} scope={scopeKey} grades={disponibilidades.filter(d=>isGlobalAdmin||d.unidadeId===userUnidadeId)} blocks={bloqueios} directoryComplete={!directoryMayBeLimited} blocksReady={blocksReady} canReadAgenda={canReviewAgenda} canReadQuotas={canReviewQuotas} canReadBlocks={canReviewBlocks}/>}</div>;
+  };
 
   const openNewForProf = (profId: string) => {
     if(!configLoaded||!may('can_create')||gradeWriteInFlight.current)return;
@@ -796,10 +810,10 @@ const Disponibilidade: React.FC = () => {
             </section>
             <section className="clinical-premium p-3 space-y-2 text-sm" role="status">
               <h3 className="triage-section-title"><ShieldCheck className="w-4 h-4"/>Cotas externas</h3>
-              <Label htmlFor="external-quota-reservation">Reserva para Cotas Externas</Label>
+              <Label htmlFor="external-quota-reservation">Total cadastrado das cotas ativas que intersectam o período</Label>
               <Input id="external-quota-reservation" className="mt-1 max-w-32" readOnly value={quotaLoading ? 'Carregando' : quotaReservation ?? 'Indisponível'} />
               <p className="mt-2 text-muted-foreground">{modo === 'por_hora' ? `Recepção limitada a ${form.vagasPorDia} vagas por dia` : 'Recepção limitada às vagas de cada turno abaixo'} · Cotas externas autorizadas no período: {quotaReservation ?? 'não confirmadas'} · Master sem limite de capacidade para encaixes.</p>
-              <p className="mt-1 text-xs text-muted-foreground">A reserva é a soma das cotas ativas vinculadas a este profissional e unidade. Pode variar por data e turno; ajuste as cotas em Funcionários → Profissionais Externos.</p>
+              <p className="mt-1 text-xs text-muted-foreground">O total inclui cotas de data específica e limites de vários dias; não é reserva diária nem saldo de vagas. Consulte a conferência por data em Gerenciar. Ajuste as cotas em Funcionários → Profissionais Externos.</p>
             </section>
 
             <section className="clinical-premium p-3 space-y-2">
@@ -1077,6 +1091,7 @@ const Disponibilidade: React.FC = () => {
               {draftSummary.days.map(d=><div key={d.day} className="flex flex-wrap gap-x-2 gap-y-1 border-t pt-1.5 text-xs"><strong className="w-20">{diasSemanaFull[d.day]}</strong><span className="flex-1 min-w-[8rem] break-words">{d.blocks.map(b=>b.nome+' · '+b.inicio+'–'+b.fim+' · '+b.vagas+' vagas').join(' / ')}</span></div>)}
               <p className="text-xs text-muted-foreground">Capacidade nominal de uma semana configurada, sem descontar bloqueios, feriados, cotas ou agendamentos. Não representa vagas disponíveis.</p>
               {draftOverlap&&<p role="alert" className="text-xs text-destructive">{draftOverlap}</p>}
+              {draftIssues.length>0&&<div role="status" className="text-xs text-amber-800 dark:text-amber-300 space-y-1"><strong>Conferência informativa dos horários</strong>{draftIssues.map((issue,i)=><p key={i}>{issue.replace(/^Dia (\d+):/,(_,day)=>diasSemanaFull[Number(day)]+':')}</p>)}<p>As validações e regras de salvamento existentes continuam valendo.</p></div>}
               {renewal&&form.dataInicio&&form.dataFim&&!renewalValid&&<p role="alert" className="text-xs text-destructive">Novo período deve começar após o término da grade de origem, a partir de hoje, e terminar na mesma data ou depois.</p>}
               {!activeDaysCount&&<p className="text-xs text-muted-foreground">Configure pelo menos um dia com horários.</p>}
             </section>
@@ -1122,7 +1137,7 @@ const Disponibilidade: React.FC = () => {
                     const period=gradePeriod(first.dataInicio,first.dataFim,todayStr);
                     const sala = first.salaId && !isTurno ? salas.find(s => s.id === first.salaId) : null;
 
-                    if(gradeMode(records)==='misto')return <Card key={key}><CardContent className="p-3 space-y-2"><div className="flex flex-wrap gap-2 items-center"><Badge variant="outline">Modalidades misturadas</Badge>{periodBadge(period)}</div><p className="text-xs text-muted-foreground">{first.dataInicio} a {first.dataFim} · {unidade?.nome||'Unidade não localizada'}. Consulta somente leitura para evitar interpretação incorreta.</p>{records.map(r=><div key={r.id} className="text-xs border-t pt-1">{r.vagasPorHora===0?'Por turno':'Por hora'} · {r.diasSemana.map(d=>diasSemanaLabels[d]||'Dia inválido').join(', ')} · {r.horaInicio}–{r.horaFim} · {r.vagasPorDia} vagas/dia {r.vagasPorHora!==0&&`· ${r.vagasPorHora} vagas/hora`}</div>)}</CardContent></Card>;
+                    if(gradeMode(records)==='misto')return <Card key={key}><CardContent className="p-3 space-y-2"><div className="flex flex-wrap gap-2 items-center"><Badge variant="outline">Modalidades misturadas</Badge>{periodBadge(period)}</div><p className="text-xs text-muted-foreground">{first.dataInicio} a {first.dataFim} · {unidade?.nome||'Unidade não localizada'}. Consulta somente leitura para evitar interpretação incorreta.</p>{reviewControl(key,first)}{records.map(r=><div key={r.id} className="text-xs border-t pt-1">{r.vagasPorHora===0?'Por turno':'Por hora'} · {r.diasSemana.map(d=>diasSemanaLabels[d]||'Dia inválido').join(', ')} · {r.horaInicio}–{r.horaFim} · {r.vagasPorDia} vagas/dia {r.vagasPorHora!==0&&`· ${r.vagasPorHora} vagas/hora`}</div>)}</CardContent></Card>;
                     if (isTurno) {
                       const turnoBlocks: { bloco: BlocoConfig; dayNum: number }[] = [];
                       records.forEach(r => {
@@ -1190,9 +1205,7 @@ const Disponibilidade: React.FC = () => {
                               </tbody>
                             </table>
                           </div>
-                          {todayStr >= first.dataInicio && todayStr <= first.dataFim && (
-                            <div className="px-4 py-2 border-t border-border"><SlotInfoBadge profissionalId={first.profissionalId} unidadeId={first.unidadeId} date={todayStr} /></div>
-                          )}
+                          <div className="px-4 py-2">{reviewControl(key,first)}</div>
                         </div>
                       );
                     }
@@ -1243,9 +1256,7 @@ const Disponibilidade: React.FC = () => {
                             <span>•</span>
                             <span>{first.duracaoConsulta || 30}min</span>
                           </div>
-                          {todayStr >= first.dataInicio && todayStr <= first.dataFim && (
-                            <div className="mt-2"><SlotInfoBadge profissionalId={first.profissionalId} unidadeId={first.unidadeId} date={todayStr} /></div>
-                          )}
+                          <div className="mt-2">{reviewControl(key,first)}</div>
                         </CardContent>
                       </Card>
                     );
