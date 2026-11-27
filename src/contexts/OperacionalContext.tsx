@@ -1018,7 +1018,7 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         .eq("id", id)
         .select("id");
       if (error) throw error;
-      if (!data || data.length !== 1 || String(data[0].id) !== id) {
+      if (!data || data.length !== 1 || String((data[0] as any).id) !== id) {
         throw new Error("Remoção não confirmada. Confira as permissões ou atualize a lista.");
       }
       await queryClient.invalidateQueries({ queryKey: queryKeys.bloqueios.all });
