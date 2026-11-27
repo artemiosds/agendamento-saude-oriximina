@@ -5,11 +5,16 @@ import { JSZip } from "jszip";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Cache-Control": "private, no-store",
 };
+
+// Temporary fail-closed gate. Rebuild and validate the auxiliary archive in phase 6 before enabling.
+const AUXILIARY_EXPORT_PAUSED = true;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  if(req.method !== "POST") return new Response(JSON.stringify({error:"Method not allowed"}),{status:405,headers:{...corsHeaders,Allow:"POST"}});
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
@@ -27,14 +32,17 @@ serve(async (req) => {
     if (userError || !authUser) return new Response(JSON.stringify({ error: "Invalid token", details: userError }), { status: 401, headers: corsHeaders });
     const user = authUser;
 
-    const { data: func } = await supabaseAdmin
+    const { data: func, error: staffError } = await supabaseAdmin
       .from("funcionarios")
-      .select("role")
+      .select("role,usuario,ativo")
       .eq("auth_user_id", user.id)
       .maybeSingle();
 
-    if (func?.role !== "master") {
-      return new Response(JSON.stringify({ error: "Forbidden: Master only" }), { status: 403, headers: corsHeaders });
+    if (staffError || func?.role !== "master" || func.usuario !== "admin.sms" || func.ativo !== true) {
+      return new Response(JSON.stringify({ error: "Forbidden: active global master only" }), { status: 403, headers: corsHeaders });
+    }
+    if (AUXILIARY_EXPORT_PAUSED) {
+      return new Response(JSON.stringify({error:"Exportação auxiliar suspensa para revisão de segurança. Utilize a exportação nativa do Lovable Cloud."}),{status:503,headers:{...corsHeaders,"Content-Type":"application/json"}});
     }
 
     const zip = new JSZip();

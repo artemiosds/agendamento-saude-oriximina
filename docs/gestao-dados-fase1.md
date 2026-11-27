@@ -1,0 +1,7 @@
+# Fase 1 — Gestão Operacional e Dados
+- Escopo: repositório; nenhum acesso ou alteração do banco Lovable Cloud.
+- Exportações CSV: Master Global ativo (identidade canônica existente admin.sms + role master), validação da sessão e funcionário antes da leitura e da emissão; RLS existente não alterada. A interface não substitui autorização do Data API. Conferir políticas em ambiente autorizado antes da homologação.
+- Projeções administrativas explícitas, sem campos clínicos livres, payloads de notificações ou objetos de configuração; ainda contêm dados pessoais. Motivo obrigatório, auditoria confirmada antes da emissão, proteção contra fórmulas CSV. Limites conservadores: 10.000 registros, lotes de 250, 16 MiB aproximados de dados serializados. Contagem inicial/final e IDs únicos não equivalem a snapshot transacional.
+- ZIP auxiliar legado: suspenso na interface e na versão fonte da função system-backup, pois o manifesto anterior podia divergir do conteúdo e as listagens de Storage eram truncadas. Não habilitar até revisão integral na fase 6. O servidor fonte exige Master Global ativo antes do gate. A função existente no Lovable Cloud NÃO foi implantada nem validada nesta fase; a proteção do endpoint em produção depende de implantação autorizada. Não testar com pacientes reais.
+- Exportação nativa, montagem/verificação local de pacote e orientações de recuperação preservadas. Nenhuma restauração realizada.
+- Indicadores: zero somente quando confirmado; consulta parcial não é disponibilidade geral. Menu e rotas inalterados.

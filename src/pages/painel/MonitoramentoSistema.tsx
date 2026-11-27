@@ -52,14 +52,16 @@ const TABLES = [
   { name: 'system_config', date: null },
 ] as const;
 
+// A missing metric must not be coerced from null, empty string or boolean to zero.
+const measuredNumber=z.union([z.number(),z.string().regex(/^\d+$/)]).transform(Number).pipe(z.number().finite().int().nonnegative());
 const usageSchema = z.object({
   checked_at: z.string(),
-  database_bytes: z.coerce.number().nonnegative(),
+  database_bytes: measuredNumber,
   buckets: z.array(z.object({
     name: z.string(),
-    file_count: z.coerce.number().nonnegative(),
-    used_bytes: z.coerce.number().nonnegative(),
-    unknown_size_count: z.coerce.number().nonnegative(),
+    file_count: measuredNumber,
+    used_bytes: measuredNumber,
+    unknown_size_count: measuredNumber,
   })),
 });
 
@@ -94,8 +96,8 @@ const MonitoramentoSistema: React.FC = () => {
   const [dbStats, setDbStats] = useState<TableStats[]>([]);
   const [storageStats, setStorageStats] = useState<StorageStats[]>([]);
   const [alerts, setAlerts] = useState<Array<{ id: string; title: string; description: string | null; severity: string }>>([]);
-  const [alertsError, setAlertsError] = useState<string | null>(null);
-  const [storageError, setStorageError] = useState<string | null>(null);
+  const [alertsError, setAlertsError] = useState<string | null>("Alertas ainda não consultados.");
+  const [storageError, setStorageError] = useState<string | null>("Armazenamento ainda não consultado.");
   const [systemStatus, setSystemStatus] = useState<'verificado' | 'parcial' | 'erro'>('parcial');
   const [databaseBytes, setDatabaseBytes] = useState<number | null>(null);
   const [lastCheck, setLastCheck] = useState<Date | null>(null);
@@ -163,7 +165,7 @@ const MonitoramentoSistema: React.FC = () => {
       ]);
       setDbStats(results);
       setAlerts(alertResult?.error ? [] : alertResult?.data ?? []);
-      setAlertsError(isMaster ? alertResult?.error?.message ?? null : 'Alertas restritos ao perfil Master.');
+      setAlertsError(isMaster ? alertResult?.error?.message ?? (!alertResult?.data ? 'Consulta de alertas não confirmada.' : null) : 'Alertas restritos ao perfil Master.');
       setStorageError(usageResult.error);
       setStorageStats(usageResult.data?.buckets.map(bucket => ({
         bucket: bucket.name,
@@ -174,10 +176,13 @@ const MonitoramentoSistema: React.FC = () => {
       setDatabaseBytes(usageResult.data?.database_bytes ?? null);
       setLastCheck(new Date());
       const successful = results.filter(result => result.count !== null).length;
-      setSystemStatus(successful === 0 ? 'erro' : results.some(result => result.error) || usageResult.error || (isMaster && alertResult?.error) ? 'parcial' : 'verificado');
+      const incomplete=results.some((result,index)=>!!result.error||result.count===null||(TABLES[index].date!==null&&(result.recent7d===null||result.recent30d===null)));
+      setSystemStatus(successful === 0 ? "erro" : incomplete || !!usageResult.error || !usageResult.data || usageResult.data.buckets.some(bucket=>bucket.unknown_size_count>0) || !isMaster || !!alertResult?.error || !alertResult?.data ? "parcial" : "verificado");
     } catch (err) {
       console.error('Error fetching system stats:', err);
       toast.error('Erro ao atualizar dados de monitoramento');
+      setDbStats([]);setStorageStats([]);setAlerts([]);setDatabaseBytes(null);setLastCheck(null);
+      setStorageError('Consulta indisponível.');setAlertsError('Consulta indisponível.');
       setSystemStatus('erro');
     } finally {
       setRefreshDurationMs(Math.round(performance.now() - started));
@@ -193,7 +198,7 @@ const MonitoramentoSistema: React.FC = () => {
   const storageBytes = storageStats.reduce((sum, bucket) => sum + bucket.usedBytes, 0);
   const unknownSizeCount = storageStats.reduce((sum, bucket) => sum + bucket.unknownSizeCount, 0);
   const checkedTables = dbStats.filter(table => table.count !== null).length;
-  const hasStorageUsage = !storageError;
+  const hasStorageUsage = !!lastCheck && databaseBytes!==null && !storageError;
   const quotaBytes = quotaGB === null ? null : quotaGB * 1024 ** 3;
 
   const saveQuota = () => {
@@ -307,7 +312,7 @@ const MonitoramentoSistema: React.FC = () => {
               <Server className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Hospedagem</p>
+              <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Tamanho do banco</p>
               <p className="text-lg font-bold">{databaseBytes !== null ? formatBytes(databaseBytes) : 'Não medido'}</p>
               <p className="text-xs text-muted-foreground">Banco de dados</p>
             </div>
@@ -360,7 +365,7 @@ const MonitoramentoSistema: React.FC = () => {
                 ) : alerts.length === 0 ? (
                   <div className="py-12 text-center text-muted-foreground">
                     <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3 opacity-20" />
-                    <p>Nenhum alerta crítico encontrado.</p>
+                    <p>Nenhum alerta ativo retornado pela consulta.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
