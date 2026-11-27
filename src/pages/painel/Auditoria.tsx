@@ -24,6 +24,8 @@ import { auditService } from '@/services/auditService';
 import { getAuditActorLabel } from '@/lib/auditActor';
 import AuditOverview from '@/components/audit/AuditOverview';
 import AuditRelatedTimeline from '@/components/audit/AuditRelatedTimeline';
+import { auditMunicipalDate } from '@/lib/auditOverview';
+import { auditReportDays, readAuditReport, REPORT_LIMIT, REPORT_MAX_DAYS, REPORT_METRICS, reportMetricCells, type AuditReport, type ReportEvent } from '@/lib/auditActivityReport';
 import {auditComparisons,type AuditValue} from '@/lib/auditInvestigation';
 import { auditDateBounds, auditModuleDistribution, AUDIT_FAILURE_STATUSES, AUDIT_CLASSIFIED_STATUSES } from '@/lib/auditOverview';
 import { auditScope, auditDeviceLabel, auditCsvCell, auditEscapeHtml, auditSafeText, isAuditSecret, redactAuditData, maskAuditIdentifier } from '@/lib/auditSecurity';
@@ -357,7 +359,8 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
   const active = useRef(false);
   const requestId = useRef(0);
   const exportLock = useRef(false);
-  useEffect(()=>{active.current=true;return()=>{active.current=false;requestId.current++;};},[]);
+  const reportController=useRef<AbortController|null>(null);
+  useEffect(()=>{active.current=true;return()=>{active.current=false;requestId.current++;reportController.current?.abort();};},[]);
   const unitFilter = useMemo<Record<string,string>>(()=>unitId ? {unidade_id:unitId} : {},[unitId]);
   const [directory,setDirectory] = useState<{key:string;rows:EnrichedLog[];count:number;warning:string;error:string}|null>(null);
   const [revision,setRevision] = useState(0);
@@ -383,11 +386,11 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
         formato,
         protocolo,
         sha256: hash,
-        quantidade_registros: report ? reportData.length : logs.length,
-        total_filtrado: report ? undefined : totalCount,
-        abrangencia: report ? 'relatorio_profissionais_recorte_consultado' : 'pagina_atual',
+        quantidade_registros: report ? reportResult?.report.totals.totalAcoes : logs.length,
+        total_filtrado: report ? reportResult?.report.totals.totalAcoes : totalCount,
+        abrangencia: report ? 'relatorio_profissionais_unidades_periodo' : 'pagina_atual',
         aviso_consulta: report ? undefined : searchWarning || undefined,
-        filtros: report ? reportPeriod : { de: filterDateFrom, ate: filterDateTo, usuario:filterUser, perfil:filterRole, modulo:filterModulo, acao:filterAcao, status:filterStatus, unidade:filterUnidade, grupo:filterEventoGrupo, cpf_informado:!!filterCpf, busca_informada:!!search, pagina:page+1 },
+        filtros: report ? reportResult?.period : { de: filterDateFrom, ate: filterDateTo, usuario:filterUser, perfil:filterRole, modulo:filterModulo, acao:filterAcao, status:filterStatus, unidade:filterUnidade, grupo:filterEventoGrupo, cpf_informado:!!filterCpf, busca_informada:!!search, pagina:page+1 },
       },
     }, {requireConfirmation:true});
     if (!active.current) throw Error('A sessão ou abrangência foi alterada.');
@@ -396,9 +399,19 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
   const [detailState,setDetailState] = useState<{id:string;error:string;full?:boolean}|null>(null);
   const [showAllChanges,setShowAllChanges]=useState(false);
   const [showReport, setShowReport] = useState(false);
-  const [reportData, setReportData] = useState<any[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
-  const [reportPeriod,setReportPeriod] = useState({de:'',ate:''});
+  const [reportDraft,setReportDraft]=useState(()=>({de:auditMunicipalDate(new Date()),ate:auditMunicipalDate(new Date()),unidade:unitId||''}));
+  const [reportResult,setReportResult]=useState<{report:AuditReport;period:{de:string;ate:string;unidade:string;cutoff:string}}|null>(null);
+  const [reportError,setReportError]=useState('');
+  const [reportProgress,setReportProgress]=useState({n:0,total:0});
+  const [reportTab,setReportTab]=useState<'actors'|'units'>('actors');
+  const [reportPage,setReportPage]=useState(0);
+  const reportRows=reportResult?.report[reportTab]||[];
+  const reportPageSize=25;
+  const reportPageCount=Math.max(1,Math.ceil(reportRows.length/reportPageSize));
+  const reportExportable=!!reportResult?.report.totals.totalAcoes && !reportLoading;
+  const reportPdfAllowed=reportExportable && (reportResult!.report.actors.length+reportResult!.report.units.length<=500);
+  const resetReport=(draft:typeof reportDraft)=>{setReportDraft(draft);setReportResult(null);setReportError('');setReportPage(0);};
 
 
   const cacheRef = useRef(new AuditReadCache<ResolvedEntity>());
@@ -606,140 +619,97 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
   };
 
   // Professional activity report
-  const generateReport = useCallback(async () => {
-    if(!active.current || !canExport) return;
-    setReportLoading(true); setReportData([]);
-    try {
-      let query = supabase
-        .from('action_logs' as any)
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      const bounds=auditDateBounds(filterDateFrom,filterDateTo);
-      if(bounds.start)query=query.gte('created_at',bounds.start);
-      if(bounds.end)query=query.lt('created_at',bounds.end);
-      if (unitId) query = query.eq('unidade_id', unitId);
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      const allLogs = ((data as unknown as LogEntry[]) || []).map(l=>redactAuditData(l) as LogEntry);
-
-      // Group by user
-      const byUser: Record<string, { nome: string; cpf: string; role: string; logs: LogEntry[] }> = {};
-      allLogs.forEach(l => {
-        if (!l.user_id || l.user_id === '' || l.role === 'sistema') return;
-        if (!byUser[l.user_id]) {
-          byUser[l.user_id] = {
-            nome: l.user_nome,
-            cpf: String((l.detalhes as any)?.usuario_cpf || ''),
-            role: l.role,
-            logs: [],
-          };
-        }
-        byUser[l.user_id].logs.push(l);
-      });
-
-      const report = Object.entries(byUser).map(([userId, data]) => {
-        const logins = data.logs.filter(l => ['login', 'login_sucesso'].includes(l.acao)).length;
-        const atendimentosIniciados = data.logs.filter(l => l.acao === 'atendimento_iniciado' || l.acao === 'iniciar_atendimento').length;
-        const atendimentosFinalizados = data.logs.filter(l => l.acao === 'atendimento_finalizado' || l.acao === 'finalizar_atendimento').length;
-        const prontuariosVisualizados = data.logs.filter(l => l.acao === 'prontuario_visualizado').length;
-        const prontuariosEditados = data.logs.filter(l => l.acao === 'prontuario_editado').length;
-        const prontuariosCriados = data.logs.filter(l => l.acao === 'prontuario_criado').length;
-
-        const sorted = [...data.logs].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-        const primeiroAcesso = sorted[0]?.created_at || '';
-        const ultimoAcesso = sorted[sorted.length - 1]?.created_at || '';
-
-        return {
-          userId, nome: data.nome, cpf: data.cpf, role: data.role,
-          logins, atendimentosIniciados, atendimentosFinalizados,
-          prontuariosVisualizados, prontuariosEditados, prontuariosCriados,
-          primeiroAcesso, ultimoAcesso, totalAcoes: data.logs.length,
-        };
-      }).sort((a, b) => b.totalAcoes - a.totalAcoes);
-
-      if(!active.current) return;
-      setReportData(report); setReportPeriod({de:filterDateFrom,ate:filterDateTo});
-      setShowReport(true);
-    } catch (err) {
-      if(active.current) toast.error('Erro ao gerar relatório.');
-    } finally {
-      if(active.current) setReportLoading(false);
-    }
-  }, [filterDateFrom, filterDateTo, unitId, canExport]);
-
-  const exportReportPDF = async (motivo: string) => {
-    if (!reportData.length) throw Error('Nenhum dado disponível para exportar.');
-    const rows = reportData.map(r => `
-      <tr>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${auditEscapeHtml(r.nome)}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${maskCpf(r.cpf)}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${auditEscapeHtml(r.role)}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;text-align:center">${r.logins}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;text-align:center">${r.atendimentosIniciados}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;text-align:center">${r.atendimentosFinalizados}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;text-align:center">${r.prontuariosVisualizados}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;text-align:center">${r.prontuariosEditados}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;font-size:10px">${r.primeiroAcesso ? format(new Date(r.primeiroAcesso), 'dd/MM HH:mm') : '-'}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;font-size:10px">${r.ultimoAcesso ? format(new Date(r.ultimoAcesso), 'dd/MM HH:mm') : '-'}</td>
-      </tr>
-    `).join('');
-
-    const periodo = reportPeriod.de || reportPeriod.ate
-      ? `${reportPeriod.de ? format(new Date(reportPeriod.de + 'T12:00:00'), 'dd/MM/yyyy') : '...'} a ${reportPeriod.ate ? format(new Date(reportPeriod.ate + 'T12:00:00'), 'dd/MM/yyyy') : '...'}`
-      : 'Todo o período';
-
-    const body = `
-      <div class="info-grid">
-        <div><span class="info-label">Período:</span><br/><span class="info-value">${periodo}</span></div>
-        <div><span class="info-label">Total de profissionais:</span><br/><span class="info-value">${reportData.length}</span></div>
-      </div>
-      <table style="width:100%;border-collapse:collapse;margin-top:16px">
-        <thead><tr style="background:#f0f0f0">
-          <th style="padding:6px 8px;border:1px solid #ddd;font-size:10px;text-align:left">Nome</th>
-          <th style="padding:6px 8px;border:1px solid #ddd;font-size:10px;text-align:left">CPF</th>
-          <th style="padding:6px 8px;border:1px solid #ddd;font-size:10px;text-align:left">Perfil</th>
-          <th style="padding:6px 8px;border:1px solid #ddd;font-size:10px;text-align:center">Logins</th>
-          <th style="padding:6px 8px;border:1px solid #ddd;font-size:10px;text-align:center">Atend. Inic.</th>
-          <th style="padding:6px 8px;border:1px solid #ddd;font-size:10px;text-align:center">Atend. Fin.</th>
-          <th style="padding:6px 8px;border:1px solid #ddd;font-size:10px;text-align:center">Pront. Vis.</th>
-          <th style="padding:6px 8px;border:1px solid #ddd;font-size:10px;text-align:center">Pront. Edit.</th>
-          <th style="padding:6px 8px;border:1px solid #ddd;font-size:10px;text-align:center">1º Acesso</th>
-          <th style="padding:6px 8px;border:1px solid #ddd;font-size:10px;text-align:center">Último</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
-
-    const hash = await sha256Hex(body);
-    const protocolo = 'AUD-'+format(new Date(),'yyyyMMddHHmmss')+'-'+hash.slice(0,8).toUpperCase();
-    await registrarExportacao('pdf',motivo,hash,protocolo,true);
-    await openPrintDocument('Relatório de Atividade por Profissional', body + `<p>Protocolo: ${protocolo} · SHA-256 do conteúdo: ${hash}</p><p>Recorte consultado; cobertura integral ainda não confirmada.</p>`, { 'Período': periodo });
+  const openReport = () => {
+    if(!canExport||!active.current||exportLock.current)return;
+    const today=auditMunicipalDate(new Date());
+    const days=auditReportDays(filterDateFrom,filterDateTo);
+    resetReport({de:days>=1&&days<=REPORT_MAX_DAYS?filterDateFrom:today,ate:days>=1&&days<=REPORT_MAX_DAYS?filterDateTo:today,unidade:unitId||filterUnidade||''});
+    setReportTab('actors');setShowReport(true);
   };
 
-  const exportReportCSV = async (motivo:string) => {
-    if (!reportData.length) throw Error('Nenhum dado disponível para exportar.');
-    const headers = ['Nome', 'CPF', 'Perfil', 'Logins', 'Atend. Iniciados', 'Atend. Finalizados', 'Pront. Visualizados', 'Pront. Editados', 'Pront. Criados', 'Primeiro Acesso', 'Último Acesso'];
-    const rows = reportData.map(r => [
-      r.nome, maskCpf(r.cpf), r.role,
-      r.logins, r.atendimentosIniciados, r.atendimentosFinalizados,
-      r.prontuariosVisualizados, r.prontuariosEditados, r.prontuariosCriados,
-      r.primeiroAcesso ? format(new Date(r.primeiroAcesso), 'dd/MM/yyyy HH:mm') : '',
-      r.ultimoAcesso ? format(new Date(r.ultimoAcesso), 'dd/MM/yyyy HH:mm') : '',
-    ]);
-    const content = [headers.join(';'), ...rows.map(r=>r.map(auditCsvCell).join(';'))].join('\n');
+  const generateReport = async () => {
+    if(!active.current || !canExport || reportController.current || exportLock.current) return;
+    const draft={...reportDraft,unidade:unitId||reportDraft.unidade.trim()};
+    const days=auditReportDays(draft.de,draft.ate);
+    if(!Number.isFinite(days)||days<1||days>REPORT_MAX_DAYS){setReportError('Informe um período válido de até '+REPORT_MAX_DAYS+' dias.');return;}
+    if(draft.unidade.length>120){setReportError('Identificador de unidade inválido.');return;}
+    const controller=new AbortController();
+    reportController.current=controller;
+    const valid=()=>active.current&&!controller.signal.aborted&&reportController.current===controller;
+    const cutoff=new Date().toISOString();
+    const bounds=auditDateBounds(draft.de,draft.ate);
+    setReportLoading(true);setReportResult(null);setReportError('');setReportProgress({n:0,total:0});setReportPage(0);
+    try {
+      // Only administrative metadata. No patient, before/after, or free-form log payload.
+      const scopeQuery=(q:any)=>{
+        q=q.gte('created_at',bounds.start).lt('created_at',bounds.end).lte('created_at',cutoff);
+        if(draft.unidade)q=q.eq('unidade_id',draft.unidade);
+        return q;
+      };
+      const count=async()=>{
+        const {count,error}=await scopeQuery(supabase.from('action_logs').select('id',{head:true,count:'exact'})).abortSignal(controller.signal);
+        if(error||count===null)throw Error('Contagem do relatório não confirmada.');
+        return count;
+      };
+      const read=async(from:number,to:number)=>{
+        const {data,error}=await scopeQuery(supabase.from('action_logs').select('id,created_at,user_id,user_nome,role,unidade_id,unidade_nome,acao,status,usuario_cpf:detalhes->>usuario_cpf'))
+          .order('created_at',{ascending:false}).order('id',{ascending:false}).range(from,to).abortSignal(controller.signal);
+        if(error||!data)throw Error('Não foi possível consultar uma página do relatório.');
+        return data as ReportEvent[];
+      };
+      const report=await readAuditReport(count,read,controller.signal,(n,total)=>{if(valid())setReportProgress({n,total});});
+      if(valid())setReportResult({report,period:{...draft,cutoff}});
+    }catch(err){if(valid())setReportError(err instanceof Error?err.message:'Não foi possível confirmar o relatório.');}
+    finally{if(reportController.current===controller){reportController.current=null;if(active.current)setReportLoading(false);}}
+  };
+
+  const closeReport=(open:boolean)=>{
+    if(exportRequest||exportLock.current)return;
+    if(!open){
+      reportController.current?.abort();reportController.current=null;setReportLoading(false);setReportResult(null);setReportError('');setReportPage(0);
+    }
+    setShowReport(open);
+  };
+
+  const reportTables=()=>{
+    if(!reportResult||!reportExportable)throw Error('Nenhum relatório confirmado para exportar.');
+    const {report}=reportResult;
+    const headers=REPORT_METRICS.map(([label])=>label);
+    return [
+      {title:'Por responsável identificado',headers:['Nome registrado','CPF mascarado','Perfil registrado','ID do responsável',...headers],rows:report.actors.map(r=>[r.nome,r.cpf,r.role,r.userId,...reportMetricCells(r)])},
+      {title:'Por unidade registrada',headers:['Unidade','ID da unidade','Responsáveis distintos','Eventos sem responsável individual',...headers],rows:report.units.map(r=>[r.nome,r.unitId,String(r.actors),String(r.semResponsavel),...reportMetricCells(r)])}
+    ];
+  };
+  const reportMetadata=()=>{
+    if(!reportResult)throw Error('Relatório não confirmado.');
+    const {period,report}=reportResult;
+    return [['Período',period.de+' a '+period.ate],['Abrangência',period.unidade||'Rede municipal autorizada'],['Corte da consulta (UTC)',period.cutoff],['Eventos consultados',String(report.totals.totalAcoes)],['Eventos sem responsável individual',String(report.semResponsavel)],['Cobertura','Contagem inicial e final coincidentes; sem snapshot transacional.'],['Metodologia','Contagem de eventos registrados, não de atendimentos únicos, frequência ou produtividade. Horários dos logins em Oriximiná.']];
+  };
+  const exportReportPDF=async(motivo:string)=>{
+    if(!reportPdfAllowed)throw Error('Use CSV para relatórios com mais de 500 grupos.');
+    const esc=auditEscapeHtml;
+    // Split the wide report into compact sections for the institutional A4 portrait template.
+    const pdfTables=reportTables().flatMap(t=>{
+      const identity=[0, t.title==='Por responsável identificado'?3:1];
+      const sections=[{title:'Identificação e totais',indices:[0,1,2,3,4]},{title:'Autenticação e erros',indices:[...identity,5,6,7,8,14,15]},{title:'Atendimento e prontuário',indices:[...identity,9,10,11,12,13]}];
+      return sections.map(section=>({title:t.title+' — '+section.title,headers:section.indices.map(i=>t.headers[i]),rows:t.rows.map(row=>section.indices.map(i=>row[i]))}));
+    });
+    const body=reportMetadata().map(([k,v])=>'<p><strong>'+esc(k)+':</strong> '+esc(v)+'</p>').join('')+
+      pdfTables.map(t=>'<h3>'+esc(t.title)+'</h3><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>'+t.headers.map(h=>'<th style="border:1px solid #ddd;padding:3px">'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+t.rows.map(r=>'<tr>'+r.map(v=>'<td style="border:1px solid #ddd;padding:3px;overflow-wrap:anywhere">'+esc(v)+'</td>').join('')+'</tr>').join('')+'</tbody></table>').join('');
+    const hash=await sha256Hex(body);
+    const protocolo='AUD-'+format(new Date(),'yyyyMMddHHmmss')+'-'+hash.slice(0,8).toUpperCase();
+    await registrarExportacao('pdf',motivo,hash,protocolo,true);
+    await openPrintDocument('Relatório de Atividade por Profissional e Unidade',body+'<p>Protocolo: '+protocolo+' · SHA-256 do conteúdo: '+hash+'</p>',{});
+  };
+  const exportReportCSV=async(motivo:string)=>{
+    const line=(r:string[])=>r.map(auditCsvCell).join(';');
+    const content=[...reportMetadata().map(line),...reportTables().flatMap(t=>['',line([t.title]),line(t.headers),...t.rows.map(line)])].join('\n');
     const hash=await sha256Hex(content);
     const protocolo='AUD-'+format(new Date(),'yyyyMMddHHmmss')+'-'+hash.slice(0,8).toUpperCase();
     await registrarExportacao('csv',motivo,hash,protocolo,true);
-    const csv=content+'\n'+[['PROTOCOLO',protocolo],['SHA-256 (conteúdo acima)',hash],['ABRANGÊNCIA','Recorte consultado; cobertura integral não confirmada']].map(r=>r.map(auditCsvCell).join(';')).join('\n');
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `relatorio_profissionais_${format(new Date(), 'yyyyMMdd')}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const csv=content+'\n'+line(['PROTOCOLO',protocolo])+'\n'+line(['SHA-256 (conteúdo acima)',hash]);
+    const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
+    const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='relatorio_atividade_'+format(new Date(),'yyyyMMdd')+'.csv';a.click();URL.revokeObjectURL(url);
   };
 
   const exportCSV = async (motivo: string) => {
@@ -852,7 +822,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
           <Button variant="outline" size="sm" aria-expanded={showFilters} onClick={() => setShowFilters(!showFilters)}>
             <Filter className="w-4 h-4 mr-1" /> Filtros {activeFilters.length>0?"("+activeFilters.length+")":""}
           </Button>
-          <Button variant="outline" size="sm" onClick={generateReport} disabled={reportLoading || !canExport}>
+          <Button variant="outline" size="sm" onClick={openReport} disabled={reportLoading || !canExport || exportBusy}>
             <BarChart3 className="w-4 h-4 mr-1" /> {reportLoading ? 'Gerando...' : 'Relatório por Profissional'}
           </Button>
           <Button variant="outline" size="sm" disabled={!canExport || loading || !logs.length || exportBusy} onClick={() => logs.length && setExportRequest('csv')}>
@@ -874,7 +844,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
           </DialogHeader>
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
-              Informe o motivo da exportação (ex.: "Atendimento ao Ofício Judicial nº 045/2026"). O motivo, o emissor e o hash SHA-256 serão enviados à auditoria. A emissão exige confirmação de gravação. A listagem exporta somente a página atual; o relatório por profissional usa o recorte consultado.
+              Informe o motivo da exportação (ex.: "Atendimento ao Ofício Judicial nº 045/2026"). O motivo, o emissor e o hash SHA-256 serão enviados à auditoria. A emissão exige confirmação de gravação. A listagem exporta somente a página atual; o relatório por profissional e unidade usa o período confirmado da consulta.
             </p>
             <textarea
               className="w-full min-h-[90px] rounded-md border border-input bg-background p-2 text-sm"
@@ -1348,67 +1318,47 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
       </Sheet>
 
       {/* Professional Activity Report Dialog */}
-      <Dialog open={showReport && !exportRequest} onOpenChange={open=>{if(!exportRequest)setShowReport(open);}}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5" />
-              Relatório de Atividade por Profissional
-            </DialogTitle>
-          </DialogHeader>
+      <Dialog open={showReport && !exportRequest} onOpenChange={closeReport}>
+        <DialogContent className="max-w-6xl max-h-[90dvh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><BarChart3 className="w-5 h-5"/>Relatório de Atividade por Profissional e Unidade</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <p className="text-xs text-muted-foreground">Relatório do recorte consultado. A cobertura integral do período será tratada na revisão de relatórios.</p>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" disabled={!canExport || !reportData.length || exportBusy} onClick={()=>setExportRequest('report_csv')}>
-                <Download className="w-4 h-4 mr-1" /> CSV
-              </Button>
-              <Button variant="outline" size="sm" disabled={!canExport || !reportData.length || exportBusy} onClick={()=>setExportRequest('report_pdf')}>
-                <FileText className="w-4 h-4 mr-1" /> PDF
-              </Button>
-            </div>
-
-            {reportData.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">Nenhum dado encontrado para o período.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>CPF</TableHead>
-                      <TableHead>Perfil</TableHead>
-                      <TableHead className="text-center">Logins</TableHead>
-                      <TableHead className="text-center">Atend. Inic.</TableHead>
-                      <TableHead className="text-center">Atend. Fin.</TableHead>
-                      <TableHead className="text-center">Pront. Vis.</TableHead>
-                      <TableHead className="text-center">Pront. Edit.</TableHead>
-                      <TableHead className="text-center">1º Acesso</TableHead>
-                      <TableHead className="text-center">Último</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {reportData.map((r) => (
-                      <TableRow key={r.userId}>
-                        <TableCell className="font-medium text-sm">{r.nome}</TableCell>
-                        <TableCell className="text-xs font-mono">{maskCpf(r.cpf)}</TableCell>
-                        <TableCell><Badge variant="outline" className="text-xs">{r.role}</Badge></TableCell>
-                        <TableCell className="text-center">{r.logins}</TableCell>
-                        <TableCell className="text-center">{r.atendimentosIniciados}</TableCell>
-                        <TableCell className="text-center">{r.atendimentosFinalizados}</TableCell>
-                        <TableCell className="text-center">{r.prontuariosVisualizados}</TableCell>
-                        <TableCell className="text-center">{r.prontuariosEditados}</TableCell>
-                        <TableCell className="text-center text-xs">
-                          {r.primeiroAcesso ? format(new Date(r.primeiroAcesso), 'dd/MM HH:mm') : '-'}
-                        </TableCell>
-                        <TableCell className="text-center text-xs">
-                          {r.ultimoAcesso ? format(new Date(r.ultimoAcesso), 'dd/MM HH:mm') : '-'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+            <div className="rounded-xl border border-border p-3 space-y-3">
+              <p className="text-xs text-muted-foreground">Consulta independente da listagem: apenas período e unidade. Limite de {REPORT_MAX_DAYS} dias e {REPORT_LIMIT.toLocaleString('pt-BR')} eventos. Não há consultas automáticas.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div><label htmlFor="report-from" className="text-xs font-medium">Data inicial</label><Input id="report-from" type="date" value={reportDraft.de} disabled={reportLoading||exportBusy} onChange={e=>resetReport({...reportDraft,de:e.target.value})}/></div>
+                <div><label htmlFor="report-to" className="text-xs font-medium">Data final</label><Input id="report-to" type="date" value={reportDraft.ate} disabled={reportLoading||exportBusy} onChange={e=>resetReport({...reportDraft,ate:e.target.value})}/></div>
+                <div><label htmlFor="report-unit" className="text-xs font-medium">Unidade</label><Input id="report-unit" value={reportDraft.unidade} maxLength={120} disabled={!!unitId||reportLoading||exportBusy} placeholder="ID exato ou vazio (rede)" onChange={e=>resetReport({...reportDraft,unidade:e.target.value})}/></div>
               </div>
-            )}
+              <div className="flex flex-wrap gap-2 items-center"><Button disabled={!canExport||reportLoading||exportBusy} onClick={()=>void generateReport()}>{reportLoading?'Consultando…':'Gerar relatório'}</Button>
+                {reportLoading&&<Button variant="outline" onClick={()=>{reportController.current?.abort();reportController.current=null;setReportLoading(false);setReportError('Consulta cancelada.');}}>Cancelar consulta</Button>}
+                {reportLoading&&<span role="status" className="text-xs text-muted-foreground">{reportProgress.total?reportProgress.n.toLocaleString('pt-BR')+' de '+reportProgress.total.toLocaleString('pt-BR')+' eventos':'Conferindo contagem…'}</span>}
+              </div>
+            </div>
+            {reportError&&<p role="alert" className="rounded-lg border border-destructive/40 p-3 text-sm text-destructive">{reportError}</p>}
+            {reportResult&&<>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{[['Eventos',reportResult.report.totals.totalAcoes],['Responsáveis',reportResult.report.actors.length],['Unidades registradas',reportResult.report.units.length],['Sem responsável individual',reportResult.report.semResponsavel],['Logins confirmados',reportResult.report.totals.logins],['Tentativas registradas',reportResult.report.totals.tentativas],['Falhas de login',reportResult.report.totals.falhasLogin],['Erros / falhas',reportResult.report.totals.erros]].map(([label,value])=><div key={label} className="rounded-lg border p-3"><p className="text-xl font-semibold tabular-nums">{Number(value).toLocaleString('pt-BR')}</p><p className="text-xs text-muted-foreground">{label}</p></div>)}</div>
+              <p className="text-xs text-muted-foreground">Contagens inicial e final coincidentes no recorte autorizado, sem garantia de snapshot transacional. Nomes e perfis correspondem ao último evento registrado no período. Os números são eventos, não atendimentos únicos, frequência ou produtividade. Horário de Oriximiná.</p>
+              <div className="flex flex-wrap justify-between gap-2">
+                <div className="flex flex-wrap gap-1">{(['actors','units'] as const).map(tab=><Button key={tab} size="sm" variant={reportTab===tab?'default':'outline'} aria-pressed={reportTab===tab} onClick={()=>{setReportTab(tab);setReportPage(0);}}>{tab==='actors'?'Por profissional':'Por unidade'}</Button>)}</div>
+                <div className="flex gap-2"><Button variant="outline" size="sm" disabled={!canExport||!reportExportable||exportBusy} onClick={()=>setExportRequest('report_csv')}><Download className="w-4 h-4 mr-1"/>CSV</Button><Button variant="outline" size="sm" disabled={!canExport||!reportPdfAllowed||exportBusy} onClick={()=>setExportRequest('report_pdf')}><FileText className="w-4 h-4 mr-1"/>PDF</Button></div>
+              </div>
+              <p className="text-xs text-muted-foreground">CSV e PDF abrangem os dois agrupamentos, independentemente da página exibida.</p>
+              {!reportPdfAllowed&&reportExportable&&<p className="text-xs text-muted-foreground">Para mais de 500 grupos, utilize CSV para evitar travar a impressão. O CSV abrange os dois agrupamentos.</p>}
+              {reportRows.length===0?<p className="text-center text-muted-foreground py-8">Nenhum registro neste agrupamento.</p>:<>
+                <div className="overflow-x-auto rounded-lg border"><Table><TableHeader className="bg-muted/40"><TableRow>
+                  <TableHead>{reportTab==='actors'?'Nome / ID':'Unidade / ID'}</TableHead>
+                  {reportTab==='actors'?<><TableHead>CPF</TableHead><TableHead>Perfil</TableHead></>:<><TableHead>Responsáveis</TableHead><TableHead>Sem responsável individual</TableHead></>}
+                  {REPORT_METRICS.map(([label])=><TableHead key={label} className="text-center whitespace-nowrap">{label}</TableHead>)}
+                </TableRow></TableHeader><TableBody>
+                  {reportRows.slice(reportPage*reportPageSize,(reportPage+1)*reportPageSize).map(r=><TableRow key={'userId' in r?r.userId:r.unitId}>
+                    <TableCell className="font-medium min-w-[180px]">{r.nome}<p className="text-[10px] text-muted-foreground break-all">{'userId' in r?r.userId:r.unitId||'Não registrada'}</p></TableCell>
+                    {'userId' in r?<><TableCell className="font-mono text-xs">{r.cpf}</TableCell><TableCell>{r.role}</TableCell></>:<><TableCell>{r.actors}</TableCell><TableCell>{r.semResponsavel}</TableCell></>}
+                    {reportMetricCells(r).map((v,i)=><TableCell key={i} className="text-center text-xs whitespace-nowrap tabular-nums">{v}</TableCell>)}
+                  </TableRow>)}
+                </TableBody></Table></div>
+                <nav aria-label="Paginação do relatório" className="flex items-center justify-between gap-2"><p className="text-xs text-muted-foreground">Página {reportPage+1} de {reportPageCount} · {reportRows.length} grupos</p><div className="flex gap-1"><Button size="sm" variant="outline" aria-label="Página anterior" disabled={reportPage===0} onClick={()=>setReportPage(p=>p-1)}><ChevronLeft className="w-4 h-4"/></Button><Button size="sm" variant="outline" aria-label="Próxima página" disabled={reportPage+1>=reportPageCount} onClick={()=>setReportPage(p=>p+1)}><ChevronRight className="w-4 h-4"/></Button></div></nav>
+              </>}
+            </>}
           </div>
         </DialogContent>
       </Dialog>
