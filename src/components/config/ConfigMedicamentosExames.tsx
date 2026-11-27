@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useConfiguracao } from '@/hooks/useConfiguracao';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -93,6 +94,9 @@ const ConfigMedicamentosExames: React.FC = () => {
   });
   const [newExam, setNewExam] = useState({ nome: '', codigo_sus: '', categoria: '' });
   const [prescricaoConfig, setPrescricaoConfig] = useState<Record<string, boolean>>({});
+  const {atualizarConfiguracao}=useConfiguracao();
+  const [prescricaoReady,setPrescricaoReady]=useState(false);
+  const [prescricaoSaving,setPrescricaoSaving]=useState(false);
 
   const loadData = useCallback(async () => {
     const [medsRes, examsRes, cfgRes] = await Promise.all([
@@ -103,8 +107,9 @@ const ConfigMedicamentosExames: React.FC = () => {
     if (medsRes.data) setMeds(medsRes.data as any);
     if (examsRes.data) setExams(examsRes.data as any);
     const cfg = cfgRes.data?.configuracoes as any;
-    if (cfg?.[CONFIG_KEY]) setPrescricaoConfig(cfg[CONFIG_KEY]);
-    else setPrescricaoConfig({ medicina: true, odontologia: true });
+    setPrescricaoReady(!cfgRes.error&&!!cfgRes.data);
+    if(!cfgRes.error&&cfgRes.data){if (cfg?.[CONFIG_KEY]) setPrescricaoConfig(cfg[CONFIG_KEY]);
+    else setPrescricaoConfig({ medicina: true, odontologia: true });}
     setLoading(false);
   }, []);
 
@@ -243,10 +248,12 @@ const ConfigMedicamentosExames: React.FC = () => {
   const handleDelete = async () => {
     if (!deleteItem) return;
     if (deleteItem.type === 'med') {
-      await supabase.from('medications').update({ ativo: false }).eq('id', deleteItem.id);
+      const {data,error}=await supabase.from('medications').update({ ativo: false }).eq('id', deleteItem.id).select('id').maybeSingle();
+      if(error||!data){toast.error('Alteração não confirmada.');return;}
       setMeds(prev => prev.map(m => m.id === deleteItem.id ? { ...m, ativo: false } : m));
     } else {
-      await supabase.from('exam_types').update({ ativo: false }).eq('id', deleteItem.id);
+      const {data,error}=await supabase.from('exam_types').update({ ativo: false }).eq('id', deleteItem.id).select('id').maybeSingle();
+      if(error||!data){toast.error('Alteração não confirmada.');return;}
       setExams(prev => prev.map(e => e.id === deleteItem.id ? { ...e, ativo: false } : e));
     }
     setDeleteItem(null);
@@ -254,27 +261,24 @@ const ConfigMedicamentosExames: React.FC = () => {
   };
 
   const reactivateMed = async (id: string) => {
-    await supabase.from('medications').update({ ativo: true }).eq('id', id);
+    const {data,error}=await supabase.from('medications').update({ ativo: true }).eq('id', id).select('id').maybeSingle();
+      if(error||!data){toast.error('Alteração não confirmada.');return;}
     setMeds(prev => prev.map(m => m.id === id ? { ...m, ativo: true } : m));
     toast.success('Reativado');
   };
 
   const makeMedGlobal = async (id: string) => {
-    await supabase.from('medications').update({ is_global: true }).eq('id', id);
+    const {data,error}=await supabase.from('medications').update({ is_global: true }).eq('id', id).select('id').maybeSingle();
+      if(error||!data){toast.error('Alteração não confirmada.');return;}
     setMeds(prev => prev.map(m => m.id === id ? { ...m, is_global: true } : m));
     toast.success('Medicamento tornado global');
   };
 
-  const savePrescricaoConfig = async (updated: Record<string, boolean>) => {
-    setPrescricaoConfig(updated);
-    const { data: existing } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-    const existingConfig = (existing?.configuracoes as any) || {};
-    await supabase.from('system_config').upsert({
-      id: 'default',
-      configuracoes: { ...existingConfig, [CONFIG_KEY]: updated },
-      updated_at: new Date().toISOString(),
-    });
-    toast.success('Permissões de prescrição salvas');
+  const savePrescricaoConfig=async(updated:Record<string,boolean>)=>{
+    if(!prescricaoReady||prescricaoSaving)return;
+    setPrescricaoSaving(true);
+    try{if(await atualizarConfiguracao(CONFIG_KEY,updated,{auditAcao:'ALTERAR_CONFIG_PRESCRICAO'}))setPrescricaoConfig(updated);}
+    finally{setPrescricaoSaving(false);}
   };
 
   const importarSeed = async (lista: MedicamentoSeed[], origem: OrigemMedicamento) => {
@@ -522,7 +526,7 @@ const ConfigMedicamentosExames: React.FC = () => {
                 {PROFISSOES_PRESCRICAO.map(p => (
                   <div key={p.key} className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
                     <Checkbox
-                      checked={prescricaoConfig[p.key] ?? false}
+                      disabled={!prescricaoReady||prescricaoSaving} checked={prescricaoConfig[p.key] ?? false}
                       onCheckedChange={v => savePrescricaoConfig({ ...prescricaoConfig, [p.key]: !!v })}
                     />
                     <span className="text-sm">{p.label}</span>

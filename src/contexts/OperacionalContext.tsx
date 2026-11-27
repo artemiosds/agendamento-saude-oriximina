@@ -1,4 +1,6 @@
 import { setActiveUnitLogo } from "@/lib/unitLogo";
+import { saveSystemConfigPatch } from "@/lib/systemConfigWriter";
+import { toast } from "sonner";
 import React, {
   createContext,
   useCallback,
@@ -397,6 +399,7 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
   const userUnidadeId = authUser?.unidadeId || "";
 
   const actorScope = JSON.stringify([authUser?.id, authUser?.authUserId, authUser?.role, isGlobalAdmin, userUnidadeId]);
+  const configActorScope=useRef(actorScope);configActorScope.current=actorScope;
   const enabled = !!authUser;
   const { data: unidadeDirectory } = useOperationalDirectory("unidades", actorScope, enabled,
     (signal) => fetchUnidades(isGlobalAdmin, userUnidadeId, signal));
@@ -432,8 +435,6 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
   bloqueiosRef.current = bloqueios;
   const funcionariosRef = useRef(funcionarios);
   funcionariosRef.current = funcionarios;
-  const configuracoesRef = useRef(configuracoes);
-  configuracoesRef.current = configuracoes;
 
   const invalidateCache = useCallback(
     (...keys: (readonly string[])[]) => {
@@ -1028,23 +1029,17 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
 
   const updateConfiguracoes = useCallback(
     async (data: Partial<Configuracoes>) => {
-      const newConfigs = safeConfigMerge({ ...configuracoesRef.current, ...data });
-      const { error } = await supabase
-        .from("system_config" as any)
-        .update({ configuracoes: newConfigs as any })
-        .eq("id", "default");
-      if (!error) {
-        setConfiguracoes(newConfigs);
+      try{
+        const saved=await saveSystemConfigPatch({...data},authUser?.authUserId);
+        if(configActorScope.current!==actorScope)return;
+        setConfiguracoes(safeConfigMerge(saved as Partial<Configuracoes>));
         invalidateCache(queryKeys.configuracoes.all);
-      } else {
-        await supabase.from("system_config" as any).insert({
-          id: "default",
-          configuracoes: newConfigs as any,
-        } as any);
-        setConfiguracoes(newConfigs);
+      }catch{
+        toast.error("Configuração não confirmada. Recarregue e tente novamente.");
+        invalidateCache(queryKeys.configuracoes.all);
       }
     },
-    [invalidateCache],
+    [invalidateCache,authUser?.authUserId,actorScope],
   );
 
   const getAvailableSlots = useCallback(

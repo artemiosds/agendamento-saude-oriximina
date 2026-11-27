@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useConfiguracao } from '@/hooks/useConfiguracao';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,8 +10,6 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Download, Building2, Bell, Palette, Shield } from 'lucide-react';
-import { ConfigSyncIndicator } from '@/components/ConfigSyncIndicator';
-import { toast } from 'sonner';
 
 const CONFIG_KEY = 'config_sistema';
 
@@ -47,38 +46,28 @@ const ConfigSistema: React.FC = () => {
   const { atualizarConfiguracao, syncPendingDrafts } = useConfiguracao();
   const [config, setConfig] = useState<SistemaConfig>(DEFAULT);
   const [loading, setLoading] = useState(true);
+  const [loadFailed,setLoadFailed]=useState(false);
+  const [saveState,setSaveState]=useState<'idle'|'saving'|'saved'|'error'>('idle');
+  const saveVersion=useRef(0);
 
-  const loadConfig = useCallback(async () => {
-    const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-    const cfg = data?.configuracoes as any;
-    if (cfg?.[CONFIG_KEY]) setConfig({ ...DEFAULT, ...cfg[CONFIG_KEY] });
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    loadConfig();
-    syncPendingDrafts();
-  }, [loadConfig, syncPendingDrafts]);
-
-  const save = async (updated: SistemaConfig) => {
-    setConfig(updated); // optimistic
-    await atualizarConfiguracao(CONFIG_KEY, updated, { auditAcao: 'ALTERAR_CONFIG_SISTEMA' });
+  const loadConfig=useCallback(async()=>{
+    setLoading(true);setLoadFailed(false);
+    try{
+      const {data,error}=await supabase.from('system_config').select('configuracoes').eq('id','default').maybeSingle();
+      if(error||!data)throw Error('Configuração indisponível.');
+      const cfg=(data.configuracoes as Record<string,any>)?.[CONFIG_KEY];
+      if(cfg)setConfig({...DEFAULT,...cfg,instituicao:{...DEFAULT.instituicao,...cfg.instituicao},notificacoes:{...DEFAULT.notificacoes,...cfg.notificacoes},aparencia:{...DEFAULT.aparencia,...cfg.aparencia},conformidade:{...DEFAULT.conformidade,...cfg.conformidade}});
+    }catch{setLoadFailed(true);}
+    finally{setLoading(false);}
+  },[]);
+  useEffect(()=>{void loadConfig();void syncPendingDrafts();},[loadConfig,syncPendingDrafts]);
+  const save=async(updated:SistemaConfig)=>{
+    setConfig(updated);
+    const version=++saveVersion.current;setSaveState('saving');
+    const ok=await atualizarConfiguracao(CONFIG_KEY,updated,{auditAcao:'ALTERAR_CONFIG_SISTEMA'});
+    if(version===saveVersion.current)setSaveState(ok?'saved':'error');
   };
-
-  const exportAllData = async () => {
-    toast.info('Exportação iniciada...');
-    const tables = ['pacientes', 'agendamentos', 'prontuarios', 'funcionarios'] as const;
-    const results: Record<string, any[]> = {};
-    const queries = tables.map(t => supabase.from(t).select('*'));
-    const responses = await Promise.all(queries);
-    tables.forEach((t, i) => { results[t] = (responses[i].data as any[]) || []; });
-    const blob = new Blob([JSON.stringify(results, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `backup_${new Date().toISOString().slice(0, 10)}.json`;
-    a.click(); URL.revokeObjectURL(url);
-    toast.success('Dados exportados com sucesso');
-  };
+  if(loadFailed)return <Card><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível confirmar as configurações atuais. Edição indisponível para evitar sobrescrita.</p><Button onClick={()=>void loadConfig()}>Tentar novamente</Button></CardContent></Card>;
 
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
@@ -86,7 +75,7 @@ const ConfigSistema: React.FC = () => {
     <div className="space-y-6">
       {/* Sync indicator */}
       <div className="flex justify-end">
-        <ConfigSyncIndicator />
+        <div role="status" className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">{saveState==='saving'?'Salvando…':saveState==='saved'?'Gravação confirmada':saveState==='error'?'Alteração não confirmada; valores mantidos nesta tela.':'Configuração carregada'}{saveState==='error'&&<Button size="sm" variant="outline" onClick={()=>void save(config)}>Tentar salvar novamente</Button>}</div>
       </div>
 
       {/* 9.1 Informações da instituição */}
@@ -153,9 +142,8 @@ const ConfigSistema: React.FC = () => {
       <Card className="shadow-card border-0">
         <CardContent className="p-5">
           <h3 className="font-semibold font-display text-foreground mb-4">Backup e Dados</h3>
-          <Button variant="outline" className="w-full" onClick={exportAllData}>
-            <Download className="w-4 h-4 mr-2" /> Exportar Todos os Dados (JSON)
-          </Button>
+          <p className="text-sm text-muted-foreground mb-3">A exportação JSON antiga não comprovava cobertura e não era um backup restaurável. Utilize os procedimentos protegidos da central de dados.</p>
+          <Button variant="outline" className="w-full" asChild><Link to="/painel/configuracoes-avancadas?aba=dados"><Download className="w-4 h-4 mr-2"/>Abrir Gestão Operacional e Dados</Link></Button>
         </CardContent>
       </Card>
 

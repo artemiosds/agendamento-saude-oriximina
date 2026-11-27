@@ -128,7 +128,7 @@ const Configuracoes: React.FC = () => {
     logo_url: '',
     telefone: '',
     evolution_base_url: 'https://api.agendamento-saude-sms-oriximina.site',
-    evolution_api_key: 'ee602586e9594a126109ceae5759d19c',
+    evolution_api_key: '',
     evolution_instance_name: '',
   });
   const [evolutionConfigId, setEvolutionConfigId] = useState<string | null>(null);
@@ -385,14 +385,15 @@ const Configuracoes: React.FC = () => {
   }, [isMaster]);
 
   const saveEvolutionConfig = async () => {
+    if(!evolutionConfig.evolution_api_key.trim()){toast.error("Informe uma credencial válida antes de salvar a conexão.");return;}
     setEvolutionSaving(true);
     try {
       if (evolutionConfigId) {
-        const { error } = await supabase
+        const { data,error } = await supabase
           .from('clinica_config')
           .update({ ...evolutionConfig, updated_at: new Date().toISOString() })
-          .eq('id', evolutionConfigId);
-        if (error) throw error;
+          .eq('id', evolutionConfigId).select('id').maybeSingle();
+        if (error || !data) throw Error('Gravação não confirmada.');
       } else {
         const { data, error } = await supabase
           .from('clinica_config')

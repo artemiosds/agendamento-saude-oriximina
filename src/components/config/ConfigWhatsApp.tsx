@@ -572,15 +572,15 @@ const ConfigWhatsApp: React.FC = () => {
       toast.error('UazapiGO ainda não está totalmente configurada.');
       return;
     }
-    setActiveProvider(next);
     try {
-      if (evolutionConfigId) {
-        await supabase.from('clinica_config').update({
-          whatsapp_provider_active: next, updated_at: new Date().toISOString(),
-        }).eq('id', evolutionConfigId);
-        toast.success(`Provedor ativo: ${next === 'evolution' ? 'Evolution API' : 'UazapiGO'}`);
-      }
-    } catch (err: any) { toast.error(`Erro: ${err.message}`); }
+      if(!evolutionConfigId){toast.error('Configuração da conexão não confirmada.');return;}
+      const {data,error}=await supabase.from('clinica_config').update({
+        whatsapp_provider_active:next,updated_at:new Date().toISOString(),
+      }).eq('id',evolutionConfigId).select('id').maybeSingle();
+      if(error||!data)throw Error('Alteração de provedor não confirmada.');
+      setActiveProvider(next);
+      toast.success(`Provedor ativo: ${next==='evolution'?'Evolution API':'UazapiGO'}`);
+    }catch{toast.error('Não foi possível confirmar a alteração do provedor.');}
   };
 
   const maskedUazToken = originalUazToken
