@@ -86,6 +86,7 @@ const ProfissionaisExternos: React.FC = () => {
   const readSequence=useRef(0);
   const agendaSequence=useRef(0);
   const [saving, setSaving] = useState(false);
+  const employeeWriteBusy=useRef(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [showSenha, setShowSenha] = useState(false);
@@ -242,9 +243,10 @@ const ProfissionaisExternos: React.FC = () => {
   };
 
   const handleSave = async () => {
+    if(employeeWriteBusy.current||loading||loadError)return;
     if (!canManage) { toast.error("Sem permissão para alterar profissionais externos."); return; }
     if (!form.nome || !form.email) { toast.error("Nome e e-mail são obrigatórios."); return; }
-    setSaving(true);
+    employeeWriteBusy.current=true;setSaving(true);
     try {
       if (editId) {
         const body: any = { 
@@ -263,10 +265,10 @@ const ProfissionaisExternos: React.FC = () => {
         };
         if (form.senha) body.senha = form.senha;
         const { data, error } = await supabase.functions.invoke("manage-external", { body });
-        if (error || data?.error) { toast.error(data?.error || "Erro."); setSaving(false); return; }
+        if (error || data?.error || data?.success!==true) { toast.error(data?.error || "Não foi possível confirmar o salvamento."); return; }
         toast.success("Profissional externo atualizado!");
       } else {
-        if (!form.senha) { toast.error("Senha obrigatória para novo cadastro."); setSaving(false); return; }
+        if (!form.senha) { toast.error("Senha obrigatória para novo cadastro."); return; }
         const { data, error } = await supabase.functions.invoke("manage-external", {
           body: { 
             action: "create", 
@@ -284,34 +286,29 @@ const ProfissionaisExternos: React.FC = () => {
             permissoes: form.permissoes
           },
         });
-        if (error || data?.error) { toast.error(data?.error || "Erro."); setSaving(false); return; }
+        if (error || data?.error || data?.success!==true) { toast.error(data?.error || "Não foi possível confirmar o salvamento."); return; }
         toast.success("Profissional externo cadastrado!");
       }
       setDialogOpen(false);
       await loadExternos();
     } catch { toast.error("Erro ao salvar."); }
-    setSaving(false);
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!canManage) { toast.error("Sem permissão para alterar profissionais externos."); return; }
-    try {
-      const { data, error } = await supabase.functions.invoke("manage-external", { body: { action: "delete", id } });
-      if (error || data?.error) { toast.error("Erro ao excluir."); return; }
-      toast.success("Excluído!");
-      await loadExternos();
-    } catch { toast.error("Erro."); }
+    finally {employeeWriteBusy.current=false;setSaving(false);}
   };
 
   const handleToggleActive = async (ext: ExternalProf) => {
+    if(employeeWriteBusy.current||loading||loadError)return;
     if (!canManage) { toast.error("Sem permissão para alterar profissionais externos."); return; }
-    const { data, error } = await supabase.functions.invoke("manage-external", {
-      body: { action: "update", id: ext.id, ativo: !ext.ativo },
-    });
-    if (!error && !data?.error) {
+    if(ext.ativo&&!window.confirm("Desativar este profissional externo? Confira os agendamentos futuros. Cotas e históricos serão mantidos."))return;
+    employeeWriteBusy.current=true;setSaving(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-external", {
+        body: { action: "update", id: ext.id, ativo: !ext.ativo },
+      });
+      if(error||data?.error||data?.success!==true){toast.error(data?.error||"Não foi possível confirmar a alteração do status.");return;}
       toast.success(ext.ativo ? "Desativado" : "Ativado");
       await loadExternos();
-    }
+    } catch {toast.error("Não foi possível confirmar a alteração do status.");}
+    finally {employeeWriteBusy.current=false;setSaving(false);}
   };
 
   // Quota management – multi-select
@@ -573,7 +570,7 @@ const ProfissionaisExternos: React.FC = () => {
           <p className="text-muted-foreground text-xs">{loading||loadError?"Consulta em atualização":filteredExternos.length+" de "+externos.length+" cadastrados"}</p>
         </div>
         {canManage && !loading && !loadError && (
-          <Button onClick={openNew} className="clinical-record-action clinical-action-main">
+          <Button onClick={openNew} disabled={saving} className="clinical-record-action clinical-action-main">
             <UserPlus className="w-4 h-4 mr-2" /> Novo Externo
           </Button>
         )}
@@ -657,27 +654,13 @@ const ProfissionaisExternos: React.FC = () => {
                         <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(ext)} title="Editar Profissional">
                           <Pencil className="w-4 h-4" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleToggleActive(ext)} title={ext.ativo ? "Desativar" : "Ativar"}>
+                        <Button size="icon" variant="ghost" className="h-8 w-8" disabled={saving||loading} onClick={() => handleToggleActive(ext)} title={ext.ativo ? "Desativar" : "Ativar"} aria-label={ext.ativo ? "Desativar profissional externo" : "Reativar profissional externo"}>
                           {ext.ativo ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </Button>
                       </>}
                     </div>
                     <div className="flex gap-1">
-                      {canManage && <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive"><Trash2 className="w-4 h-4" /></Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Excluir {ext.nome}?</AlertDialogTitle>
-                            <AlertDialogDescription>Esta ação não pode ser desfeita. Todos os acessos e quotas serão removidos.</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(ext.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Excluir</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>}
+
                     </div>
                   </div>
 
@@ -703,7 +686,7 @@ const ProfissionaisExternos: React.FC = () => {
       )}
 
       {/* Create/Edit External Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={open=>{if(!employeeWriteBusy.current)setDialogOpen(open);}}>
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>{editId ? "Editar" : "Cadastrar"} Profissional Externo</DialogTitle></DialogHeader>
           <div className="space-y-4 max-h-[70vh] overflow-y-auto px-1">
