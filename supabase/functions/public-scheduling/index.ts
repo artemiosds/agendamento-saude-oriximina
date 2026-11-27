@@ -1,4 +1,5 @@
 import { normalizePatientCpf, patientCpfError } from "../_shared/patient-cpf.ts";
+import { portalCustomPatch } from "../_shared/portal-profile-fields.ts";
 import { addSchedulingDays as addDays, buildPublicAvailability } from "../_shared/public-scheduling-availability.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -211,7 +212,7 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "Paciente não vinculado a esta conta." }), { status: 403, headers: corsHeaders });
       }
       const allowed = [
-        "nome","cpf","cns","data_nascimento","telefone","email","endereco",
+        "nome","cpf","cns","data_nascimento","telefone","endereco",
         "sexo","raca_cor","naturalidade","naturalidade_uf","municipio",
         "nome_mae","menor_idade","nome_responsavel","cpf_responsavel",
         "is_gestante","is_pne","is_autista","ubs_origem","observacoes","custom_data",
@@ -229,14 +230,20 @@ serve(async (req) => {
         else updates.cpf = normalizePatientCpf(body.cpf);
       }
       // Merge custom_data em vez de sobrescrever tudo
-      if (body.custom_data && typeof body.custom_data === "object") {
-        updates.custom_data = { ...(pac.custom_data || {}), ...body.custom_data };
+      if (body.custom_data !== undefined) {
+        updates.custom_data = portalCustomPatch(pac.custom_data, body.custom_data);
       }
-      // Nunca permite trocar unidade_id, id ou auth_user_id
-      const { error: updErr } = await supabase.from("pacientes").update(updates).eq("id", pac.id);
+      // O e-mail de login, unidade, id e auth_user_id não podem ser alterados.
+      // Reconfere a permissão antes da gravação privilegiada e limita a linha ao vínculo atual.
+      const latestAccess = await portalAccess(token);
+      if (!latestAccess || latestAccess.paciente_id !== pac.id || latestAccess.permissoes?.editarDados !== true) {
+        return new Response(JSON.stringify({ error: "Edição de dados não autorizada pelo portal." }), { status: 403, headers: corsHeaders });
+      }
+      const { data: saved, error: updErr } = await supabase.from("pacientes").update(updates).eq("id", pac.id).eq("auth_user_id", authUserId).select("id").maybeSingle();
       if (updErr) {
         return new Response(JSON.stringify({ error: updErr.message }), { status: 500, headers: corsHeaders });
       }
+      if (saved?.id !== pac.id) return new Response(JSON.stringify({error:"Não foi possível confirmar a atualização cadastral."}), {status:409,headers:corsHeaders});
       return new Response(JSON.stringify({ success: true, id: pac.id }), { headers: corsHeaders });
     }
 

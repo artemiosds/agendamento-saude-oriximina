@@ -1,5 +1,6 @@
 import { patientCpfError } from '@/lib/patientCpf';
 import { PORTAL_GUIDE_SECURITY } from '@/lib/portalAssistance';
+import { portalSafeTab, portalAllowedTabs, portalAppointmentSections, canPrintPortalReceipt, type PortalTab } from '@/lib/portalPermissionView';
 import { isDiagnosticAppointment, getEffectiveDiagnosticStatus, getDiagnosticStatusLabel } from '@/lib/diagnosticExams';
 import React, { useState, useEffect, useRef } from 'react';
 import { parsePortalAccess, mergePortalQueue, type PortalQueueEntry } from '@/lib/portalPatientSecurity';
@@ -37,8 +38,6 @@ interface AgendamentoData {
   tipo: string;
   profissional_nome: string;
   unidade_id: string;
-  observacoes: string;
-  origem?: string;
   custom_data?: Record<string, any>;
 }
 
@@ -73,6 +72,10 @@ const PortalPaciente: React.FC = () => {
   const [dados, setDados] = useState<DadosPacienteValue>(emptyDadosPaciente());
   const [savingDados, setSavingDados] = useState(false);
   const [perms, setPerms] = useState<PortalPermissoes>(PORTAL_PERMISSOES_PADRAO);
+  const [activeTab,setActiveTab] = useState<PortalTab>('proximos');
+  const [accessUnconfirmed,setAccessUnconfirmed] = useState(false);
+  const retryAccess = useRef<(() => void) | null>(null);
+  const sessionRevision = useRef(0);
 
   // Recovery state
   const [recoveryStep, setRecoveryStep] = useState<RecoveryStep>('none');
@@ -136,7 +139,7 @@ const PortalPaciente: React.FC = () => {
       const { data, error } = await (supabase as any).rpc('get_portal_patient_status');
       if (error) throw error;
       const status = parsePortalAccess(data);
-      if (status.allowed) setPerms(status.permissoes);
+      if (status.allowed) { setPerms(status.permissoes); setAccessUnconfirmed(false); }
       return status;
     } catch {
       return { allowed: false, message: 'Não foi possível verificar seu acesso ao portal. Tente novamente ou procure a unidade de saúde.' };
@@ -145,7 +148,7 @@ const PortalPaciente: React.FC = () => {
 
   // A inscrição só existe durante uma sessão autorizada, para a ficha atual.
   useEffect(() => {
-    if (!isLoggedIn || !paciente?.id || !perms.verFila) { setFila([]); return; }
+    if (!isLoggedIn || !paciente?.id || !perms.verFila || accessUnconfirmed) { setFila([]); return; }
     const patientId = paciente.id;
     let active = true;
     let revision = 0;
@@ -198,17 +201,20 @@ const PortalPaciente: React.FC = () => {
       window.removeEventListener('online', onFocus);
       void supabase.removeChannel(channel);
     };
-  }, [isLoggedIn, paciente?.id, perms.verFila]);
+  }, [isLoggedIn, paciente?.id, perms.verFila, accessUnconfirmed]);
 
   const loadPacienteData = async (authUserId: string) => {
+    const revision = ++sessionRevision.current;
     const { data: pac } = await (supabase as any).from('pacientes').select('*').eq('auth_user_id', authUserId).single();
+    if(revision!==sessionRevision.current) return;
     if (!pac) { await supabase.auth.signOut(); setIsLoggedIn(false); toast.error('Não foi possível localizar sua ficha com segurança. Procure a unidade.'); return; }
     setPaciente(pac); setIsLoggedIn(true);
     setDados(deserializeDadosPaciente(pac));
-    const { data: ags } = await (supabase as any).from('agendamentos').select('*').eq('paciente_id', pac.id).order('data', { ascending: false });
+    const { data: ags } = await (supabase as any).from('agendamentos').select('id,data,hora,status,tipo,profissional_nome,unidade_id,custom_data').eq('paciente_id', pac.id).order('data', { ascending: false });
+    if(revision!==sessionRevision.current) return;
     if (ags) setAgendamentos(ags);
     const { data: unis } = await (supabase as any).from('unidades').select('*');
-    if (unis) setUnidades(unis);
+    if (revision===sessionRevision.current && unis) setUnidades(unis);
   };
 
   const handleLogin = async () => {
@@ -233,8 +239,9 @@ const PortalPaciente: React.FC = () => {
   };
 
   const clearPortalSession = () => {
+    sessionRevision.current++; setAccessUnconfirmed(false); setActiveTab('proximos');
     setIsLoggedIn(false); setPaciente(null); setAgendamentos([]); setFila([]);
-    setDados(emptyDadosPaciente());
+    setDados(emptyDadosPaciente()); setUnidades([]);
   };
   const handleLogout = async () => { clearPortalSession(); await supabase.auth.signOut(); };
 
@@ -243,26 +250,32 @@ const PortalPaciente: React.FC = () => {
     let active = true;
     let checking = false;
     const revalidate = async () => {
-      if (!active || checking || !navigator.onLine) return;
+      if (!active || checking) return;
+      if (!navigator.onLine) { setAccessUnconfirmed(true); return; }
       checking = true;
       try {
         const { data, error } = await (supabase as any).rpc('get_portal_patient_status');
-        if (!active || error) return; // falha de rede não é revogação confirmada
+        if (!active) return;
+        if (error) { setAccessUnconfirmed(true); return; }
         const status = parsePortalAccess(data);
         if (!status.allowed || data.paciente_id !== paciente.id) {
           clearPortalSession();
           toast.error(status.message || 'Seu acesso ao portal foi alterado. Entre novamente.');
           await supabase.auth.signOut();
         } else {
-          setPerms(status.permissoes);
+          setPerms(status.permissoes); setAccessUnconfirmed(false);
         }
-      } finally { checking = false; }
+      } catch { if(active) setAccessUnconfirmed(true); } finally { checking = false; }
     };
+    retryAccess.current = () => { void revalidate(); };
+    const onOffline = () => { if(active) setAccessUnconfirmed(true); };
+    window.addEventListener('offline', onOffline);
     window.addEventListener('focus', revalidate);
     window.addEventListener('online', revalidate);
     const timer = window.setInterval(revalidate, 30000);
     return () => {
-      active = false;
+      active = false; retryAccess.current = null;
+      window.removeEventListener('offline', onOffline);
       window.clearInterval(timer);
       window.removeEventListener('focus', revalidate);
       window.removeEventListener('online', revalidate);
@@ -270,7 +283,8 @@ const PortalPaciente: React.FC = () => {
   }, [isLoggedIn, paciente?.id]);
 
   const handleSalvarDados = async () => {
-    if (!perms.editarDados) { toast.error('Edição de dados desativada pela unidade.'); return; }
+    if (accessUnconfirmed || !perms.editarDados) { toast.error('Edição de dados desativada pela unidade.'); return; }
+    const revision = sessionRevision.current;
     if (!dados.nome || !dados.telefone) { toast.error('Nome e telefone são obrigatórios.'); return; }
     const cpfError = patientCpfError(dados.cpf, { previousCpf: paciente?.cpf ?? "" });
     if (cpfError) { toast.error(cpfError); return; }
@@ -287,10 +301,11 @@ const PortalPaciente: React.FC = () => {
         { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, 'Authorization': `Bearer ${token}` }, body: JSON.stringify(payload) },
       );
       const json = await res.json();
-      if (!res.ok || json?.error) { toast.error(json?.error || 'Erro ao salvar.'); setSavingDados(false); return; }
+      if(revision!==sessionRevision.current) return;
+      if (!res.ok || json?.error || json?.success !== true || json?.id !== paciente?.id) { toast.error(json?.error || 'Erro ao salvar.'); setSavingDados(false); return; }
       toast.success('Dados atualizados com sucesso!');
       const { data: pac } = await (supabase as any).from('pacientes').select('*').eq('id', json.id).single();
-      if (pac) { setPaciente(pac); setDados(deserializeDadosPaciente(pac)); }
+      if (pac && revision===sessionRevision.current && pac.id===paciente?.id) { setPaciente(pac); setDados(deserializeDadosPaciente(pac)); }
     } catch (e) {
       console.error(e);
       toast.error('Erro ao salvar dados.');
@@ -298,9 +313,10 @@ const PortalPaciente: React.FC = () => {
   };
 
   const handleCancelar = async (agId: string) => {
-    if (!perms.cancelar) { toast.error('Cancelamento pelo portal desativado. Procure a unidade.'); return; }
+    if (accessUnconfirmed || !perms.verProximas || !perms.cancelar) { toast.error('Cancelamento pelo portal desativado. Procure a unidade.'); return; }
     if (cancelPending.current.has(agId)) return;
     cancelPending.current.add(agId);
+    const revision = sessionRevision.current;
     try {
       const appointment = agendamentos.find(a => a.id === agId);
       if (!appointment) { toast.error('Agendamento não encontrado. Atualize a página e tente novamente.'); return; }
@@ -308,6 +324,7 @@ const PortalPaciente: React.FC = () => {
         p_agendamento_id: agId,
         p_motivo: 'Cancelamento solicitado pelo próprio paciente no Portal do Paciente',
       });
+      if(revision!==sessionRevision.current) return;
       if (error) throw error;
       if (data?.id !== agId) throw new Error('Não foi possível confirmar o cancelamento. Atualize a página.');
       setAgendamentos(prev => prev.map(a => a.id === agId ? { ...a, status: 'cancelado' } : a));
@@ -322,7 +339,19 @@ const PortalPaciente: React.FC = () => {
 
   const getUnidadeNome = (id: string) => unidades.find(u => u.id === id)?.nome || '';
 
-  const handlePrintComprovante = (ag: AgendamentoData) => {
+  const handlePrintComprovante = async (ag: AgendamentoData) => {
+    if (accessUnconfirmed || !paciente || !canPrintPortalReceipt(perms,portalAppointmentSections(ag,new Date()))) return;
+    const revision = sessionRevision.current;
+    try {
+      const {data,error} = await (supabase as any).rpc('get_portal_patient_status');
+      if(revision!==sessionRevision.current) return;
+      const status = parsePortalAccess(data);
+      if(error || !status.allowed || data?.paciente_id!==paciente.id || !canPrintPortalReceipt(status.permissoes,portalAppointmentSections(ag,new Date()))) {
+        if(!error && status.allowed && data?.paciente_id===paciente.id) setPerms(status.permissoes);
+        else setAccessUnconfirmed(true);
+        toast.error('Não foi possível confirmar a autorização para emitir o comprovante.'); return;
+      }
+    } catch { if(revision===sessionRevision.current) {setAccessUnconfirmed(true);toast.error('Não foi possível conferir a autorização.');} return; }
     const unidade: any = unidades.find(u => u.id === ag.unidade_id);
     printComprovanteAgendamento({
       id: ag.id, data: ag.data, hora: ag.hora, tipo: ag.tipo, status: ag.status,
@@ -582,22 +611,18 @@ const PortalPaciente: React.FC = () => {
   }
 
   // Portal dashboard
-  const futureAgendamentos = agendamentos.filter(a => {
-    const agDate = new Date(a.data + 'T23:59:59');
-    return agDate >= new Date() && !['cancelado', 'falta'].includes(a.status);
-  });
+  const now = new Date();
+  const futureAgendamentos = perms.verProximas ? agendamentos.filter(a=>portalAppointmentSections(a,now).future) : [];
   const examesPaciente = agendamentos.filter(isDiagnosticAppointment);
-  const pastAgendamentos = agendamentos.filter(a => {
-    const agDate = new Date(a.data + 'T23:59:59');
-    return agDate < new Date() || ['cancelado', 'concluido', 'falta'].includes(a.status);
-  });
+  const pastAgendamentos = perms.verHistorico ? agendamentos.filter(a=>portalAppointmentSections(a,now).past) : [];
+  const selectedTab = portalSafeTab(activeTab,perms);
 
   return (
     <div className="min-h-screen bg-background">
       <div className="gradient-hero text-primary-foreground py-6">
         <div className="container mx-auto px-4 flex items-center justify-between">
           <div>
-            <h1 className="text-xl md:text-2xl font-bold font-display">Olá, {paciente?.nome?.split(' ')[0]}!</h1>
+            <h1 className="text-xl md:text-2xl font-bold font-display">{accessUnconfirmed ? 'Portal do Paciente' : 'Olá, ' + (paciente?.nome?.split(' ')[0] || '') + '!'}</h1>
             <p className="opacity-80 text-sm">Portal do Paciente — SMS Oriximiná</p>
           </div>
           <Button variant="ghost" size="sm" onClick={handleLogout} className="text-primary-foreground/80 hover:text-primary-foreground">
@@ -607,7 +632,8 @@ const PortalPaciente: React.FC = () => {
       </div>
 
       <div className="container mx-auto px-4 py-6 max-w-3xl">
-        <Tabs defaultValue={perms.verProximas ? "proximos" : perms.verHistorico ? "historico" : perms.verFila ? "fila" : "dados"} className="space-y-4">
+        {accessUnconfirmed ? <Card><CardContent className="p-6 space-y-3 text-center"><AlertCircle className="h-6 w-6 mx-auto text-muted-foreground"/><p className="font-medium">Não foi possível confirmar seu acesso agora.</p><p className="text-sm text-muted-foreground">Seus dados estão temporariamente ocultos. Confira sua conexão e tente novamente.</p><Button variant="outline" onClick={()=>retryAccess.current?.()}>Verificar novamente</Button></CardContent></Card> :
+        <Tabs value={selectedTab} onValueChange={value=>{if(portalAllowedTabs(perms).includes(value as PortalTab))setActiveTab(value as PortalTab);}} className="space-y-4">
           <TabsList className="flex w-full [&>*]:flex-1">
             {perms.verProximas && <TabsTrigger value="proximos" className="text-xs sm:text-sm">
               <Calendar className="w-4 h-4 mr-1 hidden sm:inline" /> Próximas ({futureAgendamentos.length})
@@ -696,9 +722,9 @@ const PortalPaciente: React.FC = () => {
                         {ag.unidade_id && <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1"><MapPin className="w-3 h-3" />{getUnidadeNome(ag.unidade_id)}</p>}
                       </div>
                       <div className="flex flex-col gap-1">
-                        <Button size="sm" variant="outline" className="text-xs" onClick={() => handlePrintComprovante(ag)} style={perms.imprimirComprovante ? undefined : { display: 'none' }}>
+                        {perms.imprimirComprovante && <Button size="sm" variant="outline" className="text-xs" onClick={() => void handlePrintComprovante(ag)}>
                           <FileText className="w-3.5 h-3.5 mr-1" />Comprovante
-                        </Button>
+                        </Button>}
                         {canCancel && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild><Button size="sm" variant="ghost" className="text-xs text-destructive">Cancelar</Button></AlertDialogTrigger>
@@ -736,7 +762,7 @@ const PortalPaciente: React.FC = () => {
                       <p className="text-sm text-muted-foreground">{ag.profissional_nome} • {ag.tipo}</p>
                     </div>
                     <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", st.class)}>{st.label}</span>
-                    <Button size="sm" variant="ghost" className="text-xs" onClick={() => handlePrintComprovante(ag)} style={perms.imprimirComprovante ? undefined : { display: 'none' }}><FileText className="w-3.5 h-3.5" /></Button>
+                    {perms.imprimirComprovante && <Button size="sm" variant="ghost" className="text-xs" aria-label="Imprimir comprovante" onClick={() => void handlePrintComprovante(ag)}><FileText className="w-3.5 h-3.5" /></Button>}
                   </CardContent>
                 </Card>
               );
@@ -767,7 +793,7 @@ const PortalPaciente: React.FC = () => {
               </Card>
             ))}
           </TabsContent>}
-        </Tabs>
+        </Tabs>}
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import PortalPatientDetail from '@/components/portal/PortalPatientDetail';
 import PortalPublicGuide from '@/components/portal/PortalPublicGuide';
+import { PORTAL_PERMISSION_GROUPS } from '@/lib/portalPermissionView';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -42,15 +43,6 @@ async function operationError(error: any, data: any, fallback: string) {
   } catch { /* no reliable server response */ }
   return fallback;
 }
-
-const PERM_LABELS: { key: keyof PortalPermissoes; label: string; desc: string }[] = [
-  { key: 'verProximas', label: 'Ver próximas consultas', desc: 'Aba com os agendamentos futuros' },
-  { key: 'cancelar', label: 'Cancelar consultas', desc: 'Paciente pode cancelar agendamentos pendentes/confirmados' },
-  { key: 'verHistorico', label: 'Ver histórico de atendimentos', desc: 'Aba com consultas passadas, faltas e canceladas' },
-  { key: 'verFila', label: 'Ver posição na fila de espera', desc: 'Aba de acompanhamento da fila' },
-  { key: 'editarDados', label: 'Editar dados cadastrais', desc: 'Desativado = somente leitura' },
-  { key: 'imprimirComprovante', label: 'Imprimir comprovante', desc: 'Botão de impressão do comprovante de agendamento' },
-];
 
 const gerarSenha = () => {
   const c = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
@@ -385,28 +377,37 @@ const PortalAcessos: React.FC = () => {
           </nav>
         </TabsContent>
 
-        <TabsContent value="regras">
+        <TabsContent value="regras" className="space-y-3">
           <Card className="border border-border/50">
-            <CardContent className="p-6 space-y-4">
-              {!canEditRules && <p className="text-xs text-muted-foreground">{settingsReady ? 'Regras institucionais: edição exclusiva do Master Global.' : 'Aguardando leitura confirmada das regras.'}</p>}
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-sm font-medium text-foreground flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-primary" />Portal ativo</span>
-                  <p className="text-xs text-muted-foreground">Desativado = nenhum paciente consegue entrar</p>
+            <CardContent className="p-4 sm:p-5 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="font-semibold flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary shrink-0"/>Central de permissões</h2>
+                  <p className="text-xs text-muted-foreground mt-1">Regras institucionais da rede municipal. Cada alteração exige confirmação e motivo.</p>
                 </div>
+                <Badge variant="outline" className="shrink-0">{!settingsReady?'Não confirmado':canEditRules?'Master Global':'Somente leitura'}</Badge>
+              </div>
+              <div className="rounded-xl border border-border p-3 flex items-center justify-between gap-3">
+                <div><p className="font-medium text-sm">Portal ativo</p><p className="text-xs text-muted-foreground">Desativar restringe o acesso ao portal, sem excluir contas ou registros.</p></div>
                 {confirmed && settingsReady ? <Switch aria-label="Portal ativo" checked={confirmed.enabled} disabled={!canEditRules || settingsLoading || salvando} onCheckedChange={value => openConfig({ kind: 'enabled', value }, value ? 'Ativar portal para toda a rede' : 'Desativar portal para toda a rede')} /> : <span className="text-xs text-muted-foreground">Não confirmado</span>}
               </div>
-              {PERM_LABELS.map(({ key, label, desc }) => (
-                <div key={String(key)} className="flex items-center justify-between border-t border-border pt-4">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">{label}</span>
-                    <p className="text-xs text-muted-foreground">{desc}</p>
-                  </div>
-                  {perms ? <Switch aria-label={label} checked={perms[key]} disabled={!canEditRules || settingsLoading || salvando} onCheckedChange={value => openConfig({ kind: 'permission', key, value }, `${value ? 'Permitir' : 'Restringir'}: ${label}`)} /> : <span className="text-xs text-muted-foreground">Não confirmado</span>}
-                </div>
-              ))}
+              {confirmed && settingsReady && !confirmed.enabled && <p role="status" className="text-sm bg-muted rounded-lg p-3">Portal desativado. As permissões individuais ficam armazenadas para quando for reativado.</p>}
+              <p className="text-xs text-muted-foreground">{perms ? Object.values(perms).filter(Boolean).length+' de 6 permissões habilitadas na configuração' : 'Permissões não confirmadas'}. Meus dados (leitura) e exames continuam seguindo as regras existentes; não há controle independente para essas áreas.</p>
             </CardContent>
           </Card>
+          {PORTAL_PERMISSION_GROUPS.map(group=><Card key={group.title} className="border border-border/50"><CardContent className="p-4 sm:p-5 space-y-3">
+            <div><h3 className="font-semibold">{group.title}</h3><p className="text-xs text-muted-foreground">{group.description}</p></div>
+            {group.rules.map(({key,label,desc,enforcement})=><div key={key} className="flex items-start justify-between gap-3 border-t border-border pt-3">
+              <div className="min-w-0 space-y-1"><p className="text-sm font-medium">{label}</p><p className="text-xs text-muted-foreground">{desc}</p><p className="text-xs text-muted-foreground">{enforcement}</p>
+                {key==='cancelar' && perms?.cancelar && !perms.verProximas && <p className="text-xs text-muted-foreground">A próxima consulta está oculta; o botão de cancelamento não aparece nessa configuração.</p>}
+                {key==='imprimirComprovante' && perms?.imprimirComprovante && !perms.verProximas && !perms.verHistorico && <p className="text-xs text-muted-foreground">Sem abas de consultas visíveis, não há botão de comprovante.</p>}
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                {perms ? <><Switch aria-label={label} checked={perms[key]} disabled={!canEditRules || settingsLoading || salvando} onCheckedChange={value => openConfig({ kind: 'permission', key, value }, `${value ? 'Permitir' : 'Restringir'}: ${label}`)} /><span className="text-[11px] text-muted-foreground">{perms[key]?'Habilitada':'Restrita'}</span></> : <span className="text-xs text-muted-foreground">Não confirmado</span>}
+              </div>
+            </div>)}
+          </CardContent></Card>)}
+          <p className="text-xs text-muted-foreground">A configuração não apaga informações nem impede cópias de conteúdo já visualizado. A aplicação efetiva das políticas do servidor depende da versão publicada.</p>
         </TabsContent>
       </Tabs>
 
