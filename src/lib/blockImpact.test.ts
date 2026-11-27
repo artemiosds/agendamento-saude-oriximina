@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {availabilityImpact} from '../components/BlockOperationalReview';
+import {availabilityImpact} from './blockImpact';
 import {type BlockDraft} from './blockDraft';
 const d:BlockDraft={dataInicio:'2026-11-27',dataFim:'2026-11-27',diaInteiro:false,horaInicio:'08:00',horaFim:'12:00',scope:'global',unidadeId:'',profissionalId:''};
 const r={data_inicio:'2026-11-01',data_fim:'2026-11-30',dias_semana:[5],hora_inicio:'09:00:00',hora_fim:'13:00:00'};
