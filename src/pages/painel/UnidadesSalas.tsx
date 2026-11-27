@@ -92,7 +92,7 @@ const UnidadesSalas: React.FC = () => {
     };
     void loadRoomConfigs();
     return () => { cancelled = true; };
-  }, [unitScopeKey,scopeKey,configReload]);
+  }, [unidades,unitScopeKey,scopeKey,configReload]);
 
   const [enviandoLogo, setEnviandoLogo] = useState(false);
   const enviarLogo = async (file: File) => {
@@ -177,11 +177,12 @@ const UnidadesSalas: React.FC = () => {
   const handleSaveRoom=async()=>{
     if(busy.current||formLoading||formError||!roomForm.nome.trim()||!roomForm.unidadeId||!canWrite(editRoomId?'can_edit':'can_create',roomForm.unidadeId)||!allowedUnits.some(u=>u.id===roomForm.unidadeId&&u.ativo))return;
     if(editRoomId&&salas.find(s=>s.id===editRoomId)?.unidadeId!==roomForm.unidadeId){toast.error('A transferência de sala exige revisão dos vínculos.');return;}
-    if(roomForm.config.finalidade==='aparelho_diagnostico'&&(!roomForm.config.exames.length||roomForm.config.exames.some(exam=>!exam.tipoExame.trim()))){toast.error('Selecione pelo menos um exame e informe o nome dos exames personalizados.');return;}
+    const preserveConfig=!!editRoomId&&JSON.stringify(roomForm.config)===JSON.stringify(normalizeDiagnosticRoomConfig(original.current.config));
+    if(!preserveConfig&&roomForm.config.finalidade==='aparelho_diagnostico'&&(!roomForm.config.exames.length||roomForm.config.exames.some(exam=>!exam.tipoExame.trim()))){toast.error('Selecione pelo menos um exame e informe o nome dos exames personalizados.');return;}
     const id=editRoomId||'s'+crypto.randomUUID(),scope=scopeKey;
     busy.current=true;setSaving(true);
     try{
-      await saveStructure(editRoomId?'room_edit':'room_create',id,roomForm.unidadeId,{nome:roomForm.nome.trim(),finalidade:roomForm.config.finalidade,config:normalizeDiagnosticRoomConfig(roomForm.config)},original.current);
+      await saveStructure(editRoomId?'room_edit':'room_create',id,roomForm.unidadeId,{nome:roomForm.nome.trim(),finalidade:roomForm.config.finalidade,config:normalizeDiagnosticRoomConfig(roomForm.config),preserve_config:preserveConfig},original.current);
       await refreshStructure();
       if(scopeRef.current===scope){toast.success(editRoomId?'Sala atualizada!':'Sala criada!');setRoomDialog(false);}
     }catch(e){if(scopeRef.current===scope)toast.error(readError(e));}
@@ -263,7 +264,7 @@ const UnidadesSalas: React.FC = () => {
 
   const renderRoomCard = (room: typeof salas[number], showUnitName = true) => {
     const unit = unidades.find(item => item.id === room.unidadeId);
-    const diagnosticConfig = roomConfigs[room.id];
+    const diagnosticConfig = configState==='ready'?roomConfigs[room.id]:undefined;
     return (
       <Card key={room.id} className="shadow-card border">
         <CardContent className="p-4">
