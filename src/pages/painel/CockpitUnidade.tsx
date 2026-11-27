@@ -6,7 +6,7 @@ import { PlantaUnidade, roomStatuses } from './PlantaUnidade';
 import type { MapRoom, Risk, RoomState } from './PlantaUnidade';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { useOperacional } from '@/contexts/OperacionalContext';
-import { careStage, cockpitDay, cockpitLabel, elapsedMinutes, freshCockpitCall, infusionVisit, isBottleneck, procedureVisit, roomSector, waitingTone } from '@/lib/unitCockpit';
+import { careStage, cockpitDay, cockpitLabel, elapsedMinutes, freshCockpitCall, infusionVisit, isBottleneck, linkedRoomWaits, procedureVisit, roomSector, waitingTone } from '@/lib/unitCockpit';
 import { useCockpitFeed } from './useCockpitFeed';
 import type { CockpitAppointment } from './useCockpitFeed';
 import { observarChamadas, type ChamadaPaciente } from '@/lib/painelChamadas';
@@ -255,21 +255,14 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
   const procedureIds = new Set(procedureActive.map(a => a.id));
   const waitingCare = active.filter(a => a.stage === 'otherCare');
   const unmapped = active.filter(a => a.stage === 'consultation' && !roomById.has(a.sala_id));
-  const waitBySpecialty = new Map<string, Set<string>>();
-  for (const a of waiting) {
-    const specialty = cockpitLabel(staff.get(a.profissional_id)?.profissao);
-    if (!specialty || a.stage !== 'ready' || (elapsedMinutes(a.arrival, now) ?? 0) <= 20) continue;
-    const ids = waitBySpecialty.get(specialty) ?? new Set<string>();
-    ids.add(a.paciente_id || a.id);
-    waitBySpecialty.set(specialty, ids);
-  }
+  const waitsByRoom = linkedRoomWaits(waiting, consultationIds, now, WAIT_LIMIT);
 
   const roomViews = [...rooms].sort((a, b) => orderNames.compare(a.nome, b.nome)).map(room => {
     const visits = visitsByRoom.get(room.id) ?? [];
     const history = historyByRoom.get(room.id) ?? [];
     const team = (teamByRoom.get(room.id) ?? []).filter(f => f.role === 'profissional');
-    const specialties = new Set(team.map(f => cockpitLabel(f.profissao)).filter(Boolean));
-    const overdue = new Set([...specialties].flatMap(s => [...(waitBySpecialty.get(s) ?? [])])).size;
+    const linkedWaits = [...(waitsByRoom.get(room.id)?.values() ?? [])];
+    const overdue = linkedWaits.length;
     const roomLabel = cockpitLabel(room.nome);
     const call = roomNameCounts.get(roomLabel) === 1 ? calls[roomLabel] : undefined;
     const agendaCall = callingByRoom.get(room.id)?.paciente_nome;
@@ -288,7 +281,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
       historyLabel: roomSector(room.nome) === 'triage' ? 'Triagem · ver detalhes' : undefined,
       patients: visits.map(a => ({ id: a.id })),
     };
-    return { map, clinician, calling, visits, history, team, elapsed };
+    return { map, clinician, calling, visits, history, team, elapsed, linkedWaits };
   });
   const currentRooms = roomViews.map(room => room.map);
   const triageRisks = new Set(classifying.map(a => asRisk(recordByAppointment.get(a.id)?.classificacao_risco)));
@@ -320,7 +313,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
   }));
   const metrics = [
     { icon: UsersRound, label: 'Pacientes na unidade', value: String(inside), hint: 'presentes' },
-    { icon: Clock3, label: 'Espera média', value: average === null ? '—' : average + ' min', hint: waits.length + ' com horário' },
+    { icon: Clock3, label: 'Espera média desde a chegada', value: average === null ? '—' : average + ' min', hint: waits.length + ' atendimentos com horário' },
     { icon: DoorOpen, label: 'Salas em atendimento', value: occupied + '/' + rooms.length, hint: 'salas' },
     { icon: CircleCheck, label: 'Concluídos hoje', value: String(done.length), hint: 'atendimentos' },
   ];
@@ -357,8 +350,8 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     const overdue = room.visits.filter(visit => (visitMinutes(visit) ?? 0) > VISIT_LIMIT);
     if (overdue.length) alerts.push({
       id: `tempo:${room.map.id}`, zones: [room.map.id], title: room.map.name,
-      summary: `${overdue.length} acima de ${VISIT_LIMIT} min · maior tempo ${Math.max(...overdue.map(a => visitMinutes(a) ?? 0))} min`,
-      tone: 'danger', appointmentIds: overdue.map(a => a.id),
+      summary: `${overdue.length} acima de ${VISIT_LIMIT} min · maior tempo ${Math.max(...overdue.map(a => visitMinutes(a) ?? 0))} min · conferir duração`,
+      tone: roomSector(room.map.name) === 'procedure' || overdue.every(a => procedureVisit(a.tipo)) ? 'warning' : 'danger', appointmentIds: overdue.map(a => a.id),
     });
   }
   if (unmapped.length) alerts.push({
@@ -381,8 +374,8 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     specialties.set(label, group);
   }
   for (const [specialty, entries] of specialties) {
-    const matchingRooms = specialty ? roomViews.filter(room => room.map.state === 'bottleneck' &&
-      room.team.some(person => cockpitLabel(person.profissao) === specialty)) : [];
+    const linkedRoomIds = new Set(entries.map(({ a }) => a.sala_id));
+    const matchingRooms = roomViews.filter(room => room.map.overdue > 0 && linkedRoomIds.has(room.map.id));
     const name = staff.get(entries[0].a.profissional_id)?.profissao?.trim();
     alerts.push({
       id: `espera-consulta:${specialty}`, zones: ['recepcao', 'aguardando-consulta', ...matchingRooms.map(room => room.map.id)],
@@ -395,7 +388,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
   if (procedureOverdue.length) alerts.unshift({
     id: 'procedimentos-demora', zones: ['procedimentos'], title: 'Procedimentos prolongados',
     summary: `${procedureOverdue.length} acima de ${VISIT_LIMIT} min · maior tempo ${Math.max(...procedureOverdue.map(a => visitMinutes(a) ?? 0))} min`,
-    tone: 'danger', appointmentIds: procedureOverdue.map(a => a.id),
+    tone: 'warning', appointmentIds: procedureOverdue.map(a => a.id),
   });
   alerts.sort((a, b) => Number(b.tone === 'danger') - Number(a.tone === 'danger'));
   const alertZones = new Map<string, CockpitAlert['tone']>();
@@ -461,7 +454,12 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
         <p>{room.map.specialty || 'Especialidade não informada'}{room.clinician && ' · ' + room.clinician}</p>
         {!room.visits.length && room.team.length > 0 && <p>Equipe cadastrada · {room.team.map(f => f.nome).join(', ')}</p>}
         {room.map.state === 'calling' && <p>Paciente chamado · <strong>{room.calling}</strong></p>}
-        {room.map.state === 'bottleneck' && <p>{room.map.overdue} pacientes da especialidade aguardam há mais de 20 min.</p>}
+        {room.linkedWaits.length > 0 && <>
+          <h3>Espera vinculada à sala · {room.linkedWaits.length}</h3>
+          <p>Pacientes com vínculo registrado nesta sala e mais de {WAIT_LIMIT} min desde a chegada. A fila da especialidade sem vínculo não é atribuída a este ambiente.</p>
+          <RecordList empty="" records={[...room.linkedWaits].sort((a, b) => (elapsedMinutes(b.arrival, now) ?? -1) - (elapsedMinutes(a.arrival, now) ?? -1)).map(a =>
+            asRecord(a, `${elapsedMinutes(a.arrival, now)} min desde a chegada`, 'warning'))} />
+        </>}
         {!!room.visits.length && <RecordList empty="" records={room.visits.map(a => {
           const min = room.elapsed(a);
           return asRecord(a, (min === null ? 'Início sem horário registrado' : min + ' min em atendimento') +
