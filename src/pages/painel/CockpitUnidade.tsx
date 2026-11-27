@@ -10,6 +10,7 @@ import { careStage, cockpitDay, cockpitLabel, elapsedMinutes, freshCockpitCall, 
 import { useCockpitFeed } from './useCockpitFeed';
 import type { CockpitAppointment } from './useCockpitFeed';
 import { observarChamadas, type ChamadaPaciente } from '@/lib/painelChamadas';
+import { cockpitIntelligence } from '@/lib/cockpitIntelligence';
 import './hospitalVirtual.css';
 
 const hourFormat = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
@@ -22,31 +23,71 @@ type RecordLine = { id: string; title: string; detail: string; tone?: string; jo
 const WAIT_LIMIT = 20;
 const VISIT_LIMIT = 90;
 const orderNames = new Intl.Collator('pt-BR', { numeric: true });
-const completionHour = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23' });
-
-function ShiftSummary({ completed, day, delayed }: { completed: Item[]; day: string; delayed: number }) {
+function ShiftSummary({ build, stale, onOpen }: {
+  build: () => Parameters<typeof cockpitIntelligence>[0]; stale: boolean;
+  onOpen: (id: string, trigger?: HTMLElement) => void;
+}) {
   const [open, setOpen] = useState(false);
-  const totals = new Map<string, number>();
-  let covered = 0;
-  if (open) {
-    for (const item of completed) {
-      const time = Date.parse(item.concluido_em || '');
-      if (!Number.isFinite(time) || cockpitDay(time) !== day) continue;
-      const hour = completionHour.format(time);
-      totals.set(hour, (totals.get(hour) ?? 0) + 1);
-      covered++;
-    }
-  }
-  const peak = Math.max(0, ...totals.values());
-  const busiest = [...totals].filter(([, total]) => total === peak).map(([hour]) => hour).sort();
-  return <details className="cockpit-shift" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary>Resumo operacional de hoje</summary>
-    {open && <dl>
-      <div><dt>Concluídos na agenda do dia</dt><dd>{completed.length}</dd></div>
-      <div><dt>Em atendimento há mais de {VISIT_LIMIT} min</dt><dd>{delayed}</dd></div>
-      <div><dt>Horários com mais conclusões</dt><dd>{peak ? busiest.map(hour => hour + 'h').join(', ') + ' · ' + peak + ' por hora' : 'Sem horários registrados'}</dd>
-        <small>{covered} de {completed.length} conclusões com horário registrado hoje.</small></div>
-    </dl>}
+  const [limit, setLimit] = useState(8);
+  // The detailed calculations are intentionally lazy and use the current in-memory snapshot.
+  const input = open ? build() : null;
+  const analysis = input ? cockpitIntelligence(input) : null;
+  const quality = analysis?.quality;
+  const duration = (value: number | null) => value === null ? '—' : value + ' min';
+  return <details className="cockpit-shift cockpit-intelligence" onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary><span><Activity size={16} aria-hidden="true"/> Inteligência operacional <small>· Resumo de hoje</small></span><small>Demanda, produtividade e qualidade</small></summary>
+    {input && analysis && quality && <div className="cockpit-intelligence-body">
+      {stale && <p className="cockpit-intelligence-note" data-warning="true">Dados da última leitura · atualização parcial ou indisponível.</p>}
+      <p className="cockpit-intelligence-note">Indicadores administrativos da agenda do dia. Não representam urgência clínica, capacidade de vagas ou previsão de espera.</p>
+      <dl className="cockpit-intelligence-totals">
+        <div><dt>Concluídos na agenda do dia</dt><dd>{input.completed.length}</dd></div>
+        <div><dt>Em atendimento há mais de {input.visitLimit} min</dt><dd>{analysis.delayed}</dd><small>Conferir duração conforme o serviço.</small></div>
+        <div><dt>Horários com mais conclusões</dt><dd>{analysis.peak ? analysis.busiest.map(h => h + 'h').join(', ') + ' · ' + analysis.peak + ' por hora' : 'Sem horários registrados'}</dd>
+          <small>{analysis.covered} de {input.completed.length} com horário válido hoje.</small></div>
+      </dl>
+      <section aria-label="Demanda por profissão" className="cockpit-intelligence-section">
+        <h3>Demanda e produção por profissão cadastrada</h3>
+        <p>Agrupa pelo cadastro do profissional vinculado, sem inferir especialidade pela sala. A fila inclui apenas registros aptos para consulta; conclusões incluem todos os registros concluídos.</p>
+        <div className="cockpit-intelligence-table-wrap">
+          <table className="cockpit-intelligence-table">
+            <thead><tr><th scope="col">Profissão</th><th scope="col">Aptos</th><th scope="col">Chegada &gt; {input.waitLimit} min</th><th scope="col">Média da chegada</th><th scope="col">Média da classificação</th><th scope="col">Concluídos</th></tr></thead>
+            <tbody>{analysis.professions.slice(0, limit).map(group => <tr key={group.key}>
+              <th scope="row">{group.name}</th><td>{group.waiting}</td>
+              <td data-attention={group.aboveLimit > 0}>{group.aboveLimit}</td>
+              <td>{duration(group.average)}<small>{group.waitingTimed}/{group.waiting} com horário</small></td>
+              <td>{duration(group.averageCleared)}<small>{group.clearedTimed}/{group.waiting} com horário</small></td>
+              <td>{group.completed}</td>
+            </tr>)}</tbody>
+          </table>
+          {!analysis.professions.length && <p className="planta-empty">Sem registros aptos ou concluídos nesta leitura.</p>}
+        </div>
+        {analysis.professions.length > limit && <button type="button" className="planta-action" onClick={() => setLimit(n => n + 8)}>Ver mais profissões ({analysis.professions.length - limit})</button>}
+      </section>
+      <section aria-label="Produtividade por horário" className="cockpit-intelligence-section">
+        <h3>Conclusões por horário</h3>
+        <p>Somente horários válidos registrados na data operacional · {analysis.covered}/{input.completed.length} conclusões.</p>
+        {analysis.hours.length ? <ul className="cockpit-hour-list">{analysis.hours.map(h => <li key={h.hour}>
+          <span>{h.hour}h</span><span className="cockpit-hour-track" aria-hidden="true"><span style={{width: (h.count / analysis.peak * 100) + '%'}}/></span><strong>{h.count}</strong>
+        </li>)}</ul> : <p className="planta-empty">Não há horários suficientes para demonstrar a distribuição.</p>}
+      </section>
+      <section aria-label="Qualidade das informações" className="cockpit-intelligence-section">
+        <h3>Qualidade das informações</h3>
+        <p>Registros a conferir; as categorias podem se sobrepor e não devem ser somadas. Nenhum dado é corrigido automaticamente.</p>
+        <div className="cockpit-quality-grid">
+          {[
+            {label:'Aguardando sem chegada válida', count:quality.missingArrival, total:input.waitingTotal, id:'indicador:espera'},
+            {label:'Aptos sem horário de classificação', count:quality.missingClearance, total:input.ready.length, id:'aguardando-consulta'},
+            {label:'Aptos sem profissão informada', count:quality.missingProfession, total:input.ready.length, id:'aguardando-consulta'},
+            {label:'Em atendimento sem início válido', count:quality.missingStart, total:input.inProgress.length, id:'indicador:salas'},
+            {label:'Em atendimento sem sala ativa vinculada', count:quality.missingRoom, total:input.inProgress.length, id:'sem-sala'},
+            {label:'Concluídos sem horário válido hoje', count:quality.missingCompletion, total:input.completed.length, id:'indicador:concluidos'},
+          ].map(item => <button type="button" className="cockpit-quality-item" key={item.label} data-attention={item.count > 0}
+            onClick={event => onOpen(item.id, event.currentTarget)} aria-haspopup="dialog">
+            <span>{item.label}</span><strong>{item.count}<small>/{item.total}</small></strong><ChevronRight size={14} aria-hidden="true"/>
+          </button>)}
+        </div>
+      </section>
+    </div>}
   </details>;
 }
 
@@ -613,8 +654,14 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
         </div>
       </footer>
     </section>
-    {rows && !theater && <ShiftSummary completed={done} day={day}
-      delayed={active.filter(item => item.stage === 'consultation' && (visitMinutes(item) ?? 0) > VISIT_LIMIT).length} />}
+    {rows && !theater && <ShiftSummary stale={stale} onOpen={openZone} build={() => ({
+      ready: readyQueue.map(({a}) => ({ profession: staff.get(a.profissional_id)?.profissao || '', arrival: a.arrival,
+        clearedAt: recordByAppointment.get(a.id)?.confirmado_em ?? null })),
+      completed: done.map(a => ({ profession: staff.get(a.profissional_id)?.profissao || '', completedAt: a.concluido_em ?? null })),
+      inProgress: active.filter(a => a.stage === 'consultation').map(a => ({ start: a.iniciado_em || starts[a.id] || null,
+        linkedRoom: roomById.has(a.sala_id) })),
+      waitingTotal: waiting.length, waitingTimed: waits.length, day, now, waitLimit: WAIT_LIMIT, visitLimit: VISIT_LIMIT,
+    })}/>}
     {rows && <div className="planta-caption">
       <span>{theater ? 'Modo telão · Sem nomes de pacientes' : 'Selecione um setor para abrir os detalhes.'}</span>
       <span>Salas do cadastro e ocupação pela Agenda · Disposição e mobiliário ilustrativos.</span>
