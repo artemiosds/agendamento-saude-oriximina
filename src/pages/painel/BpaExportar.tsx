@@ -4371,7 +4371,7 @@ ${rejectedHtml}`;
       {results && (
         <div ref={resultsRef} className="scroll-mt-4 space-y-3 min-w-0">
           <p className="text-sm text-muted-foreground">Bloco da exportação: <strong>{generatedBlockLabel.current}</strong></p>
-          {!!results.txtAudit?.length && (
+          {!!results.txtAudit?.length && user?.role?.toLowerCase().trim() === "master" && (
             <Alert variant="destructive">
               <AlertTitle>Linhas não incluídas no TXT ({results.txtAudit.length})</AlertTitle>
               <AlertDescription>

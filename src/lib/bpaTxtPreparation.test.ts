@@ -135,7 +135,9 @@ describe("preparação isolada do TXT BPA-I", () => {
     expect(result.record.municipioIbge).toBe("150040");
     expect(result.record.cep).toBe("68200000");
     expect(result.record.bairro).toBe("ST TEREZINHA");
-    expect(prepareBpaTxtRecord({ ...source, declaredMunicipality: "" }).errors.join(" ")).toContain("Município declarado");
+    const semMunicipio = prepareBpaTxtRecord({ ...source, declaredMunicipality: "" });
+    expect(semMunicipio.errors.join(" ")).not.toContain("Município declarado");
+    expect(semMunicipio.warnings.join(" ")).toContain("Município declarado");
   });
 
   it("gera 21 registros CPF com duas folhas, controle oficial, CRLF e bytes sem BOM", () => {

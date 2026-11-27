@@ -165,8 +165,10 @@ export function prepareBpaTxtRecord(input: BpaTxtPreparationInput) {
   }
 
   record.municipioIbge = input.declaredMunicipality;
+  // Como antes da camada do TXT: município ausente não bloqueia a linha, só gera aviso.
+  const municipalityWarnings: string[] = [];
   if (!/^\d{6}$/.test(input.declaredMunicipality) || /^0+$/.test(input.declaredMunicipality)) {
-    errors.push("Município declarado ausente/inválido; o IBGE não foi substituído pelo CEP.");
+    municipalityWarnings.push("Município declarado ausente/inválido; o IBGE não foi substituído pelo CEP.");
   }
   const address = normalizeBpaTxtAddress({ ...input.address,
     municipality: input.declaredMunicipality, neighborhood: record.bairro, cep: input.rawCep ?? record.cep,
@@ -176,5 +178,5 @@ export function prepareBpaTxtRecord(input: BpaTxtPreparationInput) {
     numero: address.numero, bairro: address.bairro, cep: address.cep,
   });
   adjustments.push(...address.adjustments);
-  return { record, errors: [...new Set(errors)], adjustments, warnings: address.alerts };
+  return { record, errors: [...new Set(errors)], adjustments, warnings: [...municipalityWarnings, ...address.alerts] };
 }
