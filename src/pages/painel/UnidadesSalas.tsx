@@ -336,8 +336,8 @@ const UnidadesSalas: React.FC = () => {
   const selectedMeta=selectedUnit&&configReady?unitMeta.get(selectedUnit.id):undefined;
   const profileRooms=selectedUnit?visibleRooms.filter(r=>r.unidadeId===selectedUnit.id).sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR',{numeric:true,sensitivity:'base'})):[];
   const canPrintProfile=!!selectedUnit&&!!selectedMeta&&!permissionsLoading&&can('unidades_salas','can_view')&&can('unidades_salas','can_execute');
-  const printGuard=useRef({scope:visibleScope,id:selectedUnit?.id,allowed:canPrintProfile});
-  printGuard.current={scope:visibleScope,id:selectedUnit?.id,allowed:canPrintProfile};
+  const printGuard=useRef({scope:visibleScope,id:selectedUnit?.id,allowed:canPrintProfile,staffAllowed:staffReady});
+  printGuard.current={scope:visibleScope,id:selectedUnit?.id,allowed:canPrintProfile,staffAllowed:staffReady};
   const handlePrintProfile=async()=>{
     if(!selectedUnit||!selectedMeta||!canPrintProfile||printBusy.current)return;
     const scope=visibleScope,id=selectedUnit.id;
@@ -346,7 +346,7 @@ const UnidadesSalas: React.FC = () => {
     printBusy.current=true;setPrinting(true);
     try{
       const config=await loadDocumentConfig();
-      if(!printGuard.current.allowed||printGuard.current.id!==id||printGuard.current.scope!==scope)return;
+      if(!printGuard.current.allowed||printGuard.current.id!==id||printGuard.current.scope!==scope||(counts&&!printGuard.current.staffAllowed))return;
       // Shared template uses the logged-in unit logo on the right. Suppress that slot here;
       // the selected unit's own verified HTTPS logo is rendered in the body instead.
       const scopedConfig={...config,linha2:escapeStructureHtml(selectedUnit.nome),linha3:'',linha4:'',rodapeEndereco:escapeStructureHtml(selectedUnit.endereco||''),logosConfig:{...config.logosConfig,direita:{...config.logosConfig.direita,ativo:false}}};
