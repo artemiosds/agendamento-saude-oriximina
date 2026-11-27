@@ -342,6 +342,51 @@ export type Database = {
           },
         ]
       }
+      alta_recovery_drafts: {
+        Row: {
+          atualizado_em: string
+          auth_user_id: string
+          base_hash: string
+          base_updated_at: string | null
+          changes: Json
+          expira_em: string
+          id: string
+          modo: string
+          paciente_id: string
+          profissional_id: string
+          report_id: string | null
+          unidade_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          auth_user_id?: string
+          base_hash: string
+          base_updated_at?: string | null
+          changes: Json
+          expira_em?: string
+          id?: string
+          modo: string
+          paciente_id: string
+          profissional_id: string
+          report_id?: string | null
+          unidade_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          auth_user_id?: string
+          base_hash?: string
+          base_updated_at?: string | null
+          changes?: Json
+          expira_em?: string
+          id?: string
+          modo?: string
+          paciente_id?: string
+          profissional_id?: string
+          report_id?: string | null
+          unidade_id?: string
+        }
+        Relationships: []
+      }
       atendimentos: {
         Row: {
           agendamento_id: string
@@ -4478,6 +4523,10 @@ export type Database = {
         }
         Returns: Json
       }
+      alta_recovery_scope_allowed: {
+        Args: { p_auth: string; p_prof: string; p_unit: string }
+        Returns: boolean
+      }
       apply_profession_careness_for_discharge: {
         Args: { p_discharge_id: string; p_force?: boolean }
         Returns: Json
@@ -4659,6 +4708,10 @@ export type Database = {
           p_user_id?: string
           p_user_nome?: string
         }
+        Returns: undefined
+      }
+      encerrar_escala_personalizada: {
+        Args: { p_id: string; p_primeiro_dia_sem_escala: string }
         Returns: undefined
       }
       enqueue_whatsapp_message: {
@@ -5072,6 +5125,16 @@ export type Database = {
           p_unidade: string
         }
         Returns: number
+      }
+      salvar_estrutura_unidade: {
+        Args: {
+          p_action: string
+          p_data: Json
+          p_expected: Json
+          p_id: string
+          p_unit: string
+        }
+        Returns: string
       }
       salvar_rascunho_triagem_atendimento: {
         Args: {
