@@ -29,6 +29,7 @@ import type { TurnoDefinition } from '@/components/config/ConfigFluxoAtendimento
 import { UnitScopeNavigator } from '@/components/operacional/UnitScopeNavigator';
 import { saveAvailabilityGroup, type AvailabilitySlot } from '@/services/availabilityGroupService';
 import { useOperationalUnitScope } from '@/hooks/useOperationalUnitScope';
+import { WEEKDAY_PRESETS, selectDraftDays, copyDraftDays, renewalDateAllowed, nominalWeek } from '@/lib/availabilityDraft';
 
 const diasSemanaLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const diasSemanaFull = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -109,6 +110,10 @@ const Disponibilidade: React.FC = () => {
   const { disponibilidades, funcionarios, unidades, salas, refreshFuncionarios, refreshDisponibilidades } = useOperacional();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editGroupIds, setEditGroupIds] = useState<string[]>([]);
+  const [renewal,setRenewal]=useState<{key:string;profissionalId:string;unidadeId:string;end:string;signature:string}|null>(null);
+  const [copySource,setCopySource]=useState<number|null>(null);
+  const [copyTargets,setCopyTargets]=useState<number[]>([]);
+  useEffect(()=>{if(!dialogOpen){setRenewal(null);setCopySource(null);setCopyTargets([]);}},[dialogOpen]);
   const [saving, setSaving] = useState(false);
   const [quotaReservation, setQuotaReservation] = useState<number | null>(null);
   const [quotaLoading, setQuotaLoading] = useState(false);
@@ -243,6 +248,7 @@ const Disponibilidade: React.FC = () => {
 
   const openNew = () => {
     if(!configLoaded||!may('can_create')||gradeWriteInFlight.current)return;
+    setRenewal(null);setCopySource(null);setCopyTargets([]);
     setEditGroupIds([]);
     setForm({ profissionalId: '', unidadeId: isGlobalAdmin && unitId !== 'all' ? unitId : '', salaId: '', dataInicio: '', dataFim: '', vagasPorHora: 3, vagasPorDia: 25, duracaoConsulta: 30, intervalo: 0 });
     setDaySchedules(defaultDaySchedules.map(d => ({ ...d })));
@@ -257,24 +263,28 @@ const Disponibilidade: React.FC = () => {
     setDialogOpen(true);
   };
 
-  const openEditGroup = (groupKey: string) => {
+  const openEditGroup = (groupKey: string,renew=false) => {
     const records = groups.get(groupKey);
     if (!records || records.length === 0) return;
     const first = records[0];
-    if(!configLoaded||!may('can_edit',first.unidadeId)||gradeWriteInFlight.current||first.dataFim<todayStr)return;
+    if(!configLoaded||!may(renew?'can_create':'can_edit',first.unidadeId)||gradeWriteInFlight.current||(!renew&&first.dataFim<todayStr))return;
+    if(renew&&(!directoryReady||gradePeriod(first.dataInicio,first.dataFim,todayStr)==='invalido'||!unidadesVisiveis.some(u=>u.id===first.unidadeId&&u.ativo))){toast.error('Não foi possível confirmar a origem da renovação.');return;}
     if(!profissionais.some(p=>p.id===first.profissionalId)){toast.error('Profissional ativo não localizado. Preserve a grade e confira o cadastro.');return;}
     const mixed=records.some(r=>r.vagasPorHora===0)&&records.some(r=>r.vagasPorHora!==0);
     const seenDays=new Set<number>();
     const incompatible=records.some(r=>!Array.isArray(r.diasSemana)||r.diasSemana.length===0||r.diasSemana.some(d=>!Number.isInteger(d)||d<0||d>6))||(!isGroupTurno(records)&&records.some(r=>r.salaId!==first.salaId||r.vagasPorHora!==first.vagasPorHora||r.vagasPorDia!==first.vagasPorDia||r.duracaoConsulta!==first.duracaoConsulta||r.diasSemana.some(d=>{if(seenDays.has(d))return true;seenDays.add(d);return false;})));
     if(mixed||incompatible){toast.error('Esta configuração não pode ser reconstruída com segurança pelo formulário atual. Nenhum horário foi alterado.');return;}
-    setEditGroupIds(records.map(r => r.id));
+    if(renew&&!isGroupTurno(records)&&first.salaId&&!salas.some(s=>s.id===first.salaId&&s.unidadeId===first.unidadeId&&s.ativo)){toast.error('A sala anterior não está ativa. Configure um novo período manualmente.');return;}
+    setRenewal(renew?{key:groupKey,profissionalId:first.profissionalId,unidadeId:first.unidadeId,end:first.dataFim,signature:JSON.stringify([...records].sort((a,b)=>a.id.localeCompare(b.id)))}:null);
+    setCopySource(null);setCopyTargets([]);
+    setEditGroupIds(renew?[]:records.map(r => r.id));
 
     const profModo = modosPorProfissional[first.profissionalId] || 'por_hora';
     const isTurno = isGroupTurno(records);
 
     setForm({
       profissionalId: first.profissionalId, unidadeId: first.unidadeId, salaId: first.salaId || '',
-      dataInicio: first.dataInicio, dataFim: first.dataFim,
+      dataInicio: renew?'':first.dataInicio, dataFim: renew?'':first.dataFim,
       vagasPorHora: first.vagasPorHora, vagasPorDia: first.vagasPorDia,
       duracaoConsulta: first.duracaoConsulta || 30, intervalo: 0,
     });
@@ -298,7 +308,7 @@ const Disponibilidade: React.FC = () => {
           if (dayNum >= 0 && dayNum <= 6) {
             newConfigDias[dayNum].ativo = true;
             newConfigDias[dayNum].blocos.push({
-              id: r.id,
+              id: renew?undefined:r.id,
               sourceSalaId:turnoId,
               sourceNome:turnoObj?.nome||turnoId||'Turno',
               nome: turnoObj?.nome || turnoId || 'Turno',
@@ -342,6 +352,7 @@ const Disponibilidade: React.FC = () => {
   };
 
   const handleModoChange = (newModo: ModoDisponibilidade) => {
+    setCopySource(null);setCopyTargets([]);
     setModo(newModo);
     // Initialize turno vagas with defaults
     if (newModo === 'por_turno') {
@@ -378,7 +389,8 @@ const Disponibilidade: React.FC = () => {
 
   const dayErrors = getDayErrors();
   const hasDateError = form.dataInicio && form.dataFim && form.dataFim < form.dataInicio;
-  const canSave = configLoaded&&may(isEditing?'can_edit':'can_create',form.unidadeId)&&activeDaysCount > 0 && !hasDateError && Object.keys(dayErrors).length === 0 && !saving && form.profissionalId && form.unidadeId && form.dataInicio && form.dataFim;
+  const renewalValid=!renewal||(!isEditing&&form.profissionalId===renewal.profissionalId&&form.unidadeId===renewal.unidadeId&&renewalDateAllowed(form.dataInicio,form.dataFim,renewal.end,todayStr));
+  const canSave = renewalValid&&configLoaded&&may(isEditing?'can_edit':'can_create',form.unidadeId)&&activeDaysCount > 0 && !hasDateError && Object.keys(dayErrors).length === 0 && !saving && form.profissionalId && form.unidadeId && form.dataInicio && form.dataFim;
 
   const checkOverlap = (): string | null => {
     for (const [key, records] of groups.entries()) {
@@ -432,6 +444,7 @@ const Disponibilidade: React.FC = () => {
   const handleSave = async () => {
     if(!configLoaded||!may(isEditing?'can_edit':'can_create',form.unidadeId)||gradeWriteInFlight.current)return;
     if(!profissionais.some(p=>p.id===form.profissionalId)||!unidadesVisiveis.some(u=>u.id===form.unidadeId&&u.ativo)){toast.error('Confirme profissional ativo e unidade autorizada.');return;}
+    if(renewal){const source=groups.get(renewal.key);if(!renewalValid||!source||JSON.stringify([...source].sort((a,b)=>a.id.localeCompare(b.id)))!==renewal.signature){toast.error('Confira o novo período ou reabra a renovação: a origem pode ter mudado. Nenhuma grade foi gravada.');return;}}
     if (!form.profissionalId || !form.unidadeId || !form.dataInicio || !form.dataFim) {
       toast.error('Preencha todos os campos obrigatórios.');
       return;
@@ -477,7 +490,7 @@ const Disponibilidade: React.FC = () => {
     const overlapMsg = checkOverlap();
     if (overlapMsg) { toast.error(overlapMsg); return; }
 
-    const message = isEditing ? 'Disponibilidade atualizada!'
+    const message = renewal ? 'Novo período criado. Grade anterior preservada!' : isEditing ? 'Disponibilidade atualizada!'
       : modo === 'por_hora' ? `${slots.length} registro(s) criado(s)!` : 'Disponibilidade por turno salva!';
     if (await persistGrade(editGroupIds, form, slots, message)) setDialogOpen(false);
   };
@@ -545,21 +558,29 @@ const Disponibilidade: React.FC = () => {
     }));
   };
 
-  const copyDayConfig = (fromIndex: number) => {
-    const sourceDay = configDias[fromIndex];
-    if (!sourceDay.ativo) return;
-    
-    // For simplicity, copy to ALL other active days or provide a selection? 
-    // Here we'll show a toast or just apply to next.
-    // User requested: "copy from one day to another", "apply to several days"
-    // We'll implement a simple "Apply to all other active days" or just copy to next.
-    // Let's implement "Copy to all other active days" for now.
-    setConfigDias(prev => prev.map((pd, i) => {
-      if (i === fromIndex || !pd.ativo) return pd;
-      return { ...pd, blocos: sourceDay.blocos.map(b => ({ ...b, id: undefined })) };
-    }));
-    toast.success(`Configuração de ${diasSemanaFull[fromIndex]} copiada para os demais dias ativos.`);
+  // Draft shortcuts do not call the database. Disabled days keep their draft values.
+  const draftDays=modo==='por_hora'?daySchedules:configDias;
+  const applyDayPreset=(days:readonly number[])=>{
+    if(saving||gradeWriteInFlight.current)return;
+    setCopySource(null);setCopyTargets([]);
+    if(modo==='por_hora')setDaySchedules(prev=>selectDraftDays(prev,days,day=>({...day,ativo:true})));
+    else setConfigDias(prev=>selectDraftDays(prev,days,day=>({...day,ativo:true,blocos:day.blocos.length?day.blocos:activeTurnos.map(t=>({nome:t.nome,tipo:'padrao' as const,horaInicio:t.horaInicio,horaFim:t.horaFim,vagas:20,ativo:true}))})));
   };
+  const copyDayConfig=(fromIndex:number)=>{
+    if(saving||!draftDays[fromIndex]?.ativo)return;
+    if(modo==='por_turno'&&!configDias[fromIndex].blocos.some(b=>b.ativo)){toast.error('Configure pelo menos um bloco no dia de origem.');return;}
+    setCopySource(fromIndex);setCopyTargets([]);
+  };
+  const applyCopy=()=>{
+    if(saving||gradeWriteInFlight.current||copySource===null||!draftDays[copySource]?.ativo||!copyTargets.length)return;
+    if(modo==='por_turno'&&!configDias[copySource].blocos.some(b=>b.ativo))return;
+    if(!window.confirm('Copiar a configuração para os dias selecionados? Os horários desses dias serão substituídos somente neste formulário, sem gravar no banco.'))return;
+    if(modo==='por_hora')setDaySchedules(prev=>copyDraftDays(prev,copySource,copyTargets,(from,to)=>({...to,...from,ativo:true})));
+    else setConfigDias(prev=>copyDraftDays(prev,copySource,copyTargets,(from,to)=>({...to,ativo:true,blocos:from.blocos.map(b=>({...b,id:undefined}))})));
+    setCopySource(null);setCopyTargets([]);toast.success('Configuração copiada no formulário. Confira antes de salvar.');
+  };
+  const draftSummary=nominalWeek(modo,daySchedules,configDias,form.vagasPorDia);
+  const draftOverlap=dialogOpen&&form.profissionalId&&form.unidadeId&&form.dataInicio&&form.dataFim&&!hasDateError?checkOverlap():null;
 
   const filteredSalas = salas.filter(s => s.unidadeId === form.unidadeId && s.ativo);
 
@@ -600,6 +621,7 @@ const Disponibilidade: React.FC = () => {
     if(!configLoaded||!may('can_create')||gradeWriteInFlight.current)return;
     const prof = profissionais.find(p => p.id === profId);
     if(!prof)return;
+    setRenewal(null);setCopySource(null);setCopyTargets([]);
     setEditGroupIds([]);
     setForm({
       profissionalId: profId,
@@ -682,15 +704,16 @@ const Disponibilidade: React.FC = () => {
       <Dialog open={dialogOpen} onOpenChange={v => { if (!gradeWriteInFlight.current) setDialogOpen(v); }}>
         <DialogContent className="w-[calc(100vw-1rem)] max-w-4xl gap-3 max-h-[90dvh] overflow-y-auto">
           <DialogHeader className="clinical-hub-hero text-left pr-9">
-            <div className="flex gap-3 items-start"><span className="clinical-patient-avatar flex items-center justify-center shrink-0"><Settings2 className="w-5 h-5" aria-hidden="true"/></span><div className="min-w-0"><p className="clinical-hub-eyebrow">Gestão de horários</p><DialogTitle className="clinical-hub-name font-display">{isEditing ? 'Editar' : 'Configurar'} Disponibilidade</DialogTitle><p className="clinical-patient-sub text-xs mt-1">Grade de atendimento profissional · {isEditing?'Edição de período':'Novo período'}</p></div></div>
+            <div className="flex gap-3 items-start"><span className="clinical-patient-avatar flex items-center justify-center shrink-0"><Settings2 className="w-5 h-5" aria-hidden="true"/></span><div className="min-w-0"><p className="clinical-hub-eyebrow">Gestão de horários</p><DialogTitle className="clinical-hub-name font-display">{renewal?'Renovar':isEditing ? 'Editar' : 'Configurar'} Disponibilidade</DialogTitle><p className="clinical-patient-sub text-xs mt-1">Grade de atendimento profissional · {renewal?'Novo período a partir de uma grade anterior':isEditing?'Edição de período':'Novo período'}</p></div></div>
           </DialogHeader>
+          {renewal&&<div className="clinical-inset border rounded-lg p-3 text-sm"><strong className="block">Renovação sem alterar histórico</strong><p className="text-xs text-muted-foreground">Grade de origem termina em {renewal.end.split('-').reverse().join('/')}. Informe um novo período posterior à origem e não anterior a hoje. Profissional e unidade permanecem os mesmos. Horários e vagas são uma cópia editável; cotas e agendamentos não são copiados.</p></div>}
           {isEditing&&<p className="text-xs text-muted-foreground">Períodos encerrados são protegidos. Alterações em grade vigente devem ser conferidas antes de salvar; nenhum agendamento será remarcado automaticamente.</p>
           <div className="space-y-4">
             {/* Profissional + Unidade */}
             <section className="clinical-premium p-3 space-y-3 min-w-0"><h3 className="triage-section-title"><User className="w-4 h-4"/>Identificação profissional</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div><Label>Profissional *</Label>
-                <Select value={form.profissionalId} onValueChange={handleProfissionalChange}>
+                <Select disabled={!!renewal||saving} value={form.profissionalId} onValueChange={handleProfissionalChange}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     {profissionais.length === 0 ? (
@@ -702,7 +725,7 @@ const Disponibilidade: React.FC = () => {
                 </Select>
               </div>
               <div><Label>Unidade *</Label>
-                <Select value={form.unidadeId} onValueChange={v => setForm(p => ({ ...p, unidadeId: v, salaId: '' }))}>
+                <Select disabled={!!renewal||saving} value={form.unidadeId} onValueChange={v => setForm(p => ({ ...p, unidadeId: v, salaId: '' }))}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>{unidadesVisiveis.filter(u => u.ativo).map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
                 </Select>
@@ -770,6 +793,14 @@ const Disponibilidade: React.FC = () => {
               <p className="mt-1 text-xs text-muted-foreground">A reserva é a soma das cotas ativas vinculadas a este profissional e unidade. Pode variar por data e turno; ajuste as cotas em Funcionários → Profissionais Externos.</p>
             </section>
 
+            <section className="clinical-premium p-3 space-y-2">
+              <h3 className="triage-section-title"><Calendar className="w-4 h-4"/>Seleção rápida dos dias</h3>
+              <div className="flex flex-wrap gap-1.5">{([['Segunda a sexta',WEEKDAY_PRESETS.uteis],['Fim de semana',WEEKDAY_PRESETS.fim_semana],['Todos os dias',WEEKDAY_PRESETS.todos],['Desmarcar todos',WEEKDAY_PRESETS.nenhum]] as const).map(([label,days])=><Button key={label} type="button" size="sm" variant="outline" disabled={saving} onClick={()=>applyDayPreset(days)}>{label}</Button>)}</div>
+              <div className="grid grid-cols-7 gap-1">{draftDays.map((d,index)=><div key={index} className={cn("rounded-md border p-1 text-center text-xs",d.ativo?'bg-primary/10 text-primary font-semibold':'text-muted-foreground')}>{diasSemanaLabels[index]}<span className="block text-[10px]">{d.ativo?'Ativo':'—'}</span></div>)}</div>
+              <p className="text-xs text-muted-foreground">Os atalhos alteram somente o rascunho. Os dias desmarcados não serão gravados.</p>
+              <div className="flex flex-wrap gap-2 items-center border-t pt-2"><Label>Copiar configuração de um dia</Label><Select value={copySource===null?'none':String(copySource)} onValueChange={v=>{if(v==='none'){setCopySource(null);setCopyTargets([]);}else copyDayConfig(Number(v));}} disabled={saving}><SelectTrigger className="w-full sm:w-44" aria-label="Dia de origem da cópia"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="none">Escolher dia</SelectItem>{draftDays.map((d,index)=><SelectItem key={index} value={String(index)} disabled={!d.ativo||(modo==='por_turno'&&!configDias[index].blocos.some(b=>b.ativo))}>{diasSemanaFull[index]}</SelectItem>)}</SelectContent></Select></div>
+              {copySource!==null&&<div className="clinical-inset rounded-lg border p-2 space-y-2"><p className="text-xs font-medium">Destino da cópia de {diasSemanaFull[copySource]}</p><div className="flex flex-wrap gap-1.5">{draftDays.map((_,index)=>index!==copySource&&<Button key={index} type="button" size="sm" variant={copyTargets.includes(index)?'default':'outline'} aria-pressed={copyTargets.includes(index)} disabled={saving} onClick={()=>setCopyTargets(prev=>prev.includes(index)?prev.filter(i=>i!==index):[...prev,index])}>{diasSemanaLabels[index]}</Button>)}</div><div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" onClick={()=>setCopyTargets(draftDays.flatMap((d,index)=>d.ativo&&index!==copySource?[index]:[]))}>Demais ativos</Button><Button type="button" size="sm" disabled={saving||!copyTargets.length||!draftDays[copySource]?.ativo} onClick={applyCopy}><Copy className="w-3.5 h-3.5 mr-1"/>Aplicar em {copyTargets.length} dia(s)</Button><Button type="button" size="sm" variant="ghost" onClick={()=>{setCopySource(null);setCopyTargets([]);}}>Cancelar cópia</Button></div><p className="text-xs text-muted-foreground">A cópia ativa os destinos selecionados e substitui seus horários/blocos no formulário.</p></div>}
+            </section>
             {/* === POR HORA mode === */}
             {modo === 'por_hora' && (
               <section className="clinical-premium p-3 space-y-3 min-w-0">
@@ -1032,9 +1063,17 @@ const Disponibilidade: React.FC = () => {
               </section>
             )}
 
+            <section className="clinical-premium p-3 space-y-2"><h3 className="triage-section-title"><ClipboardList className="w-4 h-4"/>Conferência antes de salvar</h3>
+              <div className="grid grid-cols-3 gap-2">{[[draftSummary.days.length,'Dias com horários'],[draftSummary.blocks,'Registros previstos'],[draftSummary.nominal,'Vagas nominais/semana']].map(([value,label])=><div key={label} className="clinical-inset rounded-md border p-2 min-w-0"><strong className="block text-lg tabular-nums">{value}</strong><span className="text-xs text-muted-foreground break-words">{label}</span></div>)}</div>
+              {draftSummary.days.map(d=><div key={d.day} className="flex flex-wrap gap-x-2 gap-y-1 border-t pt-1.5 text-xs"><strong className="w-20">{diasSemanaFull[d.day]}</strong><span className="flex-1 min-w-[8rem] break-words">{d.blocks.map(b=>b.nome+' · '+b.inicio+'–'+b.fim+' · '+b.vagas+' vagas').join(' / ')}</span></div>)}
+              <p className="text-xs text-muted-foreground">Capacidade nominal de uma semana configurada, sem descontar bloqueios, feriados, cotas ou agendamentos. Não representa vagas disponíveis.</p>
+              {draftOverlap&&<p role="alert" className="text-xs text-destructive">{draftOverlap}</p>}
+              {renewal&&form.dataInicio&&form.dataFim&&!renewalValid&&<p role="alert" className="text-xs text-destructive">Novo período deve começar após o término da grade de origem, a partir de hoje, e terminar na mesma data ou depois.</p>}
+              {!activeDaysCount&&<p className="text-xs text-muted-foreground">Configure pelo menos um dia com horários.</p>}
+            </section>
             <div className="clinical-premium p-3 space-y-2"><p className="text-xs text-muted-foreground flex gap-1.5 items-start"><ShieldCheck className="w-4 h-4 text-primary shrink-0"/>A configuração só é gravada após a confirmação do servidor.</p>
             <Button onClick={handleSave} disabled={!canSave} className="w-full gradient-primary text-primary-foreground">
-              {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Salvando...</> : isEditing ? 'Atualizar Disponibilidade' : 'Salvar Disponibilidade'}
+              {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Salvando...</> : renewal?'Criar novo período':isEditing ? 'Atualizar Disponibilidade' : 'Salvar Disponibilidade'}
             </Button></div>
           </div>
         </DialogContent>
@@ -1106,6 +1145,7 @@ const Disponibilidade: React.FC = () => {
                               {unidade && <><span className="h-5 w-px bg-border" /><span className="text-xs text-muted-foreground break-words">{unidade.nome}</span></>}
                             </div>
                             <div className="flex gap-1 shrink-0">
+                              <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" disabled={!configLoaded||!may('can_create',first.unidadeId)||saving||period==='invalido'||!profissionais.some(p=>p.id===first.profissionalId)} onClick={()=>openEditGroup(key,true)}><Copy className="w-3.5 h-3.5"/>Renovar</Button>
                               <Button size="icon" variant="ghost" className="h-8 w-8" title="Editar" disabled={!configLoaded||!may('can_edit',first.unidadeId)||saving||first.dataFim<todayStr||!profissionais.some(p=>p.id===first.profissionalId)} onClick={() => openEditGroup(key)}><Pencil className="w-4 h-4" /></Button>
                               <AlertDialog>
                                 <AlertDialogTrigger asChild><Button size="icon" variant="ghost" disabled={!may('can_delete',first.unidadeId)||saving||first.dataInicio<=todayStr} className="h-8 w-8 text-destructive" title="Excluir"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
@@ -1164,6 +1204,7 @@ const Disponibilidade: React.FC = () => {
                               <p className="text-xs text-muted-foreground"><Calendar className="w-3.5 h-3.5 inline mr-1" />{first.dataInicio} a {first.dataFim}</p>
                             </div>
                             <div className="flex gap-1">
+                              <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" disabled={!configLoaded||!may('can_create',first.unidadeId)||saving||period==='invalido'||!profissionais.some(p=>p.id===first.profissionalId)} onClick={()=>openEditGroup(key,true)}><Copy className="w-3.5 h-3.5"/>Renovar</Button>
                               <Button size="icon" variant="ghost" className="h-8 w-8" disabled={!configLoaded||!may('can_edit',first.unidadeId)||saving||first.dataFim<todayStr||!profissionais.some(p=>p.id===first.profissionalId)} onClick={() => openEditGroup(key)}><Pencil className="w-3.5 h-3.5" /></Button>
                               <AlertDialog>
                                 <AlertDialogTrigger asChild><Button size="icon" variant="ghost" disabled={!may('can_delete',first.unidadeId)||saving||first.dataInicio<=todayStr} className="h-8 w-8 text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button></AlertDialogTrigger>
