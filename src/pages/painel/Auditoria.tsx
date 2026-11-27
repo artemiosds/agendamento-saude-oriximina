@@ -23,6 +23,8 @@ import { openPrintDocument } from '@/lib/printLayout';
 import { auditService } from '@/services/auditService';
 import { getAuditActorLabel } from '@/lib/auditActor';
 import AuditOverview from '@/components/audit/AuditOverview';
+import AuditRelatedTimeline from '@/components/audit/AuditRelatedTimeline';
+import {auditComparisons,type AuditValue} from '@/lib/auditInvestigation';
 import { auditDateBounds, auditModuleDistribution, AUDIT_FAILURE_STATUSES, AUDIT_CLASSIFIED_STATUSES } from '@/lib/auditOverview';
 import { auditScope, auditDeviceLabel, auditCsvCell, auditEscapeHtml, auditSafeText, isAuditSecret, redactAuditData, maskAuditIdentifier } from '@/lib/auditSecurity';
 import { AUDIT_PAGE_SIZE, AUDIT_LOOKUP_LIMIT, AUDIT_RELATED_LIMIT, auditSearchTerm, auditLike, auditQuote, auditCpfVariants, auditActorCpfSearch, auditRelatedSearch, auditTextSearch, auditEntityRef, auditPageRange, auditLastPage, AuditReadCache, type AuditEntityKind } from '@/lib/auditDirectory';
@@ -318,7 +320,7 @@ const generateHumanSummary = (log: EnrichedLog) => {
   const data = format(new Date(log.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
   const unidade = log.unidade_nome || 'unidade não identificada';
 
-  if (log.tipo_evento === 'login') return `${user} realizou login no sistema em ${data}.`;
+  if (log.tipo_evento === 'login') return log.status==='sucesso' ? `${user} realizou login no sistema em ${data}.` : `${user} teve um evento de autenticação registrado (${log.status || 'status não informado'}) em ${data}.`;
   
   const entityType = log.entidade === 'paciente' ? 'o cadastro do paciente' : 
                      log.entidade === 'agendamento' ? 'o agendamento de' : 
@@ -391,7 +393,8 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
     if (!active.current) throw Error('A sessão ou abrangência foi alterada.');
   };
   const [selectedLog, setSelectedLog] = useState<EnrichedLog | null>(null);
-  const [detailState,setDetailState] = useState<{id:string;error:string}|null>(null);
+  const [detailState,setDetailState] = useState<{id:string;error:string;full?:boolean}|null>(null);
+  const [showAllChanges,setShowAllChanges]=useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState<any[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
@@ -435,7 +438,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
   useEffect(()=>{
     if(!detailId) return;
     const controller=new AbortController();
-    setDetailState(null);
+    setDetailState(null); setShowAllChanges(false);
     void(async()=>{
       try {
         const {data,error}=await supabase.from('action_logs').select('*').eq('id',detailId).match(unitFilter).abortSignal(controller.signal).maybeSingle();
@@ -448,7 +451,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
           const enriched=await readEntity(full,controller.signal);
           if(!controller.signal.aborted&&active.current) setSelectedLog(previous=>previous?.id===detailId?enriched:previous);
         } catch {warning='Cadastro atual não confirmado; os dados registrados no evento foram preservados.';}
-        if(!controller.signal.aborted&&active.current)setDetailState({id:detailId,error:warning});
+        if(!controller.signal.aborted&&active.current)setDetailState({id:detailId,error:warning,full:true});
       } catch {if(!controller.signal.aborted&&active.current)setDetailState({id:detailId,error:'Não foi possível consultar o evento completo. Abra novamente para tentar.'});}
     })();
     return()=>controller.abort();
@@ -570,6 +573,9 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
   },[queryKey,page,filterDateFrom,filterDateTo,filterUser,filterRole,filterModulo,filterAcao,filterStatus,filterUnidade,filterCpf,filterEventoGrupo,search,unitId,unitFilter,enrichPage]);
 
   const totalPages=Math.ceil(totalCount/ITEMS_PER_PAGE);
+  const comparisons=useMemo(()=>selectedLog?auditComparisons(selectedLog):[],[selectedLog]);
+  const comparisonValue=(field:string,v:AuditValue)=>!v.present?'Não registrado':v.value===null?'Nulo registrado':v.value===''?'Vazio registrado':typeof v.value==='boolean'?(v.value?'Verdadeiro':'Falso'):formatAuditValue(field,v.value);
+  const detailConfirmed=!!selectedLog&&detailState?.id===selectedLog.id&&detailState.full===true;
 
   const clearFilters = () => {
     setFilterDateFrom(''); setFilterDateTo(''); setFilterUser(''); setFilterRole('');
@@ -1140,7 +1146,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
 
       {/* Detail Side Panel */}
       <Sheet open={!!selectedLog} onOpenChange={open=>{if(!open){setSelectedLog(null);setDetailState(null);}}}>
-        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-4 sm:p-6">
           <SheetHeader className="border-b pb-4">
             <div className="flex items-center gap-2">
               <div className="p-2 bg-primary/10 rounded-lg text-primary">
@@ -1148,7 +1154,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
               </div>
               <div>
                 <SheetTitle className="text-xl">Detalhes da Auditoria</SheetTitle>
-                <p className="text-xs text-muted-foreground font-mono">{selectedLog?.id}</p>
+                <p className="text-xs text-muted-foreground font-mono break-all">{selectedLog?.id}</p>
               </div>
             </div>
           </SheetHeader>
@@ -1165,7 +1171,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                 <div className="grid grid-cols-1 gap-4 bg-muted/30 p-4 rounded-xl border">
                   <div>
                     <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Ação Realizada</p>
-                    <p className="text-sm font-semibold leading-tight text-foreground">{formatAuditAction(selectedLog.acao)}</p>
+                    <p className="text-base font-semibold leading-tight text-foreground break-words">{selectedLog.acao_legivel || formatAuditAction(selectedLog.acao)}</p>
                     <p className="text-xs text-muted-foreground mt-2 italic">
                       {generateHumanSummary(selectedLog)}
                     </p>
@@ -1187,7 +1193,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                     </div>
                     <div>
                       <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Tipo de Evento</p>
-                      <Badge variant="outline" className="text-[10px] font-bold uppercase">{selectedLog.tipo_evento || 'Sistema'}</Badge>
+                      <Badge variant="outline" className="text-[10px] font-bold uppercase">{selectedLog.tipo_evento || 'Não informado'}</Badge>
                     </div>
                   </div>
                 </div>
@@ -1217,7 +1223,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                     </div>
                     <div>
                       <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Unidade</p>
-                      <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos?.unidade || 'Não informada'}</p>
+                      <p className="text-xs font-medium">{selectedLog.unidade_nome || selectedLog.unidade_id || 'Não informada'}</p>
                     </div>
                   </div>
                 </div>
@@ -1266,107 +1272,27 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
 
 
               {/* 4. ALTERAÇÕES REALIZADAS */}
-              {(selectedLog.before || selectedLog.after || selectedLog.changes || selectedLog.detalhes?.old_value || selectedLog.detalhes?.new_value || selectedLog.detalhes?.campos_alterados || selectedLog.detalhes?.old_data || selectedLog.detalhes?.new_data) && (
-                <section className="space-y-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                    <History className="w-4 h-4" />
-                    ALTERAÇÕES REALIZADAS
-                  </div>
-                  <div className="space-y-2">
-                    {/* Render changes (new structure or legacy in details) */}
-                    {(() => {
-                      const changes = selectedLog.changes || 
-                                     selectedLog.detalhes?.changes || 
-                                     selectedLog.detalhes?.alteracoes;
-                      
-                      if (changes && Object.entries(changes).length > 0) {
-                        return (
-                          <div className="space-y-2">
-                            {Object.entries(changes).map(([key, vals]: [string, any]) => (
-                              <div key={key} className="bg-muted/50 rounded-xl p-3 border">
-                                <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{formatAuditFieldLabel(key)}</p>
-                                <div className="grid grid-cols-1 gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
-                                    <span className="text-xs text-muted-foreground line-through">{formatAuditValue(key, vals?.from ?? vals?.before ?? vals?.anterior ?? vals?.old)}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
-                                    <span className="text-xs font-medium text-foreground">{formatAuditValue(key, vals?.to ?? vals?.after ?? vals?.novo ?? vals?.new)}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      }
-
-                      // Check for before/after pairs
-                      const before = selectedLog.before || selectedLog.detalhes?.old_value || selectedLog.detalhes?.before || selectedLog.detalhes?.old_data;
-                      const after = selectedLog.after || selectedLog.detalhes?.new_value || selectedLog.detalhes?.after || selectedLog.detalhes?.new_data;
-
-                      if (before && after) {
-                        const allKeys = new Set([...Object.keys(before), ...Object.keys(after)]);
-                        const entries = Array.from(allKeys).filter(k => {
-                          if (['id', 'created_at', 'updated_at', 'unidade_id', 'user_id', 'custom_data'].includes(k)) return false;
-                          return JSON.stringify(before[k]) !== JSON.stringify(after[k]);
-                        });
-
-                        if (entries.length > 0) {
-                          return (
-                            <div className="space-y-2">
-                              {entries.map(key => (
-                                <div key={key} className="bg-muted/50 rounded-xl p-3 border">
-                                  <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{formatAuditFieldLabel(key)}</p>
-                                  <div className="grid grid-cols-1 gap-2">
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
-                                      <span className="text-xs text-muted-foreground line-through">{formatAuditValue(key, before[key])}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
-                                      <span className="text-xs font-medium text-foreground">{formatAuditValue(key, after[key])}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          );
-                        }
-                      }
-
-                      // Check for fields explicitly mapped in legacy format
-                      if (selectedLog.detalhes?.campos_alterados) {
-                        return (
-                          <div className="space-y-2">
-                            {Object.entries(selectedLog.detalhes.campos_alterados).map(([campo, vals]: [string, any]) => (
-                              <div key={campo} className="bg-muted/50 rounded-xl p-3 border">
-                                <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{campo}</p>
-                                <div className="grid grid-cols-1 gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
-                                    <span className="text-xs text-muted-foreground">{formatAuditValue(campo, vals?.anterior ?? vals?.old)}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
-                                    <span className="text-xs font-medium text-foreground">{formatAuditValue(campo, vals?.novo ?? vals?.new)}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <p className="text-xs text-muted-foreground italic p-4 bg-muted/20 rounded-lg border border-dashed text-center">
-                          Este log não possui comparação antes/depois registrada.
-                        </p>
-                      );
-                    })()}
-                  </div>
-                </section>
-              )}
+              <section className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-primary"><History className="w-4 h-4"/>ALTERAÇÕES REGISTRADAS</h3>
+                  {detailConfirmed&&<Badge variant="outline">{comparisons.length} campos</Badge>}
+                </div>
+                {!detailConfirmed?<p className="text-xs text-muted-foreground">A comparação depende da confirmação do evento completo.</p>:comparisons.length===0?
+                  <p className="text-xs text-muted-foreground p-3 rounded-lg border border-dashed">Não há comparação de valores disponível no evento. Isso não comprova que nada foi alterado.</p>:
+                  <>
+                    <p className="text-xs text-muted-foreground">Dados capturados no evento, não no cadastro atual. Valores não registrados não significam exclusão. Credenciais ficam ocultas.</p>
+                    {(showAllChanges?comparisons:comparisons.slice(0,20)).map(row=><div key={row.field} className="rounded-xl border border-border p-3 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-1"><p className="text-sm font-semibold break-all">{formatAuditFieldLabel(row.field)}</p><Badge variant="outline" className="text-[10px]">{row.protected?'Protegido':row.source==='explicit'?'Alteração registrada':row.source==='snapshot'?'Snapshot':'Campo informado'}</Badge></div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="min-w-0 rounded-lg border border-border bg-muted/40 p-2.5"><p className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">Antes</p><p className="text-xs break-all whitespace-pre-wrap">{comparisonValue(row.field,row.before)}</p></div>
+                        <div className="min-w-0 rounded-lg border border-border bg-primary/5 p-2.5"><p className="text-[10px] uppercase font-semibold text-primary mb-1">Depois</p><p className="text-xs break-all whitespace-pre-wrap">{comparisonValue(row.field,row.after)}</p></div>
+                      </div>
+                    </div>)}
+                    {comparisons.length>20&&<Button variant="outline" size="sm" className="w-full" onClick={()=>setShowAllChanges(v=>!v)}>{showAllChanges?'Mostrar primeiros 20':'Ver todos os '+comparisons.length+' campos'}</Button>}
+                  </>}
+              </section>
+              {detailConfirmed&&<AuditRelatedTimeline key={selectedLog.id} event={selectedLog} unitId={unitId} actionLabel={formatAuditAction}
+                onOpen={row=>{setDetailState(null);setSelectedLog(enrichAuditRow({...row,ip:'',detalhes:{}} as EnrichedLog));}}/>}
               {/* 5. CONTEXTO TÉCNICO */}
               <section className="space-y-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-primary">
@@ -1376,24 +1302,25 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                 <div className="grid grid-cols-2 gap-4 bg-muted/30 p-4 rounded-xl border">
                   <div>
                     <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Endereço IP</p>
-                    <p className="text-xs font-mono">{selectedLog.ip || 'Local/Sistema'}</p>
+                    <p className="text-xs font-mono break-all">{selectedLog.ip || 'Não registrado'}</p>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Navegador</p>
-                    <p className="text-xs truncate">{formatDispositivo(selectedLog)}</p>
+                    <p className="text-xs break-words">{formatDispositivo(selectedLog)}</p>
                   </div>
                   <div className="col-span-2">
                     <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Rota / Origem</p>
-                    <p className="text-[11px] font-mono text-muted-foreground truncate">{auditSafeText(String(selectedLog.rota || selectedLog.detalhes?.rota || selectedLog.detalhes?.origin || '-'))}</p>
+                    <p className="text-[11px] font-mono text-muted-foreground break-all">{auditSafeText(String(selectedLog.rota || selectedLog.detalhes?.rota || selectedLog.detalhes?.origin || '-'))}</p>
+                    <p className="text-xs text-muted-foreground mt-2">Origem registrada: {selectedLog.origem || 'Não informada'}</p>
                   </div>
                 </div>
               </section>
 
               {/* 6. DADOS TÉCNICOS COMPLETOS */}
-              <Accordion type="single" collapsible className="w-full">
+              {detailConfirmed&&<Accordion type="single" collapsible className="w-full">
                 <AccordionItem value="json-data" className="border-none">
                   <AccordionTrigger className="hover:no-underline bg-muted/50 rounded-xl px-4 py-3 text-xs font-bold text-muted-foreground">
-                    VER DADOS TÉCNICOS COMPLETOS (JSON)
+                    VER DADOS TÉCNICOS PROTEGIDOS (JSON)
                   </AccordionTrigger>
                   <AccordionContent className="pt-2">
                     <div className="relative">
@@ -1403,7 +1330,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                       <Button 
                         size="icon" 
                         variant="ghost" 
-                        className="absolute top-2 right-2 text-slate-400 hover:text-white hover:bg-white/10"
+                        aria-label="Copiar JSON protegido" className="absolute top-2 right-2 text-slate-400 hover:text-white hover:bg-white/10"
                         onClick={async () => {
                           try { await navigator.clipboard.writeText(JSON.stringify(redactAuditData(selectedLog.detalhes,true),null,2)); if(active.current)toast.success('JSON protegido copiado!'); }
                           catch { if(active.current)toast.error('Não foi possível copiar o JSON.'); }
@@ -1414,7 +1341,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                     </div>
                   </AccordionContent>
                 </AccordionItem>
-              </Accordion>
+              </Accordion>}
             </div>
           )}
         </SheetContent>
