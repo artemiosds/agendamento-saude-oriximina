@@ -1,6 +1,7 @@
 import {useMemo,useState} from 'react';
 import {CalendarDays,ChevronLeft,ChevronRight,Globe,Building2,User,Clock,AlertTriangle} from 'lucide-react';
 import {Button} from '@/components/ui/button';
+import BlockPrint from '@/components/BlockPrint';
 import {cn} from '@/lib/utils';
 import {validBlockDate,type BlockEntry,type BlockRow,type BlockFilter} from '@/lib/blockDirectory';
 import {blockCalendarMonth,shiftBlockMonth} from '@/lib/blockCalendar';
@@ -14,8 +15,8 @@ function initialMonth(today:string,year:string,month:string){
  return validBlockDate(candidate+'-01')?candidate:today.slice(0,7);
 }
 function formatted(date:string){return date.split('-').reverse().join('/');}
-interface Props<T extends BlockRow>{entries:readonly BlockEntry<T>[];today:string;filter:BlockFilter;limited:boolean;onList:()=>void}
-export default function BlockCalendar<T extends BlockRow>({entries,today,filter,limited,onList}:Props<T>){
+interface Props<T extends BlockRow>{entries:readonly BlockEntry<T>[];today:string;filter:BlockFilter;limited:boolean;onList:()=>void;canPrint?:boolean;printScope?:string}
+export default function BlockCalendar<T extends BlockRow>({entries,today,filter,limited,onList,canPrint,printScope}:Props<T>){
  const [month,setMonth]=useState(()=>initialMonth(today,filter.year,filter.month));
  const [selected,setSelected]=useState('');
  const data=useMemo(()=>blockCalendarMonth(month,entries,filter.year,filter.month),[month,entries,filter.year,filter.month]);
@@ -27,6 +28,7 @@ export default function BlockCalendar<T extends BlockRow>({entries,today,filter,
   <div className="flex flex-wrap items-center gap-2 justify-between">
    <div className="flex items-center gap-2 min-w-0"><span className="clinical-dock-icon clinical-tone-teal shrink-0"><CalendarDays className="w-4 h-4" aria-hidden="true"/></span><div><h2 className="font-semibold text-sm">{months[Number(month.slice(5,7))-1]} de {month.slice(0,4)}</h2><p className="text-xs text-muted-foreground">{data.count} registro(s) neste mês</p></div></div>
    <div className="flex flex-wrap items-center gap-1">
+    {canPrint&&<BlockPrint entries={entries.filter(e=>data.days.some(d=>d.entries.some(x=>x.block.id===e.block.id)))} filter={filter} today={today} limited={limited} scopeLabel={printScope||"Seleção autorizada"} month={month}/> }
     <Button type="button" size="icon" variant="outline" className="h-8 w-8" aria-label="Mês anterior" disabled={shiftBlockMonth(month,-1)===month} onClick={()=>move(shiftBlockMonth(month,-1))}><ChevronLeft className="w-4 h-4"/></Button>
     <Button type="button" size="sm" variant="outline" onClick={()=>move(today.slice(0,7))}>Hoje</Button>
     <Button type="button" size="icon" variant="outline" className="h-8 w-8" aria-label="Próximo mês" disabled={shiftBlockMonth(month,1)===month} onClick={()=>move(shiftBlockMonth(month,1))}><ChevronRight className="w-4 h-4"/></Button>
