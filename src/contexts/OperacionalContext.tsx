@@ -1012,13 +1012,16 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
 
   const deleteBloqueio = useCallback(
     async (id: string) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("bloqueios" as any)
         .delete()
-        .eq("id", id);
-      if (!error) {
-        await queryClient.invalidateQueries({ queryKey: queryKeys.bloqueios.all });
-      } else console.error("Error deleting bloqueio:", error);
+        .eq("id", id)
+        .select("id");
+      if (error) throw error;
+      if (!data || data.length !== 1 || String(data[0].id) !== id) {
+        throw new Error("Remoção não confirmada. Confira as permissões ou atualize a lista.");
+      }
+      await queryClient.invalidateQueries({ queryKey: queryKeys.bloqueios.all });
     },
     [queryClient],
   );
