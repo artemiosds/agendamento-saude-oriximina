@@ -25,7 +25,7 @@
 }
 .planta-header {
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
-  min-height: 64px; padding: 9px clamp(12px, 2vw, 30px);
+  min-height: 56px; padding: 7px clamp(10px, 1.5vw, 24px);
   background: var(--planta-dark); color: #fff; border-bottom: 1px solid #3f5659;
 }
 .planta-brand, .planta-tools, .planta-location, .planta-footer-tools, .planta-statuses { display: flex; align-items: center; gap: 10px; }
@@ -47,15 +47,14 @@
 .planta-cockpit button:focus-visible, .planta-cockpit select:focus-visible { outline: 2px solid #0c785e; outline-offset: 2px; }
 .planta-cockpit .planta-control:focus-visible { outline-color: #79d7aa; }
 .planta-unit-select { display: flex; gap: 6px; align-items: center; font-size: 12px; font-weight: 700; color: #dbece9; }
-.planta-unit-select select { max-width: min(230px, 32vw); min-height: 34px; padding: 4px 6px; border: 1px solid #476562; border-radius: 6px; background: #1a393c; color: #fff; }
-.planta-page { width: 100%; max-width: 1760px; margin: auto; padding: 12px clamp(8px, 1.6vw, 32px) 9px; display: grid; gap: 10px; }
-.planta-metrics { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--planta-border); background: var(--planta-paper); border-radius: 10px; overflow: hidden; }
-.planta-metric { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 5px 9px; align-items: center; min-width: 0; padding: 9px 13px; }
-.planta-metric + .planta-metric { border-left: 1px solid #dbe6e3; }
+.planta-unit-select select { width: clamp(180px, 28vw, 410px); max-width: 100%; min-height: 34px; padding: 4px 6px; border: 1px solid #476562; border-radius: 6px; background: #1a393c; color: #fff; }
+.planta-page { width: 100%; max-width: 1760px; margin: auto; padding: 9px clamp(7px, 1.2vw, 22px) 8px; display: grid; gap: 7px; }
+.planta-metrics { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.planta-metric { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 3px 9px; align-items: center; min-width: 0; padding: 7px 11px; border: 1px solid var(--planta-border); background: var(--planta-paper); border-radius: 9px; }
 .planta-metric-icon { grid-area: 1 / 1 / span 2; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; background: #e6f1eb; color: #135d50; }
 .planta-metric dt { grid-area: 1 / 2; font-size: 13px; line-height: 1.2; color: var(--planta-muted); font-weight: 680; }
 .planta-metric dd { grid-area: 2 / 2; font-size: 23px; line-height: 1.05; font-weight: 750; letter-spacing: -.035em; margin: 0; overflow-wrap: anywhere; }
-.planta-metric dd small { font-size: 11px; font-weight: 620; color: var(--planta-muted); letter-spacing: 0; margin-left: 5px; }
+.planta-metric dd small { display: inline-block; font-size: 10px; font-weight: 620; color: var(--planta-muted); letter-spacing: 0; margin-left: 5px; }
 .planta-board { background: var(--planta-paper); border: 1px solid #bfd2ce; border-radius: 11px; box-shadow: 0 8px 24px #0c413b0d; overflow: hidden; }
 .planta-board-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 13px; min-height: 47px; border-bottom: 1px solid #d6e2de;
@@ -140,11 +139,11 @@
   .planta-brand h1 { margin-top: 2px; font-size: 17px; }
   .planta-control { min-height: 30px; padding: 4px 6px; font-size: 12px; }
   .planta-tools { gap: 5px; justify-content: flex-start; }
-  .planta-unit-select select { max-width: 135px; }
+  .planta-tools { width: 100%; align-items: center; }
+  .planta-unit-select { flex: 1 1 0; min-width: 0; }
+  .planta-unit-select select { width: 100%; min-width: 0; }
   .planta-page { padding: 6px; gap: 6px; }
   .planta-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .planta-metric:nth-of-type(3) { border-left: 0; }
-  .planta-metric:nth-of-type(n+3) { border-top: 1px solid #dbe6e3; }
   .planta-board-head { flex-wrap: wrap; padding: 7px; }
   .planta-legend { justify-content: flex-start; }
   .planta-map { min-width: 765px; min-height: 0; max-height: none; }
@@ -155,14 +154,25 @@
   .planta-pulso, .planta-personagem { animation: none; }
 }
 
-.cockpit-alerts { display: grid; gap: .65rem; padding: .85rem; }
+.cockpit-alerts { display: grid; gap: .35rem; padding: .45rem .65rem; }
+.cockpit-alert-content { min-width: 0; }
+.cockpit-alert-content[hidden] { display: none; }
+.cockpit-alert-overview { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; font-size: .75rem; color: var(--planta-muted); }
+.cockpit-alert-overview > span[data-critical="true"] { color: #8a2434; font-weight: 730; }
+.cockpit-alert-toggle { min-height: 29px; padding: 3px 7px; font-size: 11px; }
 .cockpit-alert-heading, .cockpit-alert-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
-.cockpit-alert-heading h2 { display: flex; align-items: center; gap: .5rem; font-weight: 650; }
+.cockpit-alert-heading h2 { display: flex; align-items: center; gap: .4rem; font-size: .87rem; font-weight: 730; margin: 0; }
+.cockpit-alert-heading h2 svg { color: #92601b; }
 .cockpit-alert-heading > span, .cockpit-alert-copy > span { color: var(--planta-muted); font-size: .82rem; }
-.cockpit-alert-grid { display: grid; grid-template-columns: 1fr; gap: .65rem; margin: 0; }
-.cockpit-alert-grid > li { display: flex; flex-direction: column; gap: .6rem; justify-content: space-between; border: 1px solid hsl(var(--border)); border-inline-start: 4px solid #bf7b19; border-radius: .5rem; padding: .65rem; }
+.cockpit-alert-grid { display: grid; grid-template-columns: 1fr; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+.cockpit-alert-grid > li { display: flex; flex-direction: column; gap: .3rem; justify-content: space-between; border: 1px solid var(--planta-border); border-inline-start: 3px solid #bf7b19; border-radius: .4rem; padding: .35rem .5rem; min-width: 0; }
 .cockpit-alert-grid > li[data-tone="danger"] { border-inline-start-color: #bc424a; }
-.cockpit-alert-copy { display: grid; gap: .15rem; }
+.cockpit-alert-copy { display: grid; gap: .1rem; min-width: 0; overflow-wrap: anywhere; }
+.cockpit-alert-copy > strong { font-size: .8rem; line-height: 1.25; }
+.cockpit-alert-copy > span { font-size: .72rem; line-height: 1.35; }
+.cockpit-alert-actions { gap: .3rem; }
+.cockpit-alert-actions .planta-action, .cockpit-alert-more .planta-action { min-height: 27px; padding: 3px 7px; font-size: 11px; }
+.cockpit-alert-more { margin-top: .3rem; }
 .cockpit-alert-actions .planta-action[aria-pressed="true"] { color: #167353; }
 .planta-zone[data-alert="warning"] .planta-room-floor { stroke: #bf7b19; stroke-width: 3; }
 .planta-zone[data-alert="danger"] .planta-room-floor { stroke: #bc424a; stroke-width: 3; }
@@ -183,13 +193,13 @@
 .cockpit-stages { display: grid; padding: 4px; gap: 4px; min-width: 0; }
 .cockpit-stage {
   display: grid; align-items: center; grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: .65rem; min-width: 0; min-height: 54px; padding: .4rem .65rem; text-align: start;
+  gap: .65rem; min-width: 0; min-height: 47px; padding: .3rem .6rem; text-align: start;
   border: 1px solid #d7e5e0; border-radius: 7px; background: #f1f7f4; line-height: 1.22; font-size: .85rem; font-weight: 700;
 }
 button.cockpit-stage:hover { background: #e2f2ea; }
 .cockpit-stage > strong { font-size: 1.32rem; color: #165d50; }
 .cockpit-stage > span { overflow-wrap: anywhere; }
-.cockpit-stage small { display: block; margin-top: 3px; font-size: .73rem; color: var(--planta-muted); font-weight: 550; }
+.cockpit-stage small { display: block; margin-top: 2px; font-size: .73rem; color: var(--planta-muted); font-weight: 550; }
 .cockpit-stage[data-tone="warning"] { border-color: #daa957; background: #fffaed; }
 .cockpit-shift { padding: .65rem .85rem; }
 .cockpit-shift summary { cursor: pointer; width: fit-content; font-size: .9rem; font-weight: 740; }
@@ -199,5 +209,11 @@ button.cockpit-stage:hover { background: #e2f2ea; }
 .cockpit-shift dd { margin: .15rem 0 0; font-weight: 740; overflow-wrap: anywhere; }
 @media (min-width: 680px) {
   .cockpit-stages, .cockpit-shift dl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .cockpit-alert-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); }
+  .cockpit-alert-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 679px) {
+  .cockpit-alert-actions .planta-action, .cockpit-alert-toggle, .cockpit-alert-more .planta-action { min-height: 36px; }
+  .planta-metric dd small { display: block; margin: 3px 0 0; }
+  .cockpit-alert-overview { justify-content: flex-end; }
+
 }
