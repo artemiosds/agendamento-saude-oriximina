@@ -72,3 +72,27 @@ export function linkedRoomWaits<T extends { id: string; paciente_id: string; sal
   }
   return byRoom;
 }
+
+export type RoomIllustration = 'consultation' | 'physio' | 'speech' | 'dental' | 'nursing' | 'psychology' | 'nutrition' | 'occupational' | 'reception' | 'procedure';
+
+/** Visual classification only. Never use these hints to route patients or infer equipment inventory. */
+export function roomIllustration(name: string, specialty = ''): RoomIllustration {
+  const classify = (text: string): RoomIllustration | undefined => {
+    const key = cockpitLabel(text);
+    if (/\b(fisioterapia|fisioterapeut[ae]|ginasio|reabilitacao fisica)\b/.test(key)) return 'physio';
+    if (/\b(fonoaudiologia|fonoaudiolog[ao]|fono)\b/.test(key)) return 'speech';
+    if (/\b(odontologia|odontolog[ao]|dentista|odontologico|odontologica)\b/.test(key)) return 'dental';
+    if (/\b(enfermagem|enfermeir[ao]|triagem|classificacao de risco|vacinacao|vacina|imunizacao|curativos?)\b/.test(key)) return 'nursing';
+    if (/\b(psicologia|psicolog[ao]|psicoterapia)\b/.test(key)) return 'psychology';
+    if (/\b(nutricao|nutricionista)\b/.test(key)) return 'nutrition';
+    if (/\b(terapia ocupacional|terapeuta ocupacional)\b/.test(key)) return 'occupational';
+    if (/\b(recepcao|sala de espera|acolhimento)\b/.test(key)) return 'reception';
+    if (/\b(medicacao|infusao|procedimentos?|nebulizacao|inalacao)\b/.test(key)) return 'procedure';
+    return undefined;
+  };
+  const explicit = classify(name);
+  if (explicit) return explicit;
+  // Shared rooms keep their neutral layout unless every registered specialty matches.
+  const kinds = specialty.split('·').map(part => classify(part.trim()) ?? 'consultation');
+  return kinds.length > 0 && kinds.every(kind => kind === kinds[0]) ? kinds[0] : 'consultation';
+}
