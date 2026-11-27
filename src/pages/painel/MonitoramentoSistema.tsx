@@ -17,9 +17,6 @@ import {
   Badge 
 } from '@/components/ui/badge';
 import { 
-  ScrollArea 
-} from '@/components/ui/scroll-area';
-import { 
   Alert, AlertDescription, AlertTitle 
 } from '@/components/ui/alert';
 import { 
@@ -238,8 +235,8 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="clinical-hub space-y-3 min-w-0">
+      <div className="clinical-premium p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div>
           {embedded?<h2 className="text-xl font-bold font-display text-foreground flex items-center gap-2"><Activity className="w-5 h-5 text-primary" aria-hidden="true"/>Monitoramento do Sistema</h2>:
           <h1 className="text-2xl font-bold font-display text-foreground flex items-center gap-2"><Activity className="w-6 h-6 text-primary" aria-hidden="true"/>Monitoramento do Sistema</h1>}
@@ -264,109 +261,109 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-5 flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-              systemStatus === 'verificado' ? 'bg-emerald-100 text-emerald-600' :
-              systemStatus === 'parcial' ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-2">
+        <Card className="clinical-premium min-w-0">
+          <CardContent className="p-3 flex items-center gap-2.5 min-w-0">
+            <div className={`w-9 h-9 rounded-lg shrink-0 flex items-center justify-center ${
+              systemStatus === 'verificado' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
+              systemStatus === 'parcial' ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300' : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
             }`}>
               <Zap className="w-5 h-5" />
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Status</p>
-              <p className="text-lg font-bold capitalize">{systemStatus === 'parcial' ? 'Dados parciais' : systemStatus === 'erro' ? 'Consulta indisponível' : 'Consultado'}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wide">Status</p>
+              <p className="text-base sm:text-lg font-bold tabular-nums break-words">{systemStatus === 'parcial' ? 'Dados parciais' : systemStatus === 'erro' ? 'Consulta indisponível' : 'Consultado'}</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+        <Card className="clinical-premium min-w-0">
+          <CardContent className="p-3 flex items-center gap-2.5 min-w-0">
+            <div className="clinical-dock-icon clinical-tone-blue shrink-0">
               <Database className="w-5 h-5" />
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Banco de Dados</p>
-              <p className="text-lg font-bold">{checkedTables}/{TABLES.length} tabelas</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wide">Banco de Dados</p>
+              <p className="text-base sm:text-lg font-bold tabular-nums break-words">{checkedTables}/{TABLES.length} tabelas</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center">
+        <Card className="clinical-premium min-w-0">
+          <CardContent className="p-3 flex items-center gap-2.5 min-w-0">
+            <div className="clinical-dock-icon clinical-tone-violet shrink-0">
               <HardDrive className="w-5 h-5" />
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Storage</p>
-              <p className="text-lg font-bold">{hasStorageUsage ? `${storageStats.length} buckets` : 'Não verificado'}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wide">Storage</p>
+              <p className="text-base sm:text-lg font-bold tabular-nums break-words">{hasStorageUsage ? `${storageStats.length} buckets` : 'Não verificado'}</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center">
+        <Card className="clinical-premium min-w-0">
+          <CardContent className="p-3 flex items-center gap-2.5 min-w-0">
+            <div className="clinical-dock-icon clinical-tone-slate shrink-0">
               <Server className="w-5 h-5" />
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Tamanho do banco</p>
-              <p className="text-lg font-bold">{databaseBytes !== null ? formatBytes(databaseBytes) : 'Não medido'}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wide">Tamanho do banco</p>
+              <p className="text-base sm:text-lg font-bold tabular-nums break-words">{databaseBytes !== null ? formatBytes(databaseBytes) : 'Não medido'}</p>
               <p className="text-xs text-muted-foreground">Banco de dados</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-5 flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-              alerts.length > 0 ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'
+        <Card className="clinical-premium min-w-0">
+          <CardContent className="p-3 flex items-center gap-2.5 min-w-0">
+            <div className={`w-9 h-9 rounded-lg shrink-0 flex items-center justify-center ${
+              alerts.length > 0 ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
             }`}>
               <ShieldAlert className="w-5 h-5" />
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Alertas</p>
-              <p className="text-lg font-bold">{alertsError ? 'Não verificado' : `${alerts.length} ativos`}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wide">Alertas</p>
+              <p className="text-base sm:text-lg font-bold tabular-nums break-words">{alertsError ? 'Não verificado' : `${alerts.length} ativos`}</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <ScrollArea className="w-full">
-          <TabsList className="inline-flex w-auto bg-muted p-1 rounded-lg mb-4">
-            <TabsTrigger value="visao_geral" className="gap-2"><Info className="w-4 h-4" /> Visão Geral</TabsTrigger>
-            <TabsTrigger value="banco_dados" className="gap-2"><Database className="w-4 h-4" /> Banco de Dados</TabsTrigger>
-            <TabsTrigger value="arquivos" className="gap-2"><HardDrive className="w-4 h-4" /> Arquivos e Storage</TabsTrigger>
-            <TabsTrigger value="desempenho" className="gap-2"><Activity className="w-4 h-4" /> Desempenho</TabsTrigger>
-            <TabsTrigger value="hospedagem" className="gap-2"><Globe className="w-4 h-4" /> Ambiente</TabsTrigger>
-            <TabsTrigger value="supabase" className="gap-2"><Network className="w-4 h-4" /> Conexões</TabsTrigger>
+        <div className="clinical-premium p-2 min-w-0">
+          <TabsList className="clinical-dock flex h-auto w-full flex-wrap justify-start gap-1 p-1">
+            <TabsTrigger value="visao_geral" className="gap-1.5 min-h-10 h-auto whitespace-normal text-xs sm:text-sm"><Info className="w-4 h-4" /> Visão Geral</TabsTrigger>
+            <TabsTrigger value="banco_dados" className="gap-1.5 min-h-10 h-auto whitespace-normal text-xs sm:text-sm"><Database className="w-4 h-4" /> Banco de Dados</TabsTrigger>
+            <TabsTrigger value="arquivos" className="gap-1.5 min-h-10 h-auto whitespace-normal text-xs sm:text-sm"><HardDrive className="w-4 h-4" /> Arquivos e Storage</TabsTrigger>
+            <TabsTrigger value="desempenho" className="gap-1.5 min-h-10 h-auto whitespace-normal text-xs sm:text-sm"><Activity className="w-4 h-4" /> Desempenho</TabsTrigger>
+            <TabsTrigger value="hospedagem" className="gap-1.5 min-h-10 h-auto whitespace-normal text-xs sm:text-sm"><Globe className="w-4 h-4" /> Ambiente</TabsTrigger>
+            <TabsTrigger value="supabase" className="gap-1.5 min-h-10 h-auto whitespace-normal text-xs sm:text-sm"><Network className="w-4 h-4" /> Conexões</TabsTrigger>
             {isMaster && (
-              <TabsTrigger value="limpeza" className="gap-2"><Trash2 className="w-4 h-4" /> Retenção</TabsTrigger>
+              <TabsTrigger value="limpeza" className="gap-1.5 min-h-10 h-auto whitespace-normal text-xs sm:text-sm"><Trash2 className="w-4 h-4" /> Retenção</TabsTrigger>
             )}
           </TabsList>
-        </ScrollArea>
+        </div>
 
-        <TabsContent value="visao_geral" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
+        <TabsContent value="visao_geral" className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <Card className="clinical-premium min-w-0">
+              <CardHeader className="p-3 sm:p-4">
+                <CardTitle className="text-base font-display flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5 text-warning" />
                   Alertas do Sistema
                 </CardTitle>
                 <CardDescription>Pendências e recomendações técnicas</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-3 sm:p-4 pt-0">
                 {alertsError ? (
                   <Alert><AlertTriangle className="h-4 w-4" /><AlertTitle>Alertas não verificados</AlertTitle><AlertDescription>{alertsError}</AlertDescription></Alert>
                 ) : alerts.length === 0 ? (
-                  <div className="py-12 text-center text-muted-foreground">
-                    <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3 opacity-20" />
+                  <div className="clinical-inset rounded-xl border py-6 px-3 text-center text-muted-foreground">
+                    <CheckCircle2 className="w-7 h-7 text-emerald-600 dark:text-emerald-400 mx-auto mb-2" />
                     <p>Nenhum alerta ativo retornado pela consulta.</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {alerts.map((alert) => (
                       <Alert key={alert.id} variant={alert.severity === 'critico' ? 'destructive' : 'default'}>
                         <AlertTitle>{alert.title}</AlertTitle>
@@ -378,15 +375,15 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
+            <Card className="clinical-premium min-w-0">
+              <CardHeader className="p-3 sm:p-4">
+                <CardTitle className="text-base font-display flex items-center gap-2">
                   <RefreshCw className="w-5 h-5 text-primary" />
                   Últimas Atividades de Auditoria
                 </CardTitle>
-                <CardDescription>Resumo dos últimos logs importantes</CardDescription>
+                <CardDescription>Acesso ao histórico de eventos registrados</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-3 sm:p-4 pt-0">
                 <p className="text-sm text-muted-foreground">Acesse a aba 'Logs & Auditoria' no menu Administração para ver o histórico completo.</p>
                 <Button variant="link" className="p-0 h-auto mt-4" onClick={() => window.location.href='/painel/auditoria'}>
                   Ver todos os logs →
@@ -397,30 +394,30 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
         </TabsContent>
 
         <TabsContent value="banco_dados">
-          <Card>
-            <CardHeader>
+          <Card className="clinical-premium min-w-0">
+            <CardHeader className="p-3 sm:p-4">
               <CardTitle>Estatísticas das Tabelas</CardTitle>
               <CardDescription>Contagens reais dos registros visíveis ao seu perfil. Períodos móveis de 7 e 30 dias.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
+            <CardContent className="p-3 sm:p-4 pt-0">
+              <div className="overflow-x-auto rounded-lg border">
               <Table className="min-w-[620px]">
-                <TableHeader>
+                <TableHeader className="clinical-inset">
                   <TableRow>
                     <TableHead>Tabela</TableHead>
-                    <TableHead className="text-right">Registros Totais</TableHead>
-                    <TableHead className="text-right">Últimos 7 dias</TableHead>
-                    <TableHead className="text-right">Últimos 30 dias</TableHead>
+                    <TableHead className="text-right tabular-nums">Registros Totais</TableHead>
+                    <TableHead className="text-right tabular-nums">Últimos 7 dias</TableHead>
+                    <TableHead className="text-right tabular-nums">Últimos 30 dias</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {dbStats.map((table) => (
                     <TableRow key={table.name}>
-                      <TableCell className="font-medium">{table.name}</TableCell>
-                      <TableCell className="text-right">{table.count?.toLocaleString('pt-BR') ?? '—'}</TableCell>
-                      <TableCell className="text-right">{table.recent7d?.toLocaleString('pt-BR') ?? '—'}</TableCell>
-                      <TableCell className="text-right">{table.recent30d?.toLocaleString('pt-BR') ?? '—'}</TableCell>
+                      <TableCell className="font-medium break-words">{table.name}</TableCell>
+                      <TableCell className="text-right tabular-nums">{table.count?.toLocaleString('pt-BR') ?? '—'}</TableCell>
+                      <TableCell className="text-right tabular-nums">{table.recent7d?.toLocaleString('pt-BR') ?? '—'}</TableCell>
+                      <TableCell className="text-right tabular-nums">{table.recent30d?.toLocaleString('pt-BR') ?? '—'}</TableCell>
                       <TableCell>
                         <Badge variant={table.error ? 'destructive' : 'outline'} title={table.error}>
                           {table.error ? 'Falha na consulta' : 'Consultado'}
@@ -436,24 +433,26 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
         </TabsContent>
 
         <TabsContent value="arquivos">
-          <div className="space-y-4">
+          <div className="space-y-3">
             {storageError ? (
               <Alert><AlertTriangle className="h-4 w-4" /><AlertTitle>Uso do Storage não verificado</AlertTitle><AlertDescription>{storageError}</AlertDescription></Alert>
             ) : (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <Card><CardContent className="p-5"><p className="text-sm text-muted-foreground">Arquivos armazenados</p><p className="text-2xl font-bold">{storageStats.reduce((total, bucket) => total + bucket.fileCount, 0).toLocaleString('pt-BR')}</p></CardContent></Card>
-                  <Card><CardContent className="p-5"><p className="text-sm text-muted-foreground">Espaço usado em arquivos</p><p className="text-2xl font-bold">{formatBytes(storageBytes)}</p></CardContent></Card>
-                  <Card><CardContent className="p-5"><p className="text-sm text-muted-foreground">Espaço restante estimado</p><p className="text-2xl font-bold">{quotaBytes === null || unknownSizeCount > 0 ? 'Não calculável' : formatBytes(Math.max(0, quotaBytes - storageBytes))}</p></CardContent></Card>
+                  <Card className="clinical-premium min-w-0"><CardContent className="p-3"><p className="text-sm text-muted-foreground">Arquivos armazenados</p><p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{storageStats.reduce((total, bucket) => total + bucket.fileCount, 0).toLocaleString('pt-BR')}</p></CardContent></Card>
+                  <Card className="clinical-premium min-w-0"><CardContent className="p-3"><p className="text-sm text-muted-foreground">Espaço usado em arquivos</p><p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{formatBytes(storageBytes)}</p></CardContent></Card>
+                  <Card className="clinical-premium min-w-0"><CardContent className="p-3"><p className="text-sm text-muted-foreground">Espaço restante estimado</p><p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{quotaBytes === null || unknownSizeCount > 0 ? 'Não calculável' : formatBytes(Math.max(0, quotaBytes - storageBytes))}</p></CardContent></Card>
                 </div>
                 {unknownSizeCount > 0 && <Alert><AlertTriangle className="h-4 w-4" /><AlertTitle>Medição incompleta</AlertTitle><AlertDescription>{unknownSizeCount} arquivo(s) sem tamanho informado nos metadados. O total pode ser maior.</AlertDescription></Alert>}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {storageStats.map((s) => (
-                    <Card key={s.bucket}>
-                      <CardHeader className="pb-2"><CardTitle className="text-base break-all">{s.bucket}</CardTitle></CardHeader>
-                      <CardContent className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="font-semibold">{formatBytes(s.usedBytes)}</span>
-                        <span className="text-sm text-muted-foreground">{s.fileCount.toLocaleString('pt-BR')} arquivo(s)</span>
+                    <Card key={s.bucket} className="clinical-premium min-w-0">
+                      <CardHeader className="p-3 pb-2"><CardTitle className="text-sm font-display break-all">{s.bucket}</CardTitle></CardHeader>
+                      <CardContent className="space-y-2 p-3 pt-0">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2"><span className="font-semibold tabular-nums">{formatBytes(s.usedBytes)}</span>
+                        <span className="text-xs text-muted-foreground">{s.fileCount.toLocaleString('pt-BR')} arquivo(s)</span></div>
+                        {storageBytes>0&&<div><div className="h-2 rounded-full bg-muted overflow-hidden" aria-hidden="true"><div className="h-full rounded-full bg-primary" style={{width:Math.min(100,Math.max(0,s.usedBytes/storageBytes*100))+'%'}}/></div><p className="mt-1 text-[11px] text-muted-foreground">{(s.usedBytes/storageBytes*100).toLocaleString('pt-BR',{maximumFractionDigits:1})}% do espaço medido</p></div>}
+                        {s.unknownSizeCount>0&&<p className="text-xs text-amber-700 dark:text-amber-300">{s.unknownSizeCount.toLocaleString('pt-BR')} arquivo(s) sem tamanho informado</p>}
                       </CardContent>
                     </Card>
                   ))}
@@ -461,7 +460,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
               </>
             )}
             {isGlobalAdmin && (
-              <Card><CardHeader><CardTitle className="text-base">Referência para estimar o espaço restante</CardTitle><CardDescription>O Lovable Cloud não informa o limite contratado à aplicação. Consulte o limite no painel do provedor e informe-o aqui; este valor fica apenas neste navegador e não altera seu plano.</CardDescription></CardHeader>
+              <Card className="clinical-premium min-w-0"><CardHeader className="p-3 sm:p-4"><CardTitle className="text-base">Referência para estimar o espaço restante</CardTitle><CardDescription>O Lovable Cloud não informa o limite contratado à aplicação. Consulte o limite no painel do provedor e informe-o aqui; este valor fica apenas neste navegador e não altera seu plano.</CardDescription></CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-end gap-2">
                     <div className="w-full sm:max-w-52 space-y-1"><Label htmlFor="storage-quota">Limite de arquivos informado (GB)</Label><Input id="storage-quota" type="number" min="0.001" step="any" inputMode="decimal" value={quotaInput} onChange={event => setQuotaInput(event.target.value)} placeholder="Ex.: 10" /></div>
@@ -475,24 +474,24 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
         </TabsContent>
 
         <TabsContent value="desempenho">
-          <Card>
-            <CardHeader>
+          <Card className="clinical-premium min-w-0">
+            <CardHeader className="p-3 sm:p-4">
               <CardTitle>Monitoramento de Desempenho</CardTitle>
               <CardDescription>Medidas desta consulta no seu navegador, sem inferir a saúde de outros serviços.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-3 p-3 sm:p-4 pt-0">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 border rounded-lg">
+                <div className="clinical-inset p-3 border rounded-xl min-w-0">
                   <p className="text-sm text-muted-foreground mb-1">Duração da atualização</p>
-                  <p className="text-2xl font-bold">{refreshDurationMs === null ? '—' : `${refreshDurationMs.toLocaleString('pt-BR')} ms`}</p>
+                  <p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{refreshDurationMs === null ? '—' : `${refreshDurationMs.toLocaleString('pt-BR')} ms`}</p>
                 </div>
-                <div className="p-4 border rounded-lg">
+                <div className="clinical-inset p-3 border rounded-xl min-w-0">
                   <p className="text-sm text-muted-foreground mb-1">Tabelas consultadas</p>
-                  <p className="text-2xl font-bold">{checkedTables}/{TABLES.length}</p>
+                  <p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{checkedTables}/{TABLES.length}</p>
                 </div>
-                <div className="p-4 border rounded-lg">
+                <div className="clinical-inset p-3 border rounded-xl min-w-0">
                   <p className="text-sm text-muted-foreground mb-1">Falhas nesta atualização</p>
-                  <p className="text-2xl font-bold">{dbStats.filter(table => table.error).length + Number(Boolean(isGlobalAdmin && storageError)) + Number(Boolean(isMaster && alertsError))}</p>
+                  <p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{dbStats.filter(table => table.error).length + Number(Boolean(isGlobalAdmin && storageError)) + Number(Boolean(isMaster && alertsError))}</p>
                 </div>
               </div>
               
@@ -506,12 +505,12 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
         </TabsContent>
 
         <TabsContent value="hospedagem">
-          <Card>
-            <CardHeader>
+          <Card className="clinical-premium min-w-0">
+            <CardHeader className="p-3 sm:p-4">
               <CardTitle>Ambiente da aplicação</CardTitle>
               <CardDescription>Informações verificáveis nesta sessão</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-3 p-3 sm:p-4 pt-0">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Backend configurado</Label>
@@ -532,29 +531,29 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
         </TabsContent>
 
         <TabsContent value="supabase">
-          <Card>
-            <CardHeader>
+          <Card className="clinical-premium min-w-0">
+            <CardHeader className="p-3 sm:p-4">
               <CardTitle className="flex items-center gap-2">
                 <Network className="w-5 h-5 text-primary" />
                 Estado das consultas
               </CardTitle>
               <CardDescription>Somente serviços consultados nesta página recebem um resultado.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="p-3 border rounded-lg text-center">
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-1 min-[360px]:grid-cols-2 lg:grid-cols-4 gap-2">
+                <div className="clinical-inset p-3 border rounded-xl text-left min-w-0">
                   <p className="text-xs text-muted-foreground uppercase">Database</p>
                   <p className="text-sm font-bold">{checkedTables > 0 ? 'Consulta respondeu' : 'Não verificado'}</p>
                 </div>
-                <div className="p-3 border rounded-lg text-center">
+                <div className="clinical-inset p-3 border rounded-xl text-left min-w-0">
                   <p className="text-xs text-muted-foreground uppercase">Auth</p>
                   <p className="text-sm font-bold">Sessão ativa</p>
                 </div>
-                <div className="p-3 border rounded-lg text-center">
+                <div className="clinical-inset p-3 border rounded-xl text-left min-w-0">
                   <p className="text-xs text-muted-foreground uppercase">Storage</p>
                   <p className="text-sm font-bold">{hasStorageUsage ? 'Consulta respondeu' : 'Não verificado'}</p>
                 </div>
-                <div className="p-3 border rounded-lg text-center">
+                <div className="clinical-inset p-3 border rounded-xl text-left min-w-0">
                   <p className="text-xs text-muted-foreground uppercase">Realtime</p>
                   <p className="text-sm font-bold">Não verificado</p>
                 </div>
@@ -565,29 +564,29 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
         </TabsContent>
 
         <TabsContent value="limpeza">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="border-destructive/20">
-              <CardHeader>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Card className="clinical-premium border-destructive/30 min-w-0">
+              <CardHeader className="p-3 sm:p-4">
                 <CardTitle className="text-destructive flex items-center gap-2">
                   <Trash2 className="w-5 h-5" />
                   Limpeza de Logs Antigos
                 </CardTitle>
                 <CardDescription>Revisão antes de qualquer política de retenção</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-3 sm:p-4 pt-0">
                 <p className="text-sm text-muted-foreground">A exclusão automática está indisponível. Para preservar a auditoria, é preciso definir previamente quais logs são descartáveis, apresentar uma prévia da quantidade e validar uma rotina de limpeza com autorização no servidor.</p>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
+            <Card className="clinical-premium min-w-0">
+              <CardHeader className="p-3 sm:p-4">
                 <CardTitle className="flex items-center gap-2">
                   <HardDrive className="w-5 h-5 text-primary" />
                   Arquivos Órfãos
                 </CardTitle>
                 <CardDescription>Identificar anexos sem vínculo no banco</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-3 sm:p-4 pt-0">
                 <p className="text-sm text-muted-foreground">A identificação de arquivos órfãos exige conferir os vínculos de cada módulo. Nenhum arquivo é excluído por esta página.</p>
               </CardContent>
             </Card>
@@ -595,7 +594,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
         </TabsContent>
       </Tabs>
 
-      <div className="text-center py-4 border-t">
+      <div className="clinical-premium text-center py-2 px-3">
         <p className="text-xs text-muted-foreground">
           Última consulta: {lastCheck ? format(lastCheck, "HH:mm:ss 'em' dd/MM/yyyy", { locale: ptBR }) : 'ainda não concluída'}
         </p>

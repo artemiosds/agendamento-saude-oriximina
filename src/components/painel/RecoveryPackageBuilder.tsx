@@ -107,27 +107,27 @@ export function RecoveryPackageBuilder({ mode = "both" }: { mode?: "build" | "ve
   };
 
   return (
-    <div className="space-y-4 rounded-lg border p-4">
+    <div className="clinical-premium space-y-3 p-3 sm:p-4 min-w-0">
       {mode !== "verify" && <>
-      <h4 className="font-semibold">Montar pacote de recuperação no seu computador</h4>
+      <h4 className="font-display font-semibold">Montar pacote de recuperação no seu computador</h4>
       <p className="text-sm text-muted-foreground">Os arquivos selecionados são processados neste navegador e não são enviados ao sistema. O pacote só fica completo depois de conferir todos os arquivos do Storage e testar a restauração.</p>
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2"><Label htmlFor="recovery-database">Exportação nativa do banco (.backup)</Label><Input id="recovery-database" type="file" accept=".backup" onChange={event => setDatabase(event.target.files?.[0] ?? null)} /></div>
-        <div className="space-y-2"><Label htmlFor="recovery-source">Código do repositório (.zip)</Label><Input id="recovery-source" type="file" accept=".zip" onChange={event => setSource(event.target.files?.[0] ?? null)} /></div>
-        <div className="space-y-2 md:col-span-2"><Label htmlFor="recovery-storage">Pasta com os arquivos do Storage</Label><Input ref={storageFolderInput} id="recovery-storage" type="file" multiple onChange={event => setStorage(Array.from(event.target.files ?? []))} /><p className="text-xs text-muted-foreground">{storage.length} arquivo(s) selecionado(s). Organize a pasta com uma subpasta por bucket antes de selecioná-la; confira a lista e os caminhos no manifesto gerado. Seu navegador precisa permitir a seleção de pastas.</p></div>
+      <div className="grid gap-2.5 md:grid-cols-2">
+        <div className="clinical-inset rounded-lg border p-3 space-y-2 min-w-0"><Label htmlFor="recovery-database">Exportação nativa do banco (.backup)</Label><Input id="recovery-database" type="file" accept=".backup" onChange={event => setDatabase(event.target.files?.[0] ?? null)} /></div>
+        <div className="clinical-inset rounded-lg border p-3 space-y-2 min-w-0"><Label htmlFor="recovery-source">Código do repositório (.zip)</Label><Input id="recovery-source" type="file" accept=".zip" onChange={event => setSource(event.target.files?.[0] ?? null)} /></div>
+        <div className="clinical-inset rounded-lg border p-3 space-y-2 md:col-span-2 min-w-0"><Label htmlFor="recovery-storage">Pasta com os arquivos do Storage</Label><Input ref={storageFolderInput} id="recovery-storage" type="file" multiple onChange={event => setStorage(Array.from(event.target.files ?? []))} /><p className="text-xs text-muted-foreground">{storage.length} arquivo(s) selecionado(s). Organize a pasta com uma subpasta por bucket antes de selecioná-la; confira a lista e os caminhos no manifesto gerado. Seu navegador precisa permitir a seleção de pastas.</p></div>
       </div>
-      <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={storageConfirmed} onChange={event => setStorageConfirmed(event.target.checked)} /> Conferi que a pasta selecionada contém os arquivos de todos os buckets usados pelo projeto.</label>
+      <label className="clinical-inset rounded-lg border p-3 flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={storageConfirmed} onChange={event => setStorageConfirmed(event.target.checked)} /> Conferi que a pasta selecionada contém os arquivos de todos os buckets usados pelo projeto.</label>
       <Button onClick={createPackage} disabled={busy || !database || !source || !storage.length || !storageConfirmed}>{busy ? "Verificando arquivos..." : "Baixar pacote ZIP com manifesto"}</Button>
       <p className="text-xs text-muted-foreground">Limite de 300 MB para evitar travamentos no navegador. O ZIP não é criptografado e não restaura automaticamente no Lovable.</p>
       </>}
       {mode !== "build" && <div className="space-y-3">
-        <h4 className="font-semibold">Verificar um pacote de recuperação</h4>
+        <h4 className="font-display font-semibold">Verificar um pacote de recuperação</h4>
         <p className="text-sm text-muted-foreground">Selecione o ZIP montado acima. A conferência é local e compara os arquivos com os hashes do manifesto. Ela não acessa o banco nem prova que todos os arquivos do Storage foram incluídos.</p>
         <Label htmlFor="recovery-verify-file">Pacote ZIP para conferência</Label>
         <Input id="recovery-verify-file" type="file" accept=".zip" onChange={event => { setPackageFile(event.target.files?.[0] ?? null); setVerification(null); }} />
         <Button variant="outline" onClick={checkPackage} disabled={!packageFile || verifying}>{verifying ? "Conferindo integridade..." : "Verificar pacote"}</Button>
         {verification && (
-          <div role="status" aria-live="polite" className={`rounded-md border p-3 text-sm ${verification.valid ? "border-green-300 bg-green-50 text-green-950" : "border-red-300 bg-red-50 text-red-950"}`}>
+          <div role="status" aria-live="polite" className={`rounded-md border p-3 text-sm ${verification.valid ? "border-green-300 bg-green-50 text-green-950 dark:border-green-800 dark:bg-green-950/40 dark:text-green-200" : "border-red-300 bg-red-50 text-red-950 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"}`}>
             <strong>{verification.valid ? "Pacote íntegro — restauração ainda não testada" : "Pacote incompleto ou inválido"}</strong>
             <p>{verification.checkedFiles} arquivo(s) conferido(s), {verification.storageFiles} arquivo(s) do Storage em {verification.buckets} bucket(s) declarados.</p>
             {verification.problems.length > 0 && <ul className="mt-2 list-disc pl-5">{verification.problems.map((problem, index) => <li key={`${index}-${problem}`}>{problem}</li>)}</ul>}

@@ -102,22 +102,22 @@ const DadosSection: React.FC = () => {
   };
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="clinical-premium min-w-0">
+      <CardHeader className="p-3 sm:p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" /> Backup e Exportação do Sistema</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base font-display"><Database className="h-5 w-5" /> Backup e Exportação do Sistema</CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <CardContent className="space-y-3 p-3 sm:p-4 pt-0">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 xl:grid-cols-4 gap-2">
           {[
             { label: "Total Pacientes", value: stats.pacientes, color: "text-primary" },
             { label: "Total Agendamentos", value: stats.agendamentos, color: "text-primary" },
             { label: "Notificações Enviadas", value: stats.notificacoes, color: "text-primary" },
             { label: "Erros de Envio", value: stats.erros, color: "text-destructive" },
           ].map(s => (
-            <div key={s.label} className="border rounded-lg p-4 text-center">
-              <div className={`text-2xl font-bold ${s.color}`}>{statsLoading?"…":s.value===null?"Não verificado":s.value.toLocaleString("pt-BR")}</div>
+            <div key={s.label} className="clinical-inset rounded-xl border p-3 min-w-0">
+              <div className={`text-xl sm:text-2xl font-bold tabular-nums break-words ${s.color}`}>{statsLoading?"…":s.value===null?"Não verificado":s.value.toLocaleString("pt-BR")}</div>
               <div className="text-xs text-muted-foreground mt-1">{s.label}</div>
             </div>
           ))}
@@ -125,24 +125,24 @@ const DadosSection: React.FC = () => {
 
         <p className="text-xs text-muted-foreground">Contagens dos registros visíveis à sessão atual; indisponibilidade não significa zero.</p>
         <Tabs defaultValue="backup" className="w-full space-y-4">
-          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 p-1" aria-label="Etapas de backup e recuperação">
-            <TabsTrigger value="backup">Backup</TabsTrigger>
-            <TabsTrigger value="verificar">Verificar pacote</TabsTrigger>
-            <TabsTrigger value="recuperar">Recuperar no Lovable</TabsTrigger>
-            <TabsTrigger value="migrar">Migrar para Supabase</TabsTrigger>
+          <TabsList className="clinical-dock flex h-auto w-full flex-wrap justify-start gap-1 p-1" aria-label="Etapas de backup e recuperação">
+            <TabsTrigger value="backup" className="h-auto min-h-10 whitespace-normal text-xs sm:text-sm flex-1">Backup</TabsTrigger>
+            <TabsTrigger value="verificar" className="h-auto min-h-10 whitespace-normal text-xs sm:text-sm flex-1">Verificar pacote</TabsTrigger>
+            <TabsTrigger value="recuperar" className="h-auto min-h-10 whitespace-normal text-xs sm:text-sm flex-1">Recuperar no Lovable</TabsTrigger>
+            <TabsTrigger value="migrar" className="h-auto min-h-10 whitespace-normal text-xs sm:text-sm flex-1">Migrar para Supabase</TabsTrigger>
           </TabsList>
           <TabsContent value="backup" className="space-y-4">
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
+          <div className="rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 p-3 text-sm text-amber-950 dark:text-amber-200" role="alert">
             <strong>Para recuperar todos os dados, use a exportação nativa do Lovable Cloud.</strong> A exportação auxiliar desta página pode omitir registros e não inclui a estrutura completa do banco ou as contas de autenticação. Não a utilize como único backup.
           </div>
-          <div className="space-y-3 rounded-lg border p-4">
+          <div className="clinical-inset space-y-3 rounded-xl border p-3 sm:p-4">
               <h4 className="font-semibold">Preparar a exportação nativa</h4>
               <p className="text-sm text-muted-foreground">No Lovable: More → Database → Manage → Settings → Export project data. Baixe o arquivo PostgreSQL .backup em More → Storage. Baixe também todos os arquivos dos buckets e uma cópia do código no GitHub.</p>
               <p className="text-xs text-muted-foreground">A exportação nativa inclui estrutura, dados e contas, mas não os arquivos do Storage, segredos, configurações dos provedores de login ou código das funções. Guarde uma cópia fora do Lovable.</p>
               <Button variant="outline" asChild><a href="https://github.com/artemiosds/agendamento-saude-oriximina" target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-4 w-4" /> Abrir repositório</a></Button>
           </div>
           <RecoveryPackageBuilder mode="build" />
-          <div className="space-y-2 rounded-lg border p-4">
+          <div className="clinical-inset space-y-2 rounded-xl border p-3 sm:p-4">
             <Label className="text-sm font-medium">Exportações administrativas (CSV)</Label>
             <p className="text-xs text-muted-foreground">Somente Master Global ativo. Colunas administrativas, até {DATA_EXPORT_LIMIT.toLocaleString("pt-BR")} registros por tabela. Não inclui dados clínicos livres, payloads ou cópia restaurável. Para a cópia integral, use a exportação nativa.</p>
             {!canBulkExport&&<p role="status" className="text-sm text-muted-foreground">Exportação global restrita.</p>}
@@ -159,7 +159,7 @@ const DadosSection: React.FC = () => {
           </TabsContent>
           <TabsContent value="verificar"><RecoveryPackageBuilder mode="verify" /></TabsContent>
           <TabsContent value="recuperar">
-            <div className="space-y-3 rounded-lg border p-4">
+            <div className="clinical-inset space-y-3 rounded-xl border p-3 sm:p-4">
               <h4 className="font-semibold">1. Recuperar no Lovable Cloud</h4>
               <p className="text-sm text-muted-foreground">No editor do Lovable, siga <strong>More → Database → Manage → Backups</strong> e escolha um backup diário anterior ao problema. A restauração substitui o banco atual, inclusive os registros de autenticação; contas e senhas armazenadas acompanham o banco daquele dia. Alterações e usuários criados depois desse ponto são perdidos. Provedores externos e sessões de login exigem conferência separada.</p>
               <p className="text-sm text-muted-foreground">O backup diário <strong>não restaura arquivos do Storage</strong>. Se houver arquivos perdidos, recupere-os da cópia externa e reenvie aos mesmos buckets e caminhos em More → Storage; confira permissões, vínculos e abertura dos documentos. Caso a estrutura restaurada contenha metadados de arquivos ausentes, planeje a reposição com suporte técnico antes de sobrescrever algo.</p>
@@ -171,16 +171,16 @@ const DadosSection: React.FC = () => {
             </div>
           </TabsContent>
           <TabsContent value="migrar">
-          <div className="rounded-lg border p-4 text-sm">
+          <div className="clinical-inset rounded-xl border p-3 sm:p-4 text-sm">
             <h4 className="font-semibold">Migrar para Supabase próprio</h4>
             <p className="mt-2 text-muted-foreground">Restaure o .backup com pg_restore em um projeto de teste, resolvendo conflitos com os schemas gerenciados. Reenvie os arquivos aos buckets, implante as funções do repositório e reconfigure autenticação, chaves e integrações. Confira tabelas, vínculos, login e arquivos antes de mudar o endereço do sistema. O .backup não é um script para colar no SQL Editor.</p>
           </div>
           </TabsContent>
         </Tabs>
 
-        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+        <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
-          <div className="text-xs text-amber-800">
+          <div className="text-xs text-amber-800 dark:text-amber-200">
             <strong>Dados sensíveis:</strong> Os pacotes contêm informações de pacientes. O ZIP criado no navegador não é criptografado. Armazene-o em local criptografado e com acesso restrito. Somente uma restauração testada comprova a recuperação.
           </div>
         </div>
@@ -204,14 +204,17 @@ const ConfiguracoesAvancadas: React.FC = () => {
   };
   if(loading)return <p role="status" className="p-4 text-sm text-muted-foreground">Conferindo permissões…</p>;
   if(!access.monitoramento&&!access.dados)return <p role="alert" className="p-4 text-sm">Acesso não autorizado.</p>;
-  return <div className="space-y-4 min-w-0">
-    <header className="rounded-xl border bg-card p-4 sm:p-5">
-      <h1 className="flex items-center gap-2 text-xl font-bold font-display"><Database className="h-5 w-5 text-primary" aria-hidden="true"/>Gestão Operacional e Dados</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Central de monitoramento, infraestrutura e recuperação de dados.</p>
+  return <div className="clinical-hub space-y-3 min-w-0">
+    <header className="clinical-hub-hero flex flex-wrap items-center gap-3">
+      <div className="clinical-patient-avatar flex items-center justify-center shrink-0"><Database className="h-5 w-5" aria-hidden="true"/></div>
+      <div className="min-w-0 flex-1"><p className="clinical-hub-eyebrow">Secretaria Municipal de Saúde · Infraestrutura</p>
+      <h1 className="clinical-hub-name text-xl sm:text-2xl font-bold font-display">Gestão Operacional e Dados</h1>
+      <p className="clinical-patient-sub text-xs mt-1">Central de monitoramento, infraestrutura e recuperação de dados.</p></div>
+      <span className="rounded-lg border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold">Lovable Cloud</span>
     </header>
-    <nav aria-label="Seções da gestão operacional" className="flex flex-wrap gap-2 rounded-lg border bg-card p-2">
-      {access.monitoramento&&<Button type="button" variant={section==='monitoramento'?'default':'outline'} aria-pressed={section==='monitoramento'} onClick={()=>select('monitoramento')}><Activity className="mr-2 h-4 w-4" aria-hidden="true"/>Monitoramento do Sistema</Button>}
-      {access.dados&&<Button type="button" variant={section==='dados'?'default':'outline'} aria-pressed={section==='dados'} onClick={()=>select('dados')}><ShieldCheck className="mr-2 h-4 w-4" aria-hidden="true"/>Backup e Recuperação</Button>}
+    <nav aria-label="Seções da gestão operacional" className="clinical-premium grid grid-cols-1 sm:grid-cols-2 gap-2 p-2">
+      {access.monitoramento&&<Button type="button" variant={section==='monitoramento'?'default':'outline'} aria-pressed={section==='monitoramento'} onClick={()=>select('monitoramento')} className="h-auto min-h-14 justify-start gap-3 whitespace-normal text-left px-3 py-2"><span className="clinical-dock-icon clinical-tone-blue shrink-0"><Activity className="h-4 w-4" aria-hidden="true"/></span><span className="min-w-0"><span className="block font-semibold text-sm">Monitoramento do Sistema</span><span className="block text-[11px] font-normal opacity-90">Banco, armazenamento e desempenho</span></span></Button>}
+      {access.dados&&<Button type="button" variant={section==='dados'?'default':'outline'} aria-pressed={section==='dados'} onClick={()=>select('dados')} className="h-auto min-h-14 justify-start gap-3 whitespace-normal text-left px-3 py-2"><span className="clinical-dock-icon clinical-tone-teal shrink-0"><ShieldCheck className="h-4 w-4" aria-hidden="true"/></span><span className="min-w-0"><span className="block font-semibold text-sm">Backup e Recuperação</span><span className="block text-[11px] font-normal opacity-90">Exportações, pacotes e recuperação</span></span></Button>}
     </nav>
     {section===null?<Card><CardContent className="py-8 text-sm text-muted-foreground" role="alert">Você não tem autorização para a seção solicitada. Selecione uma seção disponível.</CardContent></Card>:
       section==='monitoramento'&&access.monitoramento?<React.Suspense fallback={<p role="status" className="p-4 text-sm text-muted-foreground">Carregando monitoramento…</p>}><MonitoramentoSistema key={scope} embedded /></React.Suspense>:
