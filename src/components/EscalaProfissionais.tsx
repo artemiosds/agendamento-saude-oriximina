@@ -1,12 +1,12 @@
 import { memo, useCallback, useDeferredValue, useEffect, useId, useMemo, useState } from 'react';
 import { addDays, eachDayOfInterval, endOfMonth, format, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { MapPin, Printer, Trash2, Pencil } from 'lucide-react';
+import { MapPin, Printer, Trash2, Pencil, Users, CalendarDays, ClipboardList, AlertTriangle, ShieldAlert, ChevronRight, ChevronLeft } from 'lucide-react';
 import { CadastroEscala, type EscalaEditRequest } from './EscalaInformativa';
 import { EscalaPeriodo } from './EscalaPeriodo';
 import { resolveProfessionalCbo } from '@/lib/sigtapClinicalValidation';
-import { dateKeyEscala, distribuirRegistros, localKeyEscala, minutesEscala as time, registros, summarizeEscalaDay } from '@/lib/escalaInformativa';
-import type { RegistroEscala } from '@/lib/escalaInformativa';
+import { dateKeyEscala, distribuirRegistros, localKeyEscala, minutesEscala as time, registros, summarizeEscalaDay, buildEscalaView, matchesEscalaCategory } from '@/lib/escalaInformativa';
+import type { RegistroEscala, EscalaViewCategory } from '@/lib/escalaInformativa';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { useOperacional } from '@/contexts/OperacionalContext';
@@ -14,7 +14,7 @@ import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { openPrintDocument } from '@/lib/printLayout';
 import { cn } from '@/lib/utils';
@@ -71,18 +71,30 @@ function applyBlocks(from: number, to: number, blocks: AgendaBlock[], unit: stri
     reason: reasons.join(', '), minutes: spans.reduce((sum, [a, z]) => sum + z - a, 0) };
 }
 
+const hoursLabel=(minutes:number)=>Math.floor(minutes/60)+'h'+(minutes%60?' '+minutes%60+'min':'');
+const viewCards=[
+  {key:'people',label:'Profissionais na escala',unit:'profissionais distintos',Icon:Users,tone:'text-primary'},
+  {key:'grade',label:'Grade oficial',unit:'registros exibidos',Icon:CalendarDays,tone:'text-blue-700 dark:text-blue-300'},
+  {key:'manual',label:'Escala informativa',unit:'registros exibidos',Icon:ClipboardList,tone:'text-teal-700 dark:text-teal-300'},
+  {key:'blocked',label:'Bloqueios / ajustes',unit:'registros afetados',Icon:ShieldAlert,tone:'text-amber-700 dark:text-amber-300'},
+  {key:'conflict',label:'Horários simultâneos',unit:'registros em conflito',Icon:AlertTriangle,tone:'text-destructive'},
+] as const;
+type Inspection={key:string;category:EscalaViewCategory;personId?:never;dayKey?:never}|{key:string;personId:string;dayKey:string;category?:never};
+
 const CalendarDay = memo(function CalendarDay({ day, entries, compact, onRemove, onEdit }: { day: Date; entries: Entrada[]; compact: boolean; onRemove: (row: Entrada) => void; onEdit:(row:Entrada)=>void }) {
   const [expanded, setExpanded] = useState(false);
   const limit = compact ? 2 : 4;
   const today = dateKeyEscala(day) === dateKeyEscala(new Date());
+  const audit=useMemo(()=>summarizeEscalaDay(entries),[entries]);
   return <section className={cn('min-w-0 rounded-lg border bg-card px-2.5 py-2', today && 'border-primary/50')}
     aria-label={format(day, "EEEE, dd 'de' MMMM", { locale: ptBR })}>
     <div className="flex items-center justify-between gap-1">
       <span className={cn('text-sm font-semibold capitalize', today ? 'text-primary' : 'text-foreground')}>{format(day, 'EEE dd', { locale: ptBR })}</span>
       {today && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">Hoje</span>}
     </div>
-    {!entries.length && <p className="mt-2 text-xs text-muted-foreground">Sem escala</p>}
-    {entries.slice(0, expanded ? undefined : limit).map(r => <div key={r.id} className={cn('mt-2 rounded border-l-2 bg-muted/25 p-1.5 text-xs', r.informational ? 'border-primary' : 'border-muted-foreground/40')}>
+    {entries.length>0&&<p className="mt-1 text-[11px] text-muted-foreground tabular-nums">{entries.length} {entries.length===1?'registro':'registros'} · {hoursLabel(audit.uniqueMinutes)} previstos</p>}
+    {!entries.length && <p className="mt-2 text-xs text-muted-foreground">Sem escala cadastrada</p>}
+    {entries.slice(0, expanded ? undefined : limit).map(r => <div key={r.id} className={cn('mt-2 rounded border-l-2 bg-muted/25 p-1.5 text-xs', r.conflict?'border-destructive':r.reason?'border-amber-500':r.informational ? 'border-teal-600' : 'border-blue-500')}>
       <div className="flex items-start justify-between gap-1">
         <p className="break-words font-semibold">{r.person}</p>
         <div className="flex shrink-0 items-center gap-0.5">
@@ -116,6 +128,10 @@ export function Escala() {
   const { unidadesVisiveis, salasVisiveis, isGlobalAdmin, userUnidadeId } = useUnidadeFilter();
   const [place, setPlace] = useState('');
   const [name, setName] = useState('');
+  const [profession,setProfession]=useState('');
+  const [layout,setLayout]=useState<'calendar'|'grid'>('calendar');
+  const [inspection,setInspection]=useState<Inspection>();
+  const [inspectionPage,setInspectionPage]=useState(0);
   const [monthly, setMonthly] = useState(false);
   const [date, setDate] = useState(() => dateKeyEscala(new Date()));
   const [reload, setReload] = useState(0);
@@ -160,7 +176,7 @@ export function Escala() {
   const canEnd=canWrite&&can('disponibilidade','can_edit');
   const canDelete=canWrite&&can('disponibilidade','can_delete');
   const formScope=JSON.stringify([user?.id,userUnidadeId,isGlobalAdmin]);
-  useEffect(()=>{setEditRequest(undefined);},[formScope]);
+  useEffect(()=>{setEditRequest(undefined);setInspection(undefined);setProfession('');},[formScope]);
   const onEdit=useCallback((row:Entrada)=>{
     if(!canEnd||!current||current.error||!row.editOccurrence||row.continuation)return;
     setEditRequest(previous=>({...row.editOccurrence!,token:(previous?.token??0)+1}));
@@ -174,7 +190,7 @@ export function Escala() {
   };
   const onRemove = useCallback((row: Entrada) => { setRemoveError(''); setEndDate(dateKeyEscala(addDays(localDate(today),1))); setTarget(row); }, [today]);
   const onSaved = useCallback((savedDate: string) => {
-    setDate(savedDate); setMonthly(true); setPlace(''); setName(''); setReload(n => n + 1);
+    setDate(savedDate); setMonthly(true); setPlace(''); setName(''); setProfession(''); setReload(n => n + 1);
   }, []);
   const confirmRemove = async () => {
     if (!target?.remove || removing || !current || current.error || !manual.some(row=>row.id===target.remove?.id) || (target.remove.recurring?!canEnd:!canDelete)) return;
@@ -234,10 +250,11 @@ export function Escala() {
     return { staff, gradesByDay, externalPlaces: [...externalPlaces].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')) };
   }, [funcionarios, disponibilidades, units, isGlobalAdmin, userUnidadeId, manual, from, today]);
   const activePlace = place.startsWith('avulso:') && !externalPlaces.some(([key]) => key === place) ? '' : place;
+  const professionOptions=useMemo(()=>[...new Set(staff.map(({p})=>p.profissao?.trim()||'Sem profissão informada'))].sort((a,b)=>a.localeCompare(b,'pt-BR')),[staff]);
   const selected = useMemo(() => {
     const query = normalized(deferredName);
-    return query ? staff.filter(s => s.search.includes(query)) : staff;
-  }, [staff, deferredName]);
+    return staff.filter(s=>(!query||s.search.includes(query))&&(!profession||(s.p.profissao?.trim()||'Sem profissão informada')===profession));
+  }, [staff, deferredName,profession]);
   const { calendar, summary, count, placeTotals, overlapMinutes, conflictDays, invalidHours, unidentifiedGrades } = useMemo(() => {
     const people = new Map(selected.map(({ p }) => [p.id, p]));
     const notesByDay = new Map<string, Entrada[]>();
@@ -335,6 +352,21 @@ export function Escala() {
     return { calendar, summary, count, overlapMinutes, conflictDays, invalidHours, unidentifiedGrades:unidentified.size, placeTotals: [...totals.values()].sort((a, b) => b.quantity - a.quantity).map(({ label, quantity }) =>
       quantity + (quantity === 1 ? ' turno em ' : ' turnos em ') + label) };
   }, [selected, activePlace, days, from, gradesByDay, bloqueios, units, rooms, turnLabels, canEnd, canDelete, funcionarios, deferredName, today]);
+  const presentation=useMemo(()=>buildEscalaView(calendar),[calendar]);
+  const professionsById=useMemo(()=>new Map(selected.map(({p})=>[p.id,p.profissao||'Sem profissão informada'])),[selected]);
+  const detailReady=!!current&&!current.error&&!refreshing&&name===deferredName;
+  const inspectionKey=JSON.stringify([requestKey,activePlace,deferredName,profession]);
+  const activeInspection=detailReady&&inspection?.key===inspectionKey?inspection:undefined;
+  const details=useMemo(()=>{
+    if(!activeInspection)return [];
+    if(activeInspection.category){return calendar.map(({day,entries})=>({day,entries:entries.filter(e=>matchesEscalaCategory(e,activeInspection.category!))})).filter(d=>d.entries.length);}
+    return calendar.filter(d=>dateKeyEscala(d.day)===activeInspection.dayKey).map(({day,entries})=>({day,entries:entries.filter(e=>e.personId===activeInspection.personId)}));
+  },[calendar,activeInspection]);
+  const detailTitle=activeInspection?.category?viewCards.find(c=>c.key===activeInspection.category)?.label:presentation.rows.find(r=>r.id===activeInspection?.personId)?.name;
+  const detailPages=Math.max(1,Math.ceil(details.length/7));
+  const pageIndex=Math.min(inspectionPage,detailPages-1);
+  const inspectCategory=(category:EscalaViewCategory)=>{if(detailReady){setInspectionPage(0);setInspection({key:inspectionKey,category});}};
+  const inspectCell=(personId:string,dayKey:string)=>{if(detailReady){setInspectionPage(0);setInspection({key:inspectionKey,personId,dayKey});}};
   const period = format(start, 'dd/MM/yyyy') + ' a ' + format(days[days.length - 1], 'dd/MM/yyyy');
   const print = async () => {
     if (printing || refreshing || name !== deferredName || !count || !current || current.error || invalidHours || unidentifiedGrades) return;
@@ -346,7 +378,7 @@ export function Escala() {
           registration: [p.tipoConselho, p.numeroConselho, p.ufConselho].filter(Boolean).join(' / '),
           cbo: resolveProfessionalCbo(p), unit: units.get(p.unidadeId) })),
         placeFilter: activePlace ? units.get(activePlace.replace(/^unidade:/, '')) || externalPlaces.find(([key]) => key === activePlace)?.[1] || activePlace : 'Todos os locais autorizados',
-        professionalFilter: deferredName, emittedBy: user?.nome || user?.usuario || 'Usuário autenticado',
+        professionalFilter: [deferredName,profession?'Profissão: '+profession:''].filter(Boolean).join(' · '), emittedBy: user?.nome || user?.usuario || 'Usuário autenticado',
       });
       await openPrintDocument(document.title, document.body, document.meta);
     } catch (error) {
@@ -365,7 +397,7 @@ export function Escala() {
         <Button type="button" variant="outline" size="sm" disabled={refreshing} onClick={()=>void refreshScale()}>{refreshing?'Atualizando…':'Atualizar escala'}</Button>
         <Button type="button" variant="outline" size="sm" disabled={printing || refreshing || name !== deferredName || !count || !current || !!current.error || !!invalidHours || !!unidentifiedGrades} onClick={() => void print()}><Printer className="h-4 w-4" /> {printing ? 'Preparando escala…' : 'Imprimir Escala Oficial (A4)'}</Button>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
         <div className="flex items-end gap-1" aria-label="Visão do calendário">
           <Button type="button" variant={!monthly ? 'secondary' : 'ghost'} aria-pressed={!monthly} onClick={() => setMonthly(false)}>Semanal</Button>
           <Button type="button" variant={monthly ? 'secondary' : 'ghost'} aria-pressed={monthly} onClick={() => setMonthly(true)}>Mensal</Button>
@@ -381,7 +413,9 @@ export function Escala() {
           <Input type="search" list={listId} placeholder="Pesquisar profissional" value={name} onChange={e => setName(e.target.value)} />
           <datalist id={listId}>{staff.map(({ p }) => <option key={p.id} value={p.nome} />)}</datalist>
         </label>
+        <label className="min-w-0 space-y-1 text-xs font-medium"><span>Profissão</span><select className={selectClass} value={profession} onChange={e=>setProfession(e.target.value)}><option value="">Todas as profissões</option>{profession&&!professionOptions.includes(profession)&&<option value={profession}>{profession} (sem registros)</option>}{professionOptions.map(p=><option key={p} value={p}>{p}</option>)}</select></label>
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2"><div className="flex flex-wrap gap-1" aria-label="Visualização da escala"><Button type="button" size="sm" variant={layout==='calendar'?'secondary':'ghost'} aria-pressed={layout==='calendar'} onClick={()=>setLayout('calendar')}>Calendário</Button><Button type="button" size="sm" variant={layout==='grid'?'secondary':'ghost'} aria-pressed={layout==='grid'} onClick={()=>setLayout('grid')}>Grade consolidada</Button></div>{(place||name||profession)&&<Button type="button" size="sm" variant="ghost" onClick={()=>{setPlace('');setName('');setProfession('');}}>Limpar filtros</Button>}</div>
     </section>
     {!current && signedIn && <p className="text-sm text-muted-foreground" role="status">Carregando escalas manuais…</p>}
     {current?.error && <div className="flex flex-wrap items-center gap-2 text-sm text-destructive" role="alert">
@@ -389,16 +423,20 @@ export function Escala() {
     </div>}
     {conflictDays>0 && <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><strong>{conflictDays} {conflictDays===1?"dia com horários simultâneos":"dias com horários simultâneos"}</strong> · {Math.floor(overlapMinutes/60)}h {overlapMinutes%60}min descontados da soma. Os registros originais continuam visíveis. Confira todos os locais autorizados para identificar conflitos entre locais.</div>}
     {(invalidHours>0||unidentifiedGrades>0)&&<div role="alert" className="rounded-lg border border-destructive/40 p-3 text-sm text-destructive">Conferência necessária: {invalidHours} horário(s) inválido(s) e {unidentifiedGrades} registro(s) sem profissional identificado no período e filtro. Não foram incluídos na carga; impressão bloqueada até a conferência.</div>}
+    <section className="grid grid-cols-2 gap-2 lg:grid-cols-5" aria-label="Indicadores da escala no período e filtros atuais">{viewCards.map(({key,label,unit,Icon,tone})=><button key={key} type="button" disabled={!detailReady} onClick={()=>inspectCategory(key)} className="group min-w-0 rounded-lg border bg-card p-3 text-left transition hover:border-primary/50 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-70" aria-label={label+': '+presentation.totals[key]+'. Consultar registros'}><span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><Icon className={cn('h-4 w-4 shrink-0',tone)} aria-hidden="true"/><span>{label}</span></span><span className="mt-1 flex items-center justify-between gap-1"><strong className={cn('text-2xl font-semibold tabular-nums',tone)}>{presentation.totals[key]}</strong><ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" aria-hidden="true"/></span><span className="block text-[11px] text-muted-foreground">{unit}</span></button>)}</section>
+    <p className="text-xs text-muted-foreground">Indicadores do período e filtros aplicados; uma continuação noturna é exibida no dia seguinte. Bloqueios e conflitos podem se sobrepor às categorias de origem.{!detailReady?' · Consulta em atualização ou parcial.':''}</p>
     <div className="space-y-2">
       <p className="text-sm font-medium" role="status">{summary}{!current||current.error?" · dados parciais":""}</p>
       {!!placeTotals.length && <ul className="flex flex-wrap gap-1.5" aria-label="Turnos por local">
         {placeTotals.map(total => <li key={total} className="rounded-full border bg-muted/30 px-2 py-0.5 text-xs">{total}</li>)}
       </ul>}
     </div>
-    <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-7">
+    {layout==='calendar'?<div className="grid gap-2 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-7">
+      {monthly&&['SEG','TER','QUA','QUI','SEX','SÁB','DOM'].map(d=><div key={d} className="hidden text-center text-[11px] font-semibold text-muted-foreground xl:block">{d}</div>)}
       {monthly && Array.from({ length: (start.getDay() + 6) % 7 }, (_, i) => <div key={i} className="hidden xl:block" aria-hidden="true" />)}
       {calendar.map(({ day, entries }) => <CalendarDay key={dateKeyEscala(day)} day={day} entries={entries} compact={monthly} onRemove={onRemove} onEdit={onEdit} />)}
-    </div>
+    </div>:<section className="min-w-0 rounded-xl border bg-card" aria-label="Grade consolidada de profissionais"><div className="flex flex-wrap items-center justify-between gap-2 border-b p-3"><div><h3 className="text-sm font-semibold">Grade consolidada {monthly?'mensal':'semanal'}</h3><p className="text-xs text-muted-foreground">Clique em uma célula para consultar os registros e horários do dia.</p></div><span className="text-xs text-muted-foreground">{presentation.rows.length} profissionais · {calendar.length} dias</span></div>{!presentation.rows.length?<p className="p-4 text-sm text-muted-foreground">Nenhum registro de escala para os filtros atuais.</p>:<div className="max-h-[70vh] overflow-auto" tabIndex={0} aria-label="Tabela com rolagem horizontal e vertical"><table className="w-full border-separate border-spacing-0 text-xs"><thead><tr><th scope="col" className="sticky left-0 top-0 z-30 min-w-[170px] max-w-[220px] border-b border-r bg-card p-2 text-left">Profissional</th>{calendar.map(({day})=><th key={dateKeyEscala(day)} scope="col" className={cn('sticky top-0 z-10 min-w-[65px] border-b border-r bg-card px-2 py-2 text-center whitespace-nowrap',day.getDay()%6===0&&'bg-muted',dateKeyEscala(day)===today&&'text-primary')}><span className="block text-[10px] uppercase text-muted-foreground">{format(day,'EEE',{locale:ptBR})}</span><span className="font-semibold tabular-nums">{format(day,'dd')}</span></th>)}<th scope="col" className="sticky top-0 z-10 min-w-[84px] border-b bg-card p-2 text-right whitespace-nowrap">Total previsto</th></tr></thead><tbody>{presentation.rows.map(person=><tr key={person.id}><th scope="row" className="sticky left-0 z-20 min-w-[170px] max-w-[220px] border-b border-r bg-card p-2 text-left font-medium"><span className="block break-words">{person.name}</span><span className="block text-[10px] font-normal text-muted-foreground">{professionsById.get(person.id)}{person.inactive?' · Inativo':''}</span></th>{calendar.map(({day})=>{const key=dateKeyEscala(day),entries=person.cells.get(key)??[];const audit=summarizeEscalaDay(entries);const conflict=entries.some(e=>e.conflict),blocked=entries.some(e=>e.reason),grade=entries.some(e=>!e.informational),manual=entries.some(e=>e.informational);return <td key={key} className="border-b border-r p-1 text-center"><button type="button" disabled={!detailReady} onClick={()=>inspectCell(person.id,key)} aria-label={person.name+' em '+format(day,'dd/MM/yyyy')+': '+(entries.length?hoursLabel(audit.uniqueMinutes)+' previstos, '+entries.length+' registros':'sem escala cadastrada')+(conflict?', conflito':'')+(blocked?', bloqueio':'')} className={cn('min-h-[39px] w-full rounded px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:ring-1 hover:ring-primary whitespace-nowrap',conflict?'bg-destructive/10 text-destructive':blocked?'bg-amber-100 text-amber-950 dark:bg-amber-950 dark:text-amber-200':manual&&grade?'bg-muted text-foreground':manual?'bg-teal-100 text-teal-950 dark:bg-teal-950 dark:text-teal-200':grade?'bg-blue-100 text-blue-950 dark:bg-blue-950 dark:text-blue-200':'text-muted-foreground')}><span className="block font-semibold tabular-nums">{entries.length?(audit.invalid?'Conferir':hoursLabel(audit.uniqueMinutes)):'–'}</span>{entries.length>0&&<span className="block text-[10px]">{[grade?'G':'',manual?'I':'',blocked?'B':'',conflict?'!':''].filter(Boolean).join(' · ')}</span>}</button></td>})}<td className="border-b p-2 text-right font-semibold tabular-nums whitespace-nowrap">{hoursLabel(person.minutes)}</td></tr>)}</tbody></table></div>}<p className="border-t p-3 text-[11px] text-muted-foreground">G = grade oficial · I = informativa · B = bloqueio/ajuste · ! = conflito · – = sem escala cadastrada (não significa folga). Total sem duplicar horas do mesmo profissional.</p></section>}
+    <Dialog open={!!activeInspection} onOpenChange={open=>{if(!open)setInspection(undefined);}}><DialogContent className="max-h-[85dvh] max-w-4xl overflow-y-auto"><DialogTitle>{detailTitle||'Detalhes da escala'}</DialogTitle><DialogDescription>{activeInspection?.dayKey?format(localDate(activeInspection.dayKey),'dd/MM/yyyy'):period} · {details.reduce((sum,d)=>sum+d.entries.length,0)} registros exibidos. Consulta conforme os filtros atuais.</DialogDescription>{!details.some(d=>d.entries.length)?<p className="rounded-lg border p-3 text-sm text-muted-foreground">Nenhum registro para esta seleção.</p>:<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{details.slice(pageIndex*7,pageIndex*7+7).map(({day,entries})=><CalendarDay key={dateKeyEscala(day)} day={day} entries={entries} compact={false} onEdit={row=>{setInspection(undefined);onEdit(row);}} onRemove={row=>{setInspection(undefined);onRemove(row);}}/>)}</div>}{detailPages>1&&<div className="flex items-center justify-between gap-2"><Button type="button" size="sm" variant="outline" disabled={pageIndex===0} onClick={()=>setInspectionPage(pageIndex-1)}><ChevronLeft className="h-4 w-4"/> Anterior</Button><span className="text-xs text-muted-foreground">{pageIndex+1} de {detailPages}</span><Button type="button" size="sm" variant="outline" disabled={pageIndex+1>=detailPages} onClick={()=>setInspectionPage(pageIndex+1)}>Próxima <ChevronRight className="h-4 w-4"/></Button></div>}</DialogContent></Dialog>
     <AlertDialog open={!!target} onOpenChange={open => { if (!open && !removing) setTarget(undefined); }}>
       <AlertDialogContent>
         <AlertDialogHeader>
