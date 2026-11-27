@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import AvailabilityCapacityReview from '@/components/AvailabilityCapacityReview';
+import AvailabilityProfessionalProfile from '@/components/AvailabilityProfessionalProfile';
 import { draftWindowIssues } from '@/lib/availabilityReview';
 import type { TurnoDefinition } from '@/components/config/ConfigFluxoAtendimento';
 import { UnitScopeNavigator } from '@/components/operacional/UnitScopeNavigator';
@@ -1122,6 +1123,7 @@ const Disponibilidade: React.FC = () => {
                 </DialogHeader>
 
                 <div className="space-y-3">
+                  {!dialogOpen&&<AvailabilityProfessionalProfile key={JSON.stringify([scopeKey,unitId,profId])} person={prof} groups={data.groups} units={unidadesVisiveis} rooms={salas} turns={turnosGlobais} today={todayStr} scope={JSON.stringify([scopeKey,unitId,profId])} complete={!directoryMayBeLimited&&configLoaded} canPrint={directoryReady&&can('disponibilidade','can_execute')} emittedBy={user?.nome||user?.usuario||'Usuário autenticado'} onShowPeriod={period=>{setManagePeriod(period);setReviewGroupKey(null);}}/>}
                   <div className="clinical-premium p-3 flex flex-wrap items-center justify-between gap-2">
                     <div><h3 className="font-semibold text-sm">Períodos de atendimento</h3><p className="text-xs text-muted-foreground">{data.groups.length} disponibilidade(s) cadastrada(s)</p></div>
                     <Button size="sm" disabled={!configLoaded||!may('can_create')||saving||!profissionais.some(p=>p.id===profId)} onClick={() => openNewForProf(profId)} className="gradient-primary text-primary-foreground">
