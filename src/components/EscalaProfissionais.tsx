@@ -1,8 +1,8 @@
 import { memo, useCallback, useDeferredValue, useEffect, useId, useMemo, useState } from 'react';
 import { addDays, eachDayOfInterval, endOfMonth, format, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { MapPin, Printer, Trash2 } from 'lucide-react';
-import { CadastroEscala } from './EscalaInformativa';
+import { MapPin, Printer, Trash2, Pencil } from 'lucide-react';
+import { CadastroEscala, type EscalaEditRequest } from './EscalaInformativa';
 import { EscalaPeriodo } from './EscalaPeriodo';
 import { resolveProfessionalCbo } from '@/lib/sigtapClinicalValidation';
 import { dateKeyEscala, distribuirRegistros, localKeyEscala, minutesEscala as time, registros, summarizeEscalaDay } from '@/lib/escalaInformativa';
@@ -52,6 +52,7 @@ interface Entrada {
   conflict?: boolean;
   currentInactive?: boolean;
   remove?: { id: string; recurring: boolean };
+  editOccurrence?: {recordId:string;date:string};
 }
 
 type AgendaBlock = ReturnType<typeof useOperacional>['bloqueios'][number];
@@ -70,7 +71,7 @@ function applyBlocks(from: number, to: number, blocks: AgendaBlock[], unit: stri
     reason: reasons.join(', '), minutes: spans.reduce((sum, [a, z]) => sum + z - a, 0) };
 }
 
-const CalendarDay = memo(function CalendarDay({ day, entries, compact, onRemove }: { day: Date; entries: Entrada[]; compact: boolean; onRemove: (row: Entrada) => void }) {
+const CalendarDay = memo(function CalendarDay({ day, entries, compact, onRemove, onEdit }: { day: Date; entries: Entrada[]; compact: boolean; onRemove: (row: Entrada) => void; onEdit:(row:Entrada)=>void }) {
   const [expanded, setExpanded] = useState(false);
   const limit = compact ? 2 : 4;
   const today = dateKeyEscala(day) === dateKeyEscala(new Date());
@@ -84,9 +85,12 @@ const CalendarDay = memo(function CalendarDay({ day, entries, compact, onRemove 
     {entries.slice(0, expanded ? undefined : limit).map(r => <div key={r.id} className={cn('mt-2 rounded border-l-2 bg-muted/25 p-1.5 text-xs', r.informational ? 'border-primary' : 'border-muted-foreground/40')}>
       <div className="flex items-start justify-between gap-1">
         <p className="break-words font-semibold">{r.person}</p>
+        <div className="flex shrink-0 items-center gap-0.5">
+        {r.editOccurrence&&!r.continuation&&<button type="button" className="rounded p-1 text-muted-foreground hover:bg-primary/10 hover:text-primary" title="Alterar apenas esta ocorrência" aria-label={'Alterar ocorrência de '+r.person} onClick={()=>onEdit(r)}><Pencil className="h-3.5 w-3.5" aria-hidden="true"/></button>}
         {r.remove && <button type="button" className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           title={r.remove.recurring?'Encerrar recorrência':'Remover entrada manual'} aria-label={(r.remove.recurring?'Encerrar recorrência de ':'Remover escala de ') + r.person + ' em ' + r.place}
           onClick={() => onRemove(r)}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" /></button>}
+        </div>
       </div>
       <p className="break-words text-muted-foreground">{r.place}</p>
       <p className="mt-1 font-medium tabular-nums">{r.hours || 'Bloqueado'}</p>
@@ -118,6 +122,7 @@ export function Escala() {
   const [refreshing, setRefreshing] = useState(false);
   const [snapshot, setSnapshot] = useState<{ key: string; rows: RegistroEscala[]; error?: string }>();
   const [target, setTarget] = useState<Entrada>();
+  const [editRequest,setEditRequest]=useState<EscalaEditRequest>();
   const [endDate,setEndDate]=useState('');
   const [removing, setRemoving] = useState(false);
   const [printing, setPrinting] = useState(false);
@@ -154,6 +159,12 @@ export function Escala() {
   const canWrite = !!user && !permissionsLoading && ['master', 'coordenador', 'gestao'].includes(user.role) && (isGlobalAdmin || !!userUnidadeId) && can('disponibilidade','can_view');
   const canEnd=canWrite&&can('disponibilidade','can_edit');
   const canDelete=canWrite&&can('disponibilidade','can_delete');
+  const formScope=JSON.stringify([user?.id,userUnidadeId,isGlobalAdmin]);
+  useEffect(()=>{setEditRequest(undefined);},[formScope]);
+  const onEdit=useCallback((row:Entrada)=>{
+    if(!canEnd||!current||current.error||!row.editOccurrence||row.continuation)return;
+    setEditRequest(previous=>({...row.editOccurrence!,token:(previous?.token??0)+1}));
+  },[canEnd,current]);
   const refreshScale = async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -257,6 +268,7 @@ export function Escala() {
             minutes: minutes - carry,
             mode: r.profissional ? 'Manual · ' + (r.semanal ? 'Semanal' : 'Avulsa') : 'Escala informativa', informational: true,
             currentInactive: !p.ativo,
+            editOccurrence: r.profissional&&p.ativo&&canEnd&&key>=today&&(r.semanal||r.origem)&&rows.some(s=>s.semanal&&s.id===(r.origem||r.id)&&visible.has(s.id)&&(!s.fim_recorrencia||key<=s.fim_recorrencia)) ? {recordId:r.id,date:key}:undefined,
             remove: r.profissional && (r.semanal ? canEnd && (!r.fim_recorrencia || r.fim_recorrencia>=today) : canDelete && r.data>=today) ? { id: r.id, recurring: r.semanal } : undefined };
           if (key >= from) addNote(key, note);
           const next = nextByDay.get(key);
@@ -346,7 +358,7 @@ export function Escala() {
   };
 
   return <div className="space-y-4">
-    <CadastroEscala date={date} entries={manual} onSavedDate={onSaved} />
+    <CadastroEscala key={formScope} date={date} entries={manual} onSavedDate={onSaved} editRequest={editRequest} />
     <section className="space-y-3 rounded-xl border bg-card p-3 sm:p-4" aria-label="Filtros da escala">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div><h3 className="font-semibold">Consultar escala</h3><p className="text-xs text-muted-foreground">{period}</p></div>
@@ -385,7 +397,7 @@ export function Escala() {
     </div>
     <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-7">
       {monthly && Array.from({ length: (start.getDay() + 6) % 7 }, (_, i) => <div key={i} className="hidden xl:block" aria-hidden="true" />)}
-      {calendar.map(({ day, entries }) => <CalendarDay key={dateKeyEscala(day)} day={day} entries={entries} compact={monthly} onRemove={onRemove} />)}
+      {calendar.map(({ day, entries }) => <CalendarDay key={dateKeyEscala(day)} day={day} entries={entries} compact={monthly} onRemove={onRemove} onEdit={onEdit} />)}
     </div>
     <AlertDialog open={!!target} onOpenChange={open => { if (!open && !removing) setTarget(undefined); }}>
       <AlertDialogContent>
