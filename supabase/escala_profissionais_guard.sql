@@ -72,6 +72,27 @@ BEGIN
  END IF;
  RETURN NEW;
 END;$f$;
+-- Same permission precedence used by the existing Disponibilidade module.
+CREATE OR REPLACE FUNCTION escala_guard.may_write(actor public.funcionarios,action text)
+RETURNS boolean LANGUAGE plpgsql STABLE SET search_path='' AS $f$
+DECLARE module_name text:='disponibilidade'; raw_role text:=lower(btrim(actor.role)); profile text; result boolean;
+BEGIN
+ IF raw_role='master' THEN RETURN true; END IF;
+ IF raw_role NOT IN ('gestao','coordenador') OR action NOT IN ('can_view','can_create','can_edit','can_delete') THEN RETURN false; END IF;
+ profile:='gestao';
+ IF NOT EXISTS(SELECT 1 FROM public.permissoes p WHERE p.perfil IN (profile,raw_role) AND p.modulo=module_name AND p.unidade_id IN (coalesce(actor.unidade_id,''),''))
+ AND NOT EXISTS(SELECT 1 FROM public.permissoes_usuario u WHERE u.user_id=actor.id::text AND u.modulo=module_name AND u.unidade_id IN (coalesce(actor.unidade_id,''),'')) THEN
+  module_name:='usuarios';
+ END IF;
+ SELECT (v.value)::boolean INTO result FROM (
+   SELECT to_jsonb(u)->>action AS value, CASE WHEN u.unidade_id<>'' THEN 1 ELSE 2 END AS priority, 0 AS role_priority
+   FROM public.permissoes_usuario u WHERE u.user_id=actor.id::text AND u.modulo=module_name AND u.unidade_id IN (coalesce(actor.unidade_id,''),'')
+   UNION ALL
+   SELECT to_jsonb(p)->>action,CASE WHEN p.unidade_id<>'' THEN 3 ELSE 4 END,CASE WHEN p.perfil=profile THEN 0 ELSE 1 END
+   FROM public.permissoes p WHERE p.perfil IN (profile,raw_role) AND p.modulo=module_name AND p.unidade_id IN (coalesce(actor.unidade_id,''),'')
+ ) v WHERE v.value IS NOT NULL ORDER BY v.priority,v.role_priority LIMIT 1;
+ RETURN coalesce(result,module_name='usuarios' AND action IN ('can_view','can_create','can_edit'));
+END;$f$;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA escala_guard FROM PUBLIC, anon, authenticated;
 CREATE OR REPLACE FUNCTION public.salvar_escalas_personalizadas(p_profissional uuid, p_unidade text, p_local text, p_setor text, p_datas date[], p_inicio time without time zone, p_duracao integer, p_semanal boolean, p_origem uuid)
  RETURNS integer
@@ -98,6 +119,9 @@ begin
   select * into actor from public.funcionarios where auth_user_id = auth.uid() and ativo is true;
   if actor.id is null or coalesce(actor.role, '') not in ('master', 'coordenador', 'gestao') then
     raise exception 'Seu perfil não pode cadastrar escalas informativas.' using errcode = '42501';
+  end if;
+  if not escala_guard.may_write(actor,'can_view') or not escala_guard.may_write(actor,case when p_origem is null then 'can_create' else 'can_edit' end) then
+    raise exception 'Seu perfil não possui permissão para esta ação na disponibilidade.' using errcode='42501';
   end if;
   global_admin := actor.usuario is not distinct from 'admin.sms' and actor.role = 'master';
   select * into pessoa from public.funcionarios where id = p_profissional and ativo and role = 'profissional';
@@ -226,6 +250,7 @@ begin
   if actor.id is null or coalesce(actor.role, '') not in ('master', 'coordenador', 'gestao') then
     raise exception 'Seu perfil não pode remover escalas informativas.' using errcode = '42501';
   end if;
+  if not escala_guard.may_write(actor,'can_view') or not escala_guard.may_write(actor,'can_delete') then raise exception 'Remoção não autorizada na disponibilidade.' using errcode='42501'; end if;
   perform pg_advisory_xact_lock(hashtextextended('escala_profissionais_guard_v1',0));
   select configuracoes->'escalas_personalizadas' into itens from public.system_config
     where id = 'escalas_personalizadas' for update;
@@ -251,6 +276,7 @@ DECLARE actor public.funcionarios%rowtype; items jsonb; target jsonb; last_day d
 BEGIN
  SELECT * INTO actor FROM public.funcionarios WHERE auth_user_id=auth.uid() AND ativo IS TRUE;
  IF actor.id IS NULL OR coalesce(actor.role,'') NOT IN ('master','coordenador','gestao') THEN RAISE EXCEPTION 'Seu perfil não pode encerrar escalas.' USING ERRCODE='42501'; END IF;
+ IF NOT escala_guard.may_write(actor,'can_view') OR NOT escala_guard.may_write(actor,'can_edit') THEN RAISE EXCEPTION 'Encerramento não autorizado na disponibilidade.' USING ERRCODE='42501'; END IF;
  IF p_primeiro_dia_sem_escala IS NULL OR NOT isfinite(p_primeiro_dia_sem_escala) OR p_primeiro_dia_sem_escala<(clock_timestamp() AT TIME ZONE 'America/Santarem')::date THEN RAISE EXCEPTION 'O encerramento não pode alterar datas passadas.' USING ERRCODE='22023'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('escala_profissionais_guard_v1',0));
  SELECT configuracoes->'escalas_personalizadas' INTO items FROM public.system_config WHERE id='escalas_personalizadas' FOR UPDATE;
