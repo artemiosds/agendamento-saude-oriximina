@@ -53,3 +53,22 @@ export function freshCockpitCall(createdAt: string, now: number) {
   const age = now - Date.parse(createdAt);
   return Number.isFinite(age) && age >= -10000 && age < 60000;
 }
+
+/** Operational waiting queue: only a registered room in this unit can receive demand.
+ * Group by patient per room; never distribute a specialty's queue to its entire team.
+ */
+export function linkedRoomWaits<T extends { id: string; paciente_id: string; sala_id: string; stage: ReturnType<typeof careStage>; arrival: string | null }>(
+  items: readonly T[], validRooms: ReadonlySet<string>, now: number, limit = 20,
+) {
+  const byRoom = new Map<string, Map<string, T>>();
+  for (const item of items) {
+    const minutes = elapsedMinutes(item.arrival, now);
+    if (item.stage !== 'ready' || !validRooms.has(item.sala_id) || minutes === null || minutes <= limit) continue;
+    const patients = byRoom.get(item.sala_id) ?? new Map<string, T>();
+    const key = item.paciente_id || item.id;
+    const previous = patients.get(key);
+    if (!previous || (elapsedMinutes(previous.arrival, now) ?? -1) < minutes) patients.set(key, item);
+    byRoom.set(item.sala_id, patients);
+  }
+  return byRoom;
+}
