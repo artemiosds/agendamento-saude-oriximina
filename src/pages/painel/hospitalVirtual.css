@@ -241,3 +241,41 @@ button.planta-metric:focus-visible { outline-offset: -2px; }
   .planta-metric-icon svg { width: 15px; height: 15px; }
   .planta-metric-chevron { width: 12px; }
 }
+
+/* Phase 5: keep the operational analysis compact and lazy, without chart dependencies. */
+.cockpit-intelligence > summary { display: flex; width: 100%; align-items: center; flex-wrap: wrap; gap: 6px; justify-content: space-between; list-style: none; }
+.cockpit-intelligence > summary::-webkit-details-marker { display: none; }
+.cockpit-intelligence > summary > span { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.cockpit-intelligence > summary::after { content: '＋'; color: #457c6e; font-weight: 800; }
+.cockpit-intelligence[open] > summary::after { content: '−'; }
+.cockpit-intelligence > summary:focus-visible { outline: 2px solid #168575; outline-offset: 4px; border-radius: 4px; }
+.cockpit-intelligence-body { display: grid; gap: 10px; margin-top: 10px; }
+.cockpit-intelligence-body .cockpit-intelligence-note { margin: 0; font-size: .75rem; line-height: 1.4; color: var(--planta-muted); }
+.cockpit-intelligence-note[data-warning="true"] { color: #79501b; border: 1px solid #e1bd7b; background: #fff4df; padding: 6px 8px; border-radius: 6px; }
+.cockpit-intelligence-body .cockpit-intelligence-totals { margin: 0; }
+.cockpit-intelligence-section { min-width: 0; border-top: 1px solid var(--planta-border); padding-top: 9px; }
+.cockpit-intelligence-section h3 { font-size: .87rem; font-weight: 740; margin: 0 0 3px; }
+.cockpit-intelligence-section p { color: var(--planta-muted); font-size: .74rem; margin: 0 0 7px; line-height: 1.4; }
+.cockpit-intelligence-table-wrap { overflow-x: auto; max-width: 100%; }
+.cockpit-intelligence-table { width: 100%; border-collapse: collapse; font-size: .75rem; font-variant-numeric: tabular-nums; }
+.cockpit-intelligence-table th, .cockpit-intelligence-table td { padding: 6px 8px; text-align: start; border-bottom: 1px solid var(--planta-border); vertical-align: top; }
+.cockpit-intelligence-table thead th { color: var(--planta-muted); font-weight: 650; background: #edf5f1; }
+.cockpit-intelligence-table tbody th { font-weight: 650; overflow-wrap: anywhere; min-width: 95px; }
+.cockpit-intelligence-table td small { display: block; white-space: nowrap; font-size: .66rem; }
+.cockpit-intelligence-table td[data-attention="true"] { font-weight: 750; color: #9a5c18; }
+.cockpit-hour-list { display: grid; gap: 4px; list-style: none; padding: 0; margin: 0; }
+.cockpit-hour-list li { display: grid; grid-template-columns: 35px minmax(0,1fr) 34px; align-items: center; gap: 8px; font-size: .75rem; font-variant-numeric: tabular-nums; }
+.cockpit-hour-track { height: 8px; background: #e3ede7; border-radius: 5px; overflow: hidden; }
+.cockpit-hour-track > span { display: block; height: 100%; background: #278b78; border-radius: 5px; }
+.cockpit-hour-list strong { text-align: end; }
+.cockpit-quality-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; }
+.cockpit-quality-item { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 6px; align-items: center; text-align: start; font-size: .75rem; min-height: 42px; color: var(--planta-ink); border: 1px solid var(--planta-border); background: var(--planta-paper); border-radius: 7px; padding: 7px 9px; }
+.cockpit-quality-item:hover { border-color: #78b3a1; background: #edf6f1; }
+.cockpit-quality-item[data-attention="true"] { border-inline-start: 3px solid #bf7b19; }
+.cockpit-quality-item strong { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: .93rem; }
+.cockpit-quality-item strong small { font-size: .72rem; font-weight: 500; }
+.cockpit-quality-item svg { color: #457c6e; flex: none; }
+@media (max-width: 680px) {
+  .cockpit-quality-grid { grid-template-columns: 1fr; }
+  .cockpit-intelligence-table { min-width: 535px; }
+}
