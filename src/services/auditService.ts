@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getPublicIp, getDeviceInfo } from '@/lib/clientInfo';
+import { shouldCaptureAuditOrigin,type AuditOrigin } from '@/lib/auditOrigin';
 import { redactAuditData, auditSafeText } from '@/lib/auditSecurity';
 
 export interface AuditParams {
@@ -105,7 +106,8 @@ export const auditService = {
 
   async log(params: AuditParams, options?: { requireConfirmation?: boolean }) {
     try {
-      const ip = await getPublicIp();
+      let originContext:AuditOrigin|null=null;
+      const ip = await getPublicIp(params.user?.id&&shouldCaptureAuditOrigin(params.user.role)?context=>{originContext=context;}:undefined);
       const device = getDeviceInfo();
       const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : '';
       const currentUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : '';
@@ -165,7 +167,9 @@ export const auditService = {
           ...redactAuditData(safeDetalhes),
           usuario_cpf: params.user?.cpf,
           usuario_email: params.user?.email,
-          url: currentUrl
+          url: currentUrl,
+          // Override any caller-provided value; only the current network capture is stored.
+          contexto_rede: originContext || undefined
         }
       };
 

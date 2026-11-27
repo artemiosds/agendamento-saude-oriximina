@@ -1,23 +1,43 @@
-// Cached public IP - fetched once per session
-let cachedIp: string | null = null;
-let fetchPromise: Promise<string> | null = null;
+import {ORIGIN_CACHE_MS,ORIGIN_RETRY_MS,parseAuditOrigin,plausibleIp,type AuditOrigin} from './auditOrigin';
 
-export async function getPublicIp(): Promise<string> {
-  if (cachedIp) return cachedIp;
-  if (fetchPromise) return fetchPromise;
-
-  fetchPromise = (async () => {
-    try {
-      const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(1500) });
-      const data = await res.json();
-      cachedIp = data.ip || 'IP não disponível';
-    } catch {
-      cachedIp = 'IP não disponível';
+// Separate cached staff context from ordinary IP lookup. No location request for
+// callers that only use the existing getPublicIp() contract.
+type Snapshot={ip:string;context:AuditOrigin|null;expires:number};
+const caches=new Map<boolean,Snapshot>();
+const pending=new Map<boolean,Promise<Snapshot>>();
+const now=()=>Date.now();
+async function readSnapshot(withOrigin:boolean):Promise<Snapshot>{
+  if(withOrigin&&typeof window!=='undefined'){
+    try{
+      const res=await fetch('/api/audit-origin',{signal:AbortSignal.timeout(650),cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer'});
+      if(res.ok&&(res.headers.get('content-type')||'').includes('application/json')){
+        const context=parseAuditOrigin(await res.json());
+        if(context?.source==='vercel_geoip')return {ip:context.ip,context,expires:now()+ORIGIN_CACHE_MS};
+      }
+    }catch{/* Hosting without the endpoint keeps the existing IP-only flow. */}
+  }
+  try{
+    const res=await fetch('https://api.ipify.org?format=json',{signal:AbortSignal.timeout(withOrigin?750:1500),cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer'});
+    if(!res.ok)throw Error('IP indisponível');
+    const data=await res.json();
+    if(!plausibleIp(data.ip))throw Error('IP inválido');
+    const context:AuditOrigin|null=withOrigin?{version:1,ip:data.ip,source:'ipify_browser',capturedAt:new Date().toISOString(),network:'not_configured'}:null;
+    return {ip:data.ip,context,expires:now()+(withOrigin?60_000:ORIGIN_CACHE_MS)};
+  }catch{return {ip:'IP não disponível',context:null,expires:now()+ORIGIN_RETRY_MS};}
+}
+export async function getPublicIp(onContext?:(value:AuditOrigin|null)=>void):Promise<string>{
+  const withOrigin=!!onContext;
+  let snapshot=caches.get(withOrigin);
+  if(!snapshot||snapshot.expires<=now()){
+    let request=pending.get(withOrigin);
+    if(!request){
+      request=readSnapshot(withOrigin).then(value=>{caches.set(withOrigin,value);return value;}).finally(()=>pending.delete(withOrigin));
+      pending.set(withOrigin,request);
     }
-    return cachedIp!;
-  })();
-
-  return fetchPromise;
+    snapshot=await request;
+  }
+  onContext?.(snapshot.context);
+  return snapshot.ip;
 }
 
 export function parseDeviceInfo(ua: string, touchPoints = 0) {

@@ -24,6 +24,7 @@ import { auditService } from '@/services/auditService';
 import { getAuditActorLabel } from '@/lib/auditActor';
 import AuditOverview from '@/components/audit/AuditOverview';
 import AuditRelatedTimeline from '@/components/audit/AuditRelatedTimeline';
+import AuditOriginPanel from '@/components/audit/AuditOriginPanel';
 import AuditEventFeed, {type AuditFeedEvent} from '@/components/audit/AuditEventFeed';
 import {auditFeedCounts} from '@/lib/auditEventFeed';
 import {auditUnitLabel,recordedUnitName,pendingAuditUnitIds,unitCatalogName,isAuditUnitField,type AuditUnitRef} from '@/lib/auditUnitIdentity';
@@ -1326,27 +1327,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
               {detailConfirmed&&<AuditRelatedTimeline key={selectedLog.id} event={selectedLog} unitId={unitId} actionLabel={formatAuditAction}
                 onOpen={row=>{setDetailState(null);setSelectedLog(enrichAuditRow({...row,ip:'',detalhes:{}} as EnrichedLog));}}/>}
               {/* 5. CONTEXTO TÉCNICO */}
-              <section className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                  <Monitor className="w-4 h-4" />
-                  CONTEXTO TÉCNICO
-                </div>
-                <div className="grid grid-cols-2 gap-4 bg-muted/30 p-4 rounded-xl border">
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Endereço IP</p>
-                    <p className="text-xs font-mono break-all">{selectedLog.ip || 'Não registrado'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Navegador</p>
-                    <p className="text-xs break-words">{formatDispositivo(selectedLog)}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Rota / Origem</p>
-                    <p className="text-[11px] font-mono text-muted-foreground break-all">{auditSafeText(String(selectedLog.rota || selectedLog.detalhes?.rota || selectedLog.detalhes?.origin || '-'))}</p>
-                    <p className="text-xs text-muted-foreground mt-2">Origem registrada: {selectedLog.origem || 'Não informada'}</p>
-                  </div>
-                </div>
-              </section>
+              <AuditOriginPanel event={selectedLog} device={formatDispositivo(selectedLog)} confirmed={detailConfirmed}/>
 
               {/* 6. DADOS TÉCNICOS COMPLETOS */}
               {detailConfirmed&&<Accordion type="single" collapsible className="w-full">
