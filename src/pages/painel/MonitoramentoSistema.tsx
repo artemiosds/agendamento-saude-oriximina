@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {monitorCount,monitorCoverage,monitorCacheFresh,monitorPeriodStatus,monitorPool} from '@/lib/monitoringEngine';
 import {auditCsvCell} from '@/lib/auditSecurity';
+import {storageDiagnosis,growthDiagnosis,inspectTreatmentLinks,LINK_SAMPLE_LIMIT} from '@/lib/monitoringIntegrity';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -96,6 +97,11 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
   const [activeTab, setActiveTab] = useState('visao_geral');
   const summaryRequest=useRef<AbortController|null>(null);
   const periodRequest=useRef<AbortController|null>(null);
+  const linkRequest=useRef<AbortController|null>(null);
+  const [linkLoading,setLinkLoading]=useState(false);
+  const [linkError,setLinkError]=useState<string|null>(null);
+  const [linkResult,setLinkResult]=useState<(ReturnType<typeof inspectTreatmentLinks>&{checkedAt:string})|null>(null);
+  const [storageCheckedAt,setStorageCheckedAt]=useState<string|null>(null);
   const periodCache=useRef<number|null>(null);
   const [periodCheckedAt,setPeriodCheckedAt]=useState<number|null>(null);
   const [periodLoading,setPeriodLoading]=useState(false);
@@ -123,6 +129,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
 
   const fetchStats = useCallback(async () => {
     if(summaryRequest.current)return;
+    linkRequest.current?.abort();linkRequest.current=null;setLinkLoading(false);setLinkError(null);setLinkResult(null);setStorageCheckedAt(null);
     periodRequest.current?.abort();periodRequest.current=null;periodCache.current=null;
     setPeriodCheckedAt(null);setPeriodLoading(false);setPeriodError(null);
     setDbStats([]);setStorageStats([]);setAlerts([]);setDatabaseBytes(null);setLastCheck(null);setRefreshDurationMs(null);
@@ -155,7 +162,9 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
               method:'POST',signal,headers:{apikey:import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,Authorization:`Bearer ${session.access_token}`,'Content-Type':'application/json'},body:'{}',
             });
             if(!response.ok)throw Error(response.status===404?'Medidor de armazenamento ainda não disponível neste ambiente.':`Consulta de armazenamento indisponível (${response.status}).`);
-            return {data:usageSchema.parse(await response.json()),error:null as string|null};
+            const data=usageSchema.parse(await response.json());
+            if(!Number.isFinite(Date.parse(data.checked_at))||!storageDiagnosis(data.buckets.map(b=>({bucket:b.name,fileCount:b.file_count,usedBytes:b.used_bytes,unknownSizeCount:b.unknown_size_count})),null).consistent)throw Error('Medição de armazenamento inconsistente.');
+            return {data,error:null as string|null};
           }catch(error){return {data:null,error:error instanceof Error?error.message:'Falha ao medir o armazenamento.'};}
         })():Promise.resolve({data:null,error:'Visão global de armazenamento disponível apenas para o Master Global.'}),
       ]);
@@ -163,12 +172,12 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
       setDbStats(results);setAlerts(alertResult.data??[]);setAlertsError(alertResult.error);
       setStorageError(usageResult.error);
       setStorageStats(usageResult.data?.buckets.map(bucket=>({bucket:bucket.name,fileCount:bucket.file_count,usedBytes:bucket.used_bytes,unknownSizeCount:bucket.unknown_size_count}))??[]);
-      setDatabaseBytes(usageResult.data?.database_bytes??null);setLastCheck(new Date());
+      setDatabaseBytes(usageResult.data?.database_bytes??null);setStorageCheckedAt(usageResult.data?.checked_at??null);setLastCheck(new Date());
       setSystemStatus(monitorCoverage(results,TABLES.length,!isMaster||!isGlobalAdmin||!!alertResult.error||!!usageResult.error||!usageResult.data||usageResult.data.buckets.some(b=>b.unknown_size_count>0)));
     }catch{
       if(!current())return;
       setDbStats([]);setStorageStats([]);setAlerts([]);setDatabaseBytes(null);setLastCheck(null);
-      setStorageError('Consulta indisponível.');setAlertsError('Consulta indisponível.');setSystemStatus('erro');
+      setStorageError('Consulta indisponível.');setAlertsError('Consulta indisponível.');setStorageCheckedAt(null);setSystemStatus('erro');
       toast.error(signal.aborted?'Tempo limite da consulta atingido.':'Erro ao atualizar dados de monitoramento');
     }finally{
       clearTimeout(timeout);
@@ -178,7 +187,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
 
   useEffect(()=>{
     void fetchStats();
-    return ()=>{const previous=summaryRequest.current;summaryRequest.current=null;previous?.abort();const detail=periodRequest.current;periodRequest.current=null;detail?.abort();periodCache.current=null;};
+    return ()=>{const previous=summaryRequest.current;summaryRequest.current=null;previous?.abort();const detail=periodRequest.current;periodRequest.current=null;detail?.abort();periodCache.current=null;const link=linkRequest.current;linkRequest.current=null;link?.abort();};
   },[fetchStats]);
 
   const fetchPeriods=useCallback(async(force=false)=>{
@@ -224,6 +233,32 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
   const hasStorageUsage = !!lastCheck && databaseBytes!==null && !storageError;
   const quotaBytes = quotaGB === null ? null : quotaGB * 1024 ** 3;
 
+  const storage=storageDiagnosis(storageStats,quotaBytes);
+  const growth=growthDiagnosis(dbStats);
+  const canInspectLinks=isGlobalAdmin&&isMaster&&user?.ativo===true;
+  const checkLinks=async()=>{
+    if(!canInspectLinks||summaryRequest.current||periodRequest.current||linkRequest.current)return;
+    const controller=new AbortController();linkRequest.current=controller;
+    const signal=controller.signal,current=()=>linkRequest.current===controller;
+    const timeout=setTimeout(()=>controller.abort(),30_000);
+    setLinkLoading(true);setLinkResult(null);setLinkError(null);
+    try{
+      const {data,error}=await supabase.from('treatment_sessions').select('id,cycle_id,patient_id').order('created_at',{ascending:false}).order('id',{ascending:false}).limit(LINK_SAMPLE_LIMIT).abortSignal(signal);
+      if(error||!data||signal.aborted)throw Error('Amostra de sessões indisponível.');
+      const ids=[...new Set(data.map(row=>row.cycle_id).filter(Boolean))];
+      const cycles=ids.length?await supabase.from('treatment_cycles').select('id,patient_id').in('id',ids).limit(LINK_SAMPLE_LIMIT).abortSignal(signal):{data:[],error:null};
+      if(cycles.error||!cycles.data||signal.aborted)throw Error('Consulta de ciclos indisponível.');
+      const result=inspectTreatmentLinks(data,cycles.data);
+      if(current())setLinkResult({...result,checkedAt:new Date().toISOString()});
+    }catch{if(current())setLinkError(signal.aborted?'Tempo limite da conferência atingido.':'Conferência amostral indisponível. Nenhuma conclusão emitida.');}
+    finally{clearTimeout(timeout);if(current()){linkRequest.current=null;setLinkLoading(false);}}
+  };
+  useEffect(()=>{
+    if(activeTab==='limpeza'&&canInspectLinks)return;
+    const previous=linkRequest.current;linkRequest.current=null;previous?.abort();
+    setLinkLoading(false);setLinkResult(null);setLinkError(null);
+  },[activeTab,canInspectLinks]);
+
   const saveQuota = () => {
     const next = Number(quotaInput.replace(',', '.'));
     if (!Number.isFinite(next) || next <= 0 || next > 1_000_000) {
@@ -238,14 +273,18 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
   };
 
   const exportReport = () => {
-    if(summaryRequest.current||periodRequest.current||!dbStats.length)return;
+    if(summaryRequest.current||periodRequest.current||linkRequest.current||!dbStats.length)return;
     const lines = [
       ['Tipo', 'Item', 'Total', '7 dias', '30 dias', 'Status', 'Períodos'],
       ['Consulta geral',lastCheck?.toISOString()??'Não concluída','','','',systemStatus,''],
       ['Consulta de períodos',periodCheckedAt===null?'Não concluída':new Date(periodCheckedAt).toISOString(),'','','',periodError??(periodCheckedAt===null?'Sob demanda':'Consulte status por tabela'),''],
       ...dbStats.map(table => ['Tabela', table.name, table.count ?? 'Indisponível', table.recent7d ?? 'N/D', table.recent30d ?? 'N/D', table.error ? 'Falha' : 'Consultado',monitorPeriodStatus(table,TABLES.some(t=>t.name===table.name&&t.date!==null))]),
       ['Alertas','Consulta',alertsError?'Não confirmado':alerts.length,'','',alertsError??'Consultado',''],
-      ['Storage','Consulta',databaseBytes??'Não medido','','',storageError??'Consultado',''],
+      ['Banco','Tamanho em bytes',databaseBytes??'Não medido','','',storageError??'Consultado',''],
+      ['Storage','Medição',storageCheckedAt??'Não medido','','',storageError??(storage.complete?'Metadados completos':'Medição parcial'),''],
+      ['Storage','Referência local em bytes',quotaBytes??'Não informada','','','Não é cota validada pelo provedor',''],
+      ['Storage','Saldo estimado em bytes',hasStorageUsage?storage.remaining??'Não calculável':'Não medido','','','Arquivos atuais; não faturamento',''],
+      ['Crescimento','Registros recentes','','','','Não equivale a crescimento líquido',''],
       ...storageStats.map(bucket => ['Storage', bucket.bucket, bucket.fileCount, '', '', `${bucket.usedBytes} bytes medidos`,`${bucket.unknownSizeCount} sem tamanho informado`]),
     ];
     const csv = lines.map(row => row.map(auditCsvCell).join(';')).join('\r\n');
@@ -285,7 +324,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
             Atualizar análise
           </Button>
-          <Button variant="outline" size="sm" onClick={exportReport} disabled={refreshing||periodLoading||dbStats.length === 0}>
+          <Button variant="outline" size="sm" onClick={exportReport} disabled={refreshing||periodLoading||linkLoading||dbStats.length === 0}>
             <Download className="w-4 h-4 mr-2" />
             Exportar relatório
           </Button>
@@ -423,7 +462,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
           </div>
         </TabsContent>
 
-        <TabsContent value="banco_dados">
+        <TabsContent value="banco_dados" className="space-y-3">
           <Card className="clinical-premium min-w-0">
             <CardHeader className="p-3 sm:p-4">
               <CardTitle>Estatísticas das Tabelas</CardTitle>
@@ -467,6 +506,13 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
               </div>
             </CardContent>
           </Card>
+          <Card className="clinical-premium min-w-0">
+            <CardHeader className="p-3 sm:p-4"><CardTitle className="text-base font-display">Volume recente de registros</CardTitle><CardDescription>Classificação pelos últimos 30 dias entre as tabelas com contagens coerentes. Não mede crescimento líquido nem espaço em disco.</CardDescription></CardHeader>
+            <CardContent className="p-3 sm:p-4 pt-0 space-y-2">
+              {growth.inconsistent>0&&<Alert><AlertTriangle className="h-4 w-4"/><AlertDescription>{growth.inconsistent} tabela(s) com contagens de momentos diferentes potencialmente divergentes; excluídas da classificação.</AlertDescription></Alert>}
+              {growth.ranked.length===0?<p className="text-sm text-muted-foreground">{periodLoading?'Consultando períodos…':'Nenhum período coerente disponível para classificação.'}</p>:growth.ranked.map(row=><div key={row.name} className="clinical-inset rounded-lg border p-2.5 space-y-1"><div className="flex flex-wrap justify-between gap-2 text-sm"><strong>{row.name}</strong><span className="tabular-nums">{row.recent30d.toLocaleString('pt-BR')} em 30 dias · {row.recent7d.toLocaleString('pt-BR')} em 7 dias</span></div><div className="h-2 rounded-full bg-muted overflow-hidden" aria-hidden="true"><div className="h-full rounded-full bg-primary" style={{width:row.share+'%'}}/></div><p className="text-xs text-muted-foreground">{row.share.toLocaleString('pt-BR',{maximumFractionDigits:1})}% dos registros atualmente visíveis, conforme contagens consultadas.</p></div>)}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="arquivos">
@@ -478,11 +524,13 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <Card className="clinical-premium min-w-0"><CardContent className="p-3"><p className="text-sm text-muted-foreground">Arquivos armazenados</p><p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{storageStats.reduce((total, bucket) => total + bucket.fileCount, 0).toLocaleString('pt-BR')}</p></CardContent></Card>
                   <Card className="clinical-premium min-w-0"><CardContent className="p-3"><p className="text-sm text-muted-foreground">Espaço usado em arquivos</p><p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{formatBytes(storageBytes)}</p></CardContent></Card>
-                  <Card className="clinical-premium min-w-0"><CardContent className="p-3"><p className="text-sm text-muted-foreground">Espaço restante estimado</p><p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{quotaBytes === null || unknownSizeCount > 0 ? 'Não calculável' : formatBytes(Math.max(0, quotaBytes - storageBytes))}</p></CardContent></Card>
+                  <Card className="clinical-premium min-w-0"><CardContent className="p-3"><p className="text-sm text-muted-foreground">Espaço restante estimado</p><p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{storage.remaining===null?'Não calculável':formatBytes(storage.remaining)}</p></CardContent></Card>
                 </div>
+                {storageCheckedAt&&<p className="text-xs text-muted-foreground">Medição do servidor: {new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Santarem',dateStyle:'short',timeStyle:'medium'}).format(new Date(storageCheckedAt))} · espaço medido nos metadados.</p>}
+                {storage.percent!==null&&<Card className="clinical-premium"><CardContent className="p-3 space-y-2"><div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">Uso da referência local</strong><span className="font-semibold tabular-nums">{storage.complete?'':'Pelo menos '}{storage.percent.toLocaleString('pt-BR',{maximumFractionDigits:1})}%</span></div><div className="h-2.5 rounded-full bg-muted overflow-hidden" aria-hidden="true"><div className={'h-full rounded-full '+(storage.level==='critical'||storage.level==='exceeded'?'bg-destructive':storage.level==='attention'?'bg-amber-500':'bg-primary')} style={{width:Math.min(100,storage.percent)+'%'}}/></div><p className="text-xs text-muted-foreground">{storage.level==='exceeded'?'Referência atingida ou excedida.':storage.level==='critical'?'Atenção prioritária: pelo menos 90% da referência.':storage.level==='attention'?'Atenção: pelo menos 75% da referência.':storage.level==='partial'?'Medição incompleta: não é possível confirmar capacidade restante.':'Abaixo da faixa de atenção da referência local.'} Limite informado manualmente, não validado pelo provedor.</p></CardContent></Card>}
                 {unknownSizeCount > 0 && <Alert><AlertTriangle className="h-4 w-4" /><AlertTitle>Medição incompleta</AlertTitle><AlertDescription>{unknownSizeCount} arquivo(s) sem tamanho informado nos metadados. O total pode ser maior.</AlertDescription></Alert>}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {storageStats.map((s) => (
+                  {storage.ranked.map((s) => (
                     <Card key={s.bucket} className="clinical-premium min-w-0">
                       <CardHeader className="p-3 pb-2"><CardTitle className="text-sm font-display break-all">{s.bucket}</CardTitle></CardHeader>
                       <CardContent className="space-y-2 p-3 pt-0">
@@ -600,7 +648,14 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
           </Card>
         </TabsContent>
 
-        <TabsContent value="limpeza">
+        <TabsContent value="limpeza" className="space-y-3">
+          {canInspectLinks&&<Card className="clinical-premium min-w-0"><CardHeader className="p-3 sm:p-4"><CardTitle className="text-base font-display">Conferência de vínculos de tratamento</CardTitle><CardDescription>Amostra de até {LINK_SAMPLE_LIMIT} sessões mais recentes visíveis à sessão atual. Compara identificadores de paciente e ciclo, sem carregar nomes ou dados clínicos.</CardDescription></CardHeader><CardContent className="p-3 sm:p-4 pt-0 space-y-3">
+            <Button variant="outline" size="sm" onClick={()=>void checkLinks()} disabled={refreshing||periodLoading||linkLoading}>{linkLoading?'Conferindo…':'Conferir vínculos da amostra'}</Button>
+            {linkError&&<Alert><AlertTriangle className="h-4 w-4"/><AlertDescription>{linkError}</AlertDescription></Alert>}
+            {linkResult&&<><p className="text-xs text-muted-foreground">Amostra: {linkResult.sample} sessões · {new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Santarem',dateStyle:'short',timeStyle:'medium'}).format(new Date(linkResult.checkedAt))}</p><div className="grid grid-cols-2 lg:grid-cols-4 gap-2">{[{label:'Vínculos coerentes',value:linkResult.confirmed},{label:'Ciclo não localizado no escopo',value:linkResult.missing},{label:'Paciente divergente',value:linkResult.mismatch},{label:'Identificador incompleto',value:linkResult.incomplete}].map(r=><div key={r.label} className="clinical-inset rounded-lg border p-2.5"><p className="text-xl font-bold tabular-nums">{r.value}</p><p className="text-xs text-muted-foreground">{r.label}</p></div>)}</div></>}
+            <p className="text-xs text-muted-foreground">Resultado amostral, não auditoria integral. Ciclo não localizado pode estar fora do escopo de leitura; não comprova registro órfão. Nenhuma correção automática.</p>
+          </CardContent></Card>}
+          <Card className="clinical-premium"><CardHeader className="p-3 sm:p-4"><CardTitle className="text-base font-display">Retenção e integridade de arquivos</CardTitle><CardDescription>Diagnóstico agregado da medição disponível.</CardDescription></CardHeader><CardContent className="p-3 sm:p-4 pt-0 space-y-2"><p className="text-sm">Eventos de auditoria visíveis: {dbStats.find(t=>t.name==='action_logs')?.count?.toLocaleString('pt-BR')??'Não verificado'}</p><p className="text-sm">Arquivos sem tamanho informado: {hasStorageUsage?unknownSizeCount.toLocaleString('pt-BR'):'Não verificado'}</p><p className="text-xs text-muted-foreground">Metadados sem tamanho não comprovam arquivo corrompido ou órfão. Inventário integral e política de retenção dependem de conferência autorizada; nenhum arquivo ou log é removido.</p></CardContent></Card>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Card className="clinical-premium border-destructive/30 min-w-0">
               <CardHeader className="p-3 sm:p-4">

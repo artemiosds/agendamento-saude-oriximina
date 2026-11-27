@@ -1,0 +1,7 @@
+# Fase 5 — Armazenamento e integridade preventiva
+- Ranking de registros criados nos últimos 30 dias usa somente contagens confirmadas e coerentes; não é crescimento líquido nem volume em bytes. Contagens não transacionais podem divergir e ficam fora do ranking.
+- Medição existente do Storage: valida nomes únicos, inteiros seguros, relação entre total de arquivos e metadados desconhecidos, timestamp e somatórios. Ordena por bytes medidos. Referência local informada manualmente; faixas informativas 75%, 90% e 100%, não representam limites oficiais. Saldo somente com metadados completos. Sem sondagem adicional de Storage.
+- Master Global ativo: conferência voluntária de até 100 sessões recentes e respectivos ciclos por identificador exato. Duas leituras no máximo, sem nomes ou dados clínicos, sem persistir ou exibir IDs. Mantém RLS do cliente existente. Resultado somente agregado, amostral e não transacional. Ciclo não localizado não prova orfandade. Cancelamento na saída, refresh e timeout de 30 segundos. Não há alteração do banco.
+- Diagnóstico de retenção mostra quantidade visível de logs e metadados desconhecidos. Não há cálculo de arquivos órfãos integral, exclusão, restauração, política automática ou migração. Dependem de mapeamento de vínculos e autorização.
+- CSV indica medição e referência manual; não exporta identificadores da amostra.
+- Validar compilação e consultas com sessão autorizada no Lovable Cloud antes da homologação.
