@@ -113,6 +113,7 @@ const Disponibilidade: React.FC = () => {
   const [renewal,setRenewal]=useState<{key:string;profissionalId:string;unidadeId:string;end:string;signature:string}|null>(null);
   const [copySource,setCopySource]=useState<number|null>(null);
   const [copyTargets,setCopyTargets]=useState<number[]>([]);
+  const copyPanelRef=useRef<HTMLDivElement|null>(null);
   useEffect(()=>{if(!dialogOpen){setRenewal(null);setCopySource(null);setCopyTargets([]);}},[dialogOpen]);
   const [saving, setSaving] = useState(false);
   const [quotaReservation, setQuotaReservation] = useState<number | null>(null);
@@ -289,6 +290,11 @@ const Disponibilidade: React.FC = () => {
       duracaoConsulta: first.duracaoConsulta || 30, intervalo: 0,
     });
 
+    // Opening a saved grade must not carry the other mode's previous draft.
+    const sourceDays=new Set(records.flatMap(r=>r.diasSemana));
+    setDaySchedules(defaultDaySchedules.map((ds,index)=>({...ds,ativo:sourceDays.has(index)})));
+    setConfigDias(Array.from({length:7},(_,diaSemana)=>({diaSemana,ativo:sourceDays.has(diaSemana),blocos:[]})));
+    setTurnoDays(defaultTurnoDays.map(d=>({...d,turnosAtivos:[]})));setTurnoVagas({});
     if (isTurno) {
       setModo('por_turno');
       // Reconstruct DiaConfig from records
@@ -340,6 +346,8 @@ const Disponibilidade: React.FC = () => {
 
   // Handle professional change - load saved mode
   const handleProfissionalChange = (profId: string) => {
+    if(renewal||gradeWriteInFlight.current)return;
+    setCopySource(null);setCopyTargets([]);
     const prof = profissionais.find(p => p.id === profId);
     setForm(p => ({
       ...p,
@@ -570,6 +578,7 @@ const Disponibilidade: React.FC = () => {
     if(saving||!draftDays[fromIndex]?.ativo)return;
     if(modo==='por_turno'&&!configDias[fromIndex].blocos.some(b=>b.ativo)){toast.error('Configure pelo menos um bloco no dia de origem.');return;}
     setCopySource(fromIndex);setCopyTargets([]);
+    requestAnimationFrame(()=>copyPanelRef.current?.scrollIntoView({block:'nearest'}));
   };
   const applyCopy=()=>{
     if(saving||gradeWriteInFlight.current||copySource===null||!draftDays[copySource]?.ativo||!copyTargets.length)return;
@@ -799,7 +808,7 @@ const Disponibilidade: React.FC = () => {
               <div className="grid grid-cols-7 gap-1">{draftDays.map((d,index)=><div key={index} className={cn("rounded-md border p-1 text-center text-xs",d.ativo?'bg-primary/10 text-primary font-semibold':'text-muted-foreground')}>{diasSemanaLabels[index]}<span className="block text-[10px]">{d.ativo?'Ativo':'—'}</span></div>)}</div>
               <p className="text-xs text-muted-foreground">Os atalhos alteram somente o rascunho. Os dias desmarcados não serão gravados.</p>
               <div className="flex flex-wrap gap-2 items-center border-t pt-2"><Label>Copiar configuração de um dia</Label><Select value={copySource===null?'none':String(copySource)} onValueChange={v=>{if(v==='none'){setCopySource(null);setCopyTargets([]);}else copyDayConfig(Number(v));}} disabled={saving}><SelectTrigger className="w-full sm:w-44" aria-label="Dia de origem da cópia"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="none">Escolher dia</SelectItem>{draftDays.map((d,index)=><SelectItem key={index} value={String(index)} disabled={!d.ativo||(modo==='por_turno'&&!configDias[index].blocos.some(b=>b.ativo))}>{diasSemanaFull[index]}</SelectItem>)}</SelectContent></Select></div>
-              {copySource!==null&&<div className="clinical-inset rounded-lg border p-2 space-y-2"><p className="text-xs font-medium">Destino da cópia de {diasSemanaFull[copySource]}</p><div className="flex flex-wrap gap-1.5">{draftDays.map((_,index)=>index!==copySource&&<Button key={index} type="button" size="sm" variant={copyTargets.includes(index)?'default':'outline'} aria-pressed={copyTargets.includes(index)} disabled={saving} onClick={()=>setCopyTargets(prev=>prev.includes(index)?prev.filter(i=>i!==index):[...prev,index])}>{diasSemanaLabels[index]}</Button>)}</div><div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" onClick={()=>setCopyTargets(draftDays.flatMap((d,index)=>d.ativo&&index!==copySource?[index]:[]))}>Demais ativos</Button><Button type="button" size="sm" disabled={saving||!copyTargets.length||!draftDays[copySource]?.ativo} onClick={applyCopy}><Copy className="w-3.5 h-3.5 mr-1"/>Aplicar em {copyTargets.length} dia(s)</Button><Button type="button" size="sm" variant="ghost" onClick={()=>{setCopySource(null);setCopyTargets([]);}}>Cancelar cópia</Button></div><p className="text-xs text-muted-foreground">A cópia ativa os destinos selecionados e substitui seus horários/blocos no formulário.</p></div>}
+              {copySource!==null&&<div ref={copyPanelRef} className="clinical-inset rounded-lg border p-2 space-y-2"><p className="text-xs font-medium">Destino da cópia de {diasSemanaFull[copySource]}</p><div className="flex flex-wrap gap-1.5">{draftDays.map((_,index)=>index!==copySource&&<Button key={index} type="button" size="sm" variant={copyTargets.includes(index)?'default':'outline'} aria-pressed={copyTargets.includes(index)} disabled={saving} onClick={()=>setCopyTargets(prev=>prev.includes(index)?prev.filter(i=>i!==index):[...prev,index])}>{diasSemanaLabels[index]}</Button>)}</div><div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" onClick={()=>setCopyTargets(draftDays.flatMap((d,index)=>d.ativo&&index!==copySource?[index]:[]))}>Demais ativos</Button><Button type="button" size="sm" disabled={saving||!copyTargets.length||!draftDays[copySource]?.ativo} onClick={applyCopy}><Copy className="w-3.5 h-3.5 mr-1"/>Aplicar em {copyTargets.length} dia(s)</Button><Button type="button" size="sm" variant="ghost" onClick={()=>{setCopySource(null);setCopyTargets([]);}}>Cancelar cópia</Button></div><p className="text-xs text-muted-foreground">A cópia ativa os destinos selecionados e substitui seus horários/blocos no formulário.</p></div>}
             </section>
             {/* === POR HORA mode === */}
             {modo === 'por_hora' && (
@@ -1050,11 +1059,11 @@ const Disponibilidade: React.FC = () => {
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Resumo da Configuração</h4>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div className="flex flex-col">
-                        <span className="text-muted-foreground text-[10px] uppercase">Vagas Semanais</span>
+                        <span className="text-muted-foreground text-[10px] uppercase">Vagas nominais semanais</span>
                         <span className="font-bold text-lg">{turnoWeeklySummary.totalVagas}</span>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-muted-foreground text-[10px] uppercase">Dias Ativos</span>
+                        <span className="text-muted-foreground text-[10px] uppercase">Dias selecionados</span>
                         <span className="font-bold text-lg">{turnoWeeklySummary.diasAtivos} / 7</span>
                       </div>
                     </div>
@@ -1144,7 +1153,7 @@ const Disponibilidade: React.FC = () => {
                               <Badge className="gap-1.5 rounded-full px-3 py-1 text-xs"><Calendar className="w-3.5 h-3.5" />Por turno</Badge>{periodBadge(period)}
                               {unidade && <><span className="h-5 w-px bg-border" /><span className="text-xs text-muted-foreground break-words">{unidade.nome}</span></>}
                             </div>
-                            <div className="flex gap-1 shrink-0">
+                            <div className="flex flex-wrap gap-1 shrink-0">
                               <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" disabled={!configLoaded||!may('can_create',first.unidadeId)||saving||period==='invalido'||!profissionais.some(p=>p.id===first.profissionalId)} onClick={()=>openEditGroup(key,true)}><Copy className="w-3.5 h-3.5"/>Renovar</Button>
                               <Button size="icon" variant="ghost" className="h-8 w-8" title="Editar" disabled={!configLoaded||!may('can_edit',first.unidadeId)||saving||first.dataFim<todayStr||!profissionais.some(p=>p.id===first.profissionalId)} onClick={() => openEditGroup(key)}><Pencil className="w-4 h-4" /></Button>
                               <AlertDialog>
@@ -1203,7 +1212,7 @@ const Disponibilidade: React.FC = () => {
                               </div>
                               <p className="text-xs text-muted-foreground"><Calendar className="w-3.5 h-3.5 inline mr-1" />{first.dataInicio} a {first.dataFim}</p>
                             </div>
-                            <div className="flex gap-1">
+                            <div className="flex flex-wrap gap-1">
                               <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" disabled={!configLoaded||!may('can_create',first.unidadeId)||saving||period==='invalido'||!profissionais.some(p=>p.id===first.profissionalId)} onClick={()=>openEditGroup(key,true)}><Copy className="w-3.5 h-3.5"/>Renovar</Button>
                               <Button size="icon" variant="ghost" className="h-8 w-8" disabled={!configLoaded||!may('can_edit',first.unidadeId)||saving||first.dataFim<todayStr||!profissionais.some(p=>p.id===first.profissionalId)} onClick={() => openEditGroup(key)}><Pencil className="w-3.5 h-3.5" /></Button>
                               <AlertDialog>
