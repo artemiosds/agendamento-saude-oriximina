@@ -17,6 +17,7 @@ export interface RegistroEscala {
   inicio: string;
   fim: string;
   semanal: boolean;
+  fim_recorrencia?: string | null;
   origem?: string | null;
 }
 
@@ -66,7 +67,7 @@ export function distribuirRegistros(rows: RegistroEscala[], days: Date[]) {
       continue;
     }
     for (const day of daysByWeekday.get(weekdayEscala(row.data)) ?? []) {
-      if (day >= row.data && !exceptions.has(row.id + '/' + day)) result.get(day)?.push(row);
+      if (day >= row.data && (!row.fim_recorrencia || day <= row.fim_recorrencia) && !exceptions.has(row.id + '/' + day)) result.get(day)?.push(row);
     }
   }
   return result;
