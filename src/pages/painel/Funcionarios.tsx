@@ -361,11 +361,13 @@ const Funcionarios: React.FC = () => {
 
   /** Print employee profile card */
   const handlePrintFuncionario = (f: FuncionarioDB) => {
+    if(!canEditEmployee(f))return;
+    const escapeHtml=(value:unknown)=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]||char));
     const unidadeNome = unidades.find(u => u.id === f.unidade_id)?.nome || '—';
     const cd = (f.custom_data as any) || {};
     const w = window.open('', '_blank', 'width=800,height=900');
     if (!w) return;
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Ficha — ${f.nome}</title>
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Ficha — ${escapeHtml(f.nome)}</title>
       <style>body{font-family:Georgia,serif;padding:32px;color:#1a1a1a;max-width:720px;margin:auto}
       h1{font-size:20px;border-bottom:2px solid #2A6F97;padding-bottom:8px;color:#2A6F97}
       h2{font-size:14px;margin-top:24px;color:#2A6F97;text-transform:uppercase;letter-spacing:1px}
@@ -373,30 +375,30 @@ const Funcionarios: React.FC = () => {
       td:first-child{font-weight:600;width:35%;color:#555} .foot{margin-top:32px;font-size:11px;color:#888;text-align:center}</style></head><body>
       <h1>Ficha do Funcionário</h1>
       <h2>Dados Pessoais</h2><table>
-      <tr><td>Nome</td><td>${f.nome}</td></tr>
-      <tr><td>CPF</td><td>${f.cpf || '—'}</td></tr>
-      <tr><td>E-mail</td><td>${f.email || '—'}</td></tr>
-      <tr><td>Usuário</td><td>${f.usuario || '—'}</td></tr>
+      <tr><td>Nome</td><td>${escapeHtml(f.nome)}</td></tr>
+      <tr><td>CPF</td><td>${escapeHtml(f.cpf || '—')}</td></tr>
+      <tr><td>E-mail</td><td>${escapeHtml(f.email || '—')}</td></tr>
+      <tr><td>Usuário</td><td>${escapeHtml(f.usuario || '—')}</td></tr>
       </table>
       <h2>Dados Profissionais</h2><table>
-      <tr><td>Profissão</td><td>${f.profissao || '—'}</td></tr>
-      <tr><td>Cargo</td><td>${f.cargo || '—'}</td></tr>
-      <tr><td>Perfil</td><td>${roleLabels[f.role] || f.role}</td></tr>
-      <tr><td>Conselho</td><td>${f.tipo_conselho || ''} ${f.numero_conselho || ''} ${f.uf_conselho ? '/' + f.uf_conselho : ''}</td></tr>
-      <tr><td>CBO</td><td>${cd.cbo_codigo || '—'} ${cd.cbo_descricao || ''}</td></tr>
-      <tr><td>CNS</td><td>${cd.cns ? formatCNS(cd.cns) : '—'}</td></tr>
-      <tr><td>Unidade</td><td>${unidadeNome}</td></tr>
-      <tr><td>Setor</td><td>${f.setor || '—'}</td></tr>
-      <tr><td>Tempo de Atendimento</td><td>${f.tempo_atendimento || '—'} min</td></tr>
+      <tr><td>Profissão</td><td>${escapeHtml(f.profissao || '—')}</td></tr>
+      <tr><td>Cargo</td><td>${escapeHtml(f.cargo || '—')}</td></tr>
+      <tr><td>Perfil</td><td>${escapeHtml(roleLabels[f.role] || f.role)}</td></tr>
+      <tr><td>Conselho</td><td>${escapeHtml(f.tipo_conselho || '')} ${escapeHtml(f.numero_conselho || '')} ${escapeHtml(f.uf_conselho ? '/' + f.uf_conselho : '')}</td></tr>
+      <tr><td>CBO</td><td>${escapeHtml(cd.cbo_codigo || '—')} ${escapeHtml(cd.cbo_descricao || '')}</td></tr>
+      <tr><td>CNS</td><td>${escapeHtml(cd.cns ? formatCNS(cd.cns) : '—')}</td></tr>
+      <tr><td>Unidade</td><td>${escapeHtml(unidadeNome)}</td></tr>
+      <tr><td>Setor</td><td>${escapeHtml(f.setor || '—')}</td></tr>
+      <tr><td>Tempo de Atendimento</td><td>${escapeHtml(f.tempo_atendimento || '—')} min</td></tr>
       </table>
       <h2>Vínculo</h2><table>
-      <tr><td>Status</td><td>${f.ativo ? 'Ativo' : 'Inativo'}</td></tr>
-      <tr><td>Tipo de Vínculo</td><td>${cd.tipo_vinculo || '—'}</td></tr>
-      <tr><td>Data de Admissão</td><td>${cd.data_admissao || '—'}</td></tr>
-      <tr><td>Turno</td><td>${cd.turno_trabalho || '—'}</td></tr>
-      <tr><td>Data de Cadastro</td><td>${f.criado_em ? new Date(f.criado_em).toLocaleDateString('pt-BR') : '—'}</td></tr>
+      <tr><td>Status</td><td>${escapeHtml(f.ativo ? 'Ativo' : 'Inativo')}</td></tr>
+      <tr><td>Tipo de Vínculo</td><td>${escapeHtml(cd.tipo_vinculo || '—')}</td></tr>
+      <tr><td>Data de Admissão</td><td>${escapeHtml(cd.data_admissao || '—')}</td></tr>
+      <tr><td>Turno</td><td>${escapeHtml(cd.turno_trabalho || '—')}</td></tr>
+      <tr><td>Data de Cadastro</td><td>${escapeHtml(f.criado_em ? new Date(f.criado_em).toLocaleDateString('pt-BR') : '—')}</td></tr>
       </table>
-      <div class="foot">Documento emitido por GestorPlantão — SMS Oriximiná — ${new Date().toLocaleString('pt-BR')}</div>
+      <div class="foot">Documento emitido por GestorPlantão — SMS Oriximiná — ${escapeHtml(new Date().toLocaleString('pt-BR'))}</div>
       <script>window.onload=()=>{window.print();}</script></body></html>`);
     w.document.close();
   };
@@ -497,11 +499,11 @@ const Funcionarios: React.FC = () => {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full">
           <TabsTrigger value="internos" className="flex-1">
-            Funcionários Internos <span className="ml-2 text-xs opacity-70">({ativosList.length})</span>
+            Funcionários Internos <span className="ml-2 text-xs opacity-70">({loading||loadError?'—':ativosList.length})</span>
           </TabsTrigger>
           <TabsTrigger value="externos" className="flex-1"><UserCog className="w-4 h-4 mr-1" />Profissionais Externos</TabsTrigger>
           <TabsTrigger value="inativos" className="flex-1">
-            Inativos <span className="ml-2 text-xs opacity-70">({inativosList.length})</span>
+            Inativos <span className="ml-2 text-xs opacity-70">({loading||loadError?'—':inativosList.length})</span>
           </TabsTrigger>
         </TabsList>
 
@@ -509,7 +511,7 @@ const Funcionarios: React.FC = () => {
           {isGlobalMaster && (
             <>
               <UnitScopeNavigator units={unidadesVisiveis} value={filterUnidade} onChange={setFilterUnidade} />
-              {!loading && (
+              {!loading && !loadError && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" aria-label="Resumo da equipe por unidade">
                   {summaryUnits.map(unit => {
                     const assigned = ativosList.filter(member => member.unidade_id === unit.id);
@@ -890,7 +892,7 @@ const Funcionarios: React.FC = () => {
       </Tabs>
 
       {/* Profile drawer */}
-      <Sheet open={!!viewFuncionario} onOpenChange={(o) => !o && setViewFuncionario(null)}>
+      <Sheet open={!!viewFuncionario && loadedScope===scopeKey && !loadError} onOpenChange={(o) => !o && setViewFuncionario(null)}>
         <SheetContent side="right" className="p-0 flex flex-col" style={{ width: '95vw', maxWidth: 480 }}>
           <SheetHeader className="p-4 pb-2 border-b">
             <SheetTitle className="font-display text-lg break-words pr-8">{viewFuncionario?.nome}</SheetTitle>
