@@ -62,7 +62,7 @@ export function RecoveryPackageBuilder({ mode = "both" }: { mode?: "build" | "ve
         const comparison=compareStorageInventory(storageEntries,parseStorageInventory(inventoryRaw));
         if(!comparison.matched)throw Error("Inventário divergente: "+comparison.missing+" ausente(s), "+comparison.extra+" extra(s), "+comparison.different+" com tamanho diferente.");
       }
-      if (selected.reduce((size, file) => size + file.size, 0) > MAX_BROWSER_BYTES) {
+      if (selected.reduce((size, file) => size + file.size, 0) + (inventoryRaw===null?0:new TextEncoder().encode(inventoryRaw).byteLength) > MAX_BROWSER_BYTES) {
         throw new Error("Arquivos acima de 300 MB devem ser empacotados em um computador, sem passar pelo navegador.");
       }
 
@@ -86,14 +86,16 @@ export function RecoveryPackageBuilder({ mode = "both" }: { mode?: "build" | "ve
       }
 
       if(inventoryRaw!==null){const file=new File([inventoryRaw],"storage.json",{type:"application/json"});zip.file("inventory/storage.json",file,{compression:"STORE"});entries.push({path:"inventory/storage.json",size:file.size,sha256:await sha256(file)});}
-      zip.file("manifest.json", JSON.stringify({
+      const manifestText=JSON.stringify({
         format: "sms-saude-recovery-package-v2",
         inventory_reference: inventoryRaw!==null,
         created_at: new Date().toISOString(),
         status: "arquivos selecionados; restauracao ainda nao testada",
         storage_files_selected: storage.length,
         entries,
-      }, null, 2));
+      }, null, 2);
+      if(new TextEncoder().encode(manifestText).byteLength>MAX_INVENTORY_BYTES)throw Error("Manifesto excede 2 MB. Use uma ferramenta local para este conjunto de arquivos.");
+      zip.file("manifest.json",manifestText);
       zip.file("LEIA_ANTES_DE_RESTAURAR.txt", [
         "Banco: arquivo PostgreSQL nativo. Teste o pg_restore em ambiente isolado antes de migrar.",
         "Lovable Cloud: restaure backups diarios pelo painel More > Database > Manage > Backups.",
@@ -149,10 +151,10 @@ export function RecoveryPackageBuilder({ mode = "both" }: { mode?: "build" | "ve
         <div className="clinical-inset rounded-lg border p-3 space-y-2 md:col-span-2 min-w-0"><Label htmlFor="recovery-storage">Pasta com os arquivos do Storage</Label><Input ref={storageFolderInput} id="recovery-storage" type="file" multiple disabled={busy||verifying} onChange={event => {setStorage(Array.from(event.target.files ?? []));setStorageConfirmed(false);}} /><p className="text-xs text-muted-foreground">{storage.length} arquivo(s) selecionado(s). Organize a pasta com uma subpasta por bucket antes de selecioná-la; confira a lista e os caminhos no manifesto gerado. Seu navegador precisa permitir a seleção de pastas.</p></div>
       </div>
       <div className="clinical-inset rounded-lg border p-3 space-y-2"><Label htmlFor="recovery-inventory">Inventário independente do Storage (opcional)</Label><Input id="recovery-inventory" type="file" accept=".json" disabled={busy||verifying} onChange={event=>{setInventory(event.target.files?.[0]??null);setStorageConfirmed(false);}}/><p className="text-xs text-muted-foreground">JSON: formato sms-storage-inventory-v1, lista files com path (bucket/caminho) e size em bytes. Compare com inventário obtido separadamente pelo TI. Sem inventário, a cobertura permanece não confirmada.</p><Button variant="outline" size="sm" type="button" onClick={()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({format:"sms-storage-inventory-v1",files:[]},null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download="modelo-inventario-storage.json";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>Baixar modelo vazio</Button></div>
-      <label className="clinical-inset rounded-lg border p-3 flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" disabled={busy||verifying} checked={storageConfirmed} onChange={event => setStorageConfirmed(event.target.checked)} /> Conferi que a pasta selecionada contém os arquivos de todos os buckets usados pelo projeto.</label>
+      <label className="clinical-inset rounded-lg border p-3 flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" disabled={busy||verifying} checked={storageConfirmed} onChange={event => setStorageConfirmed(event.target.checked)} /> Conferi a seleção dos arquivos do Storage e entendo que a cobertura total exige inventário independente e teste de recuperação.</label>
       <Button onClick={createPackage} disabled={busy || verifying || !database || !source || (!storage.length&&!inventory) || !storageConfirmed}>{busy ? "Verificando arquivos..." : "Baixar pacote ZIP com manifesto"}</Button>
       {busy&&<p role="status" className="text-xs text-muted-foreground">{progress}</p>}
-      <p className="text-xs text-muted-foreground">Limite de 300 MB para evitar travamentos no navegador. O ZIP não é criptografado e não restaura automaticamente no Lovable.</p>
+      <p className="text-xs text-muted-foreground">Limite de 300 MiB de arquivos e inventário para reduzir o risco de travamento no navegador. O ZIP não é criptografado e não restaura automaticamente no Lovable.</p>
       </>}
       {mode !== "build" && <div className="space-y-3">
         <h4 className="font-display font-semibold">Verificar um pacote de recuperação</h4>
@@ -168,7 +170,7 @@ export function RecoveryPackageBuilder({ mode = "both" }: { mode?: "build" | "ve
             {verification.problems.length > 0 && <ul className="mt-2 list-disc pl-5">{verification.problems.map((problem, index) => <li key={`${index}-${problem}`}>{problem}</li>)}</ul>}
           </div>
         )}
-        <p className="text-xs text-muted-foreground">A correspondência com os dados reais e a recuperação de contas só podem ser confirmadas por uma restauração em ambiente isolado. Segredos e provedores de login não estão no pacote.</p>
+        <p className="text-xs text-muted-foreground">A correspondência com os dados reais e a recuperação de contas só podem ser confirmadas por uma restauração em ambiente isolado. Não presuma cobertura ou ausência de segredos: o código e os arquivos selecionados podem conter informações sensíveis. Revise e proteja a cópia.</p>
       </div>
       }
     </div>

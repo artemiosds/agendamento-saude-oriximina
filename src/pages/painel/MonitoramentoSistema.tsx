@@ -120,7 +120,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
     try {
       const stored = localStorage.getItem(quotaStorageKey);
       const parsed = stored ? Number(stored) : null;
-      return parsed && Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+      return parsed && Number.isFinite(parsed) && parsed >= 0.001 && parsed <= 1_000_000 ? parsed : null;
     } catch { return null; }
   });
   const [quotaInput, setQuotaInput] = useState(() => String(quotaGB ?? ''));
@@ -163,7 +163,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
             });
             if(!response.ok)throw Error(response.status===404?'Medidor de armazenamento ainda não disponível neste ambiente.':`Consulta de armazenamento indisponível (${response.status}).`);
             const data=usageSchema.parse(await response.json());
-            if(!Number.isFinite(Date.parse(data.checked_at))||!storageDiagnosis(data.buckets.map(b=>({bucket:b.name,fileCount:b.file_count,usedBytes:b.used_bytes,unknownSizeCount:b.unknown_size_count})),null).consistent)throw Error('Medição de armazenamento inconsistente.');
+            if(!Number.isFinite(Date.parse(data.checked_at))||!Number.isSafeInteger(data.database_bytes)||!storageDiagnosis(data.buckets.map(b=>({bucket:b.name,fileCount:b.file_count,usedBytes:b.used_bytes,unknownSizeCount:b.unknown_size_count})),null).consistent)throw Error('Medição de armazenamento inconsistente.');
             return {data,error:null as string|null};
           }catch(error){return {data:null,error:error instanceof Error?error.message:'Falha ao medir o armazenamento.'};}
         })():Promise.resolve({data:null,error:'Visão global de armazenamento disponível apenas para o Master Global.'}),
@@ -261,8 +261,8 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
 
   const saveQuota = () => {
     const next = Number(quotaInput.replace(',', '.'));
-    if (!Number.isFinite(next) || next <= 0 || next > 1_000_000) {
-      toast.error('Informe um limite de referência válido em GB.');
+    if (!Number.isFinite(next) || next < 0.001 || next > 1_000_000) {
+      toast.error('Informe uma referência entre 0,001 e 1.000.000 GB.');
       return;
     }
     try {
@@ -282,7 +282,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
       ['Alertas','Consulta',alertsError?'Não confirmado':alerts.length,'','',alertsError??'Consultado',''],
       ['Banco','Tamanho em bytes',databaseBytes??'Não medido','','',storageError??'Consultado',''],
       ['Storage','Medição',storageCheckedAt??'Não medido','','',storageError??(storage.complete?'Metadados completos':'Medição parcial'),''],
-      ['Storage','Referência local em bytes',quotaBytes??'Não informada','','','Não é cota validada pelo provedor',''],
+      ['Storage','Referência local em bytes',isGlobalAdmin?(quotaBytes??'Não informada'):'Restrita','','','Não é cota validada pelo provedor',''],
       ['Storage','Saldo estimado em bytes',hasStorageUsage?storage.remaining??'Não calculável':'Não medido','','','Arquivos atuais; não faturamento',''],
       ['Crescimento','Registros recentes','','','','Não equivale a crescimento líquido',''],
       ...storageStats.map(bucket => ['Storage', bucket.bucket, bucket.fileCount, '', '', `${bucket.usedBytes} bytes medidos`,`${bucket.unknownSizeCount} sem tamanho informado`]),

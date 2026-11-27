@@ -133,7 +133,7 @@ const DadosSection: React.FC = () => {
           </TabsList>
           <TabsContent value="backup" className="space-y-4">
           <div className="rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 p-3 text-sm text-amber-950 dark:text-amber-200" role="alert">
-            <strong>Para recuperar todos os dados, use a exportação nativa do Lovable Cloud.</strong> A exportação auxiliar desta página pode omitir registros e não inclui a estrutura completa do banco ou as contas de autenticação. Não a utilize como único backup.
+            <strong>Para recuperar o banco, use a exportação nativa do Lovable Cloud.</strong> As exportações administrativas CSV não são backups restauráveis. Preserve separadamente os arquivos do Storage e o código; a recuperação completa exige validação em ambiente isolado.
           </div>
           <div className="clinical-inset space-y-3 rounded-xl border p-3 sm:p-4">
               <h4 className="font-semibold">Preparar a exportação nativa</h4>
@@ -181,7 +181,7 @@ const DadosSection: React.FC = () => {
         <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
           <div className="text-xs text-amber-800 dark:text-amber-200">
-            <strong>Dados sensíveis:</strong> Os pacotes contêm informações de pacientes. O ZIP criado no navegador não é criptografado. Armazene-o em local criptografado e com acesso restrito. Somente uma restauração testada comprova a recuperação.
+            <strong>Dados sensíveis:</strong> Os pacotes contêm informações de pacientes. O ZIP criado no navegador não é criptografado. Revise a presença de segredos e credenciais nos arquivos selecionados. Armazene-o em local criptografado e com acesso restrito. Somente uma restauração testada comprova a recuperação.
           </div>
         </div>
       </CardContent>
