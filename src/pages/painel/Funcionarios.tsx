@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { PageHeader } from '@/components/ui/page-header';
+import { staffSearchText, staffDigits, reviewStaff, staffReviewLabels, buildCurrentStaffSchedules, type StaffReview } from '@/lib/staffDirectoryReview';
 import { EmptyState, LoadingState } from '@/components/EmptyState';
-import { Users } from 'lucide-react';
+import { Users, Stethoscope, UserMinus, ClipboardCheck, RefreshCw, ListFilter, ChevronDown, Building2, CalendarDays, ChevronRight } from 'lucide-react';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
@@ -106,6 +106,8 @@ const Funcionarios: React.FC = () => {
   const [filterRole, setFilterRole] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('nome_asc');
   const [activeTab, setActiveTab] = useState<string>('internos');
+  const [reviewFilter,setReviewFilter]=useState<'all'|'pending'|StaffReview>('all');
+  const [filtersOpen,setFiltersOpen]=useState(false);
   const [viewFuncionario, setViewFuncionario] = useState<FuncionarioDB | null>(null);
 
   const loadFuncionarios = async () => {
@@ -405,7 +407,7 @@ const Funcionarios: React.FC = () => {
 
   /** Apply unit-scope and master protection (used by all tabs) */
   const scopedFuncionarios = useMemo(() => {
-    let list = loadedScope===scopeKey&&!loadError?funcionarios:[];
+    let list = loadedScope===scopeKey&&!loadError&&can('usuarios','can_view')?funcionarios:[];
     if (user?.usuario !== 'admin.sms' && user?.unidadeId) {
       list = list.filter(f => f.unidade_id === user.unidadeId || !f.unidade_id);
     }
@@ -413,7 +415,7 @@ const Funcionarios: React.FC = () => {
       list = list.filter(f => !isProtectedGlobalMaster(f));
     }
     return list;
-  }, [funcionarios, user, isUnitMaster,loadedScope,scopeKey,loadError]);
+  }, [funcionarios, user, isUnitMaster,loadedScope,scopeKey,loadError,can]);
 
   /** Distinct profession options for filter dropdown */
   const profissoesDisponiveis = useMemo(() => {
@@ -426,14 +428,13 @@ const Funcionarios: React.FC = () => {
   const applyFilters = (list: FuncionarioDB[]) => {
     let out = list;
     if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase();
-      out = out.filter(f =>
-        f.nome.toLowerCase().includes(term) || f.email.toLowerCase().includes(term) || (f.cpf || '').includes(term) || (f.profissao || '').toLowerCase().includes(term) || (f.cargo || '').toLowerCase().includes(term)
-      );
+      const term = staffSearchText(searchTerm), digits=staffDigits(searchTerm);
+      out = out.filter(f => [f.nome,f.email,f.usuario,f.profissao,f.cargo,f.setor,f.custom_data?.cbo_codigo].some(v=>staffSearchText(v).includes(term)) || (/^[\d.\-\s]+$/.test(searchTerm)&&!!digits&&staffDigits(f.cpf).includes(digits)));
     }
     if (filterUnidade !== 'all') out = out.filter(f => f.unidade_id === filterUnidade);
     if (filterProfissao !== 'all') out = out.filter(f => f.profissao === filterProfissao);
     if (filterRole !== 'all') out = out.filter(f => f.role === filterRole);
+    if(reviewFilter!=='all')out=out.filter(f=>{const issues=reviewStaff(f);return reviewFilter==='pending'?issues.length>0:issues.includes(reviewFilter);});
     const sorted = [...out];
     sorted.sort((a, b) => {
       switch (sortBy) {
@@ -453,18 +454,25 @@ const Funcionarios: React.FC = () => {
 
   const ativosList = useMemo(() => scopedFuncionarios.filter(f => f.ativo !== false), [scopedFuncionarios]);
   const inativosList = useMemo(() => scopedFuncionarios.filter(f => f.ativo === false), [scopedFuncionarios]);
-  const filteredAtivos = useMemo(() => applyFilters(ativosList), [ativosList, searchTerm, filterUnidade, filterProfissao, filterRole, sortBy, unidades]);
-  const filteredInativos = useMemo(() => applyFilters(inativosList), [inativosList, searchTerm, filterUnidade, filterProfissao, filterRole, sortBy, unidades]);
+  const filteredAtivos = useMemo(() => applyFilters(ativosList), [ativosList, searchTerm, filterUnidade, filterProfissao, filterRole, sortBy, unidades,reviewFilter]);
+  const filteredInativos = useMemo(() => applyFilters(inativosList), [inativosList, searchTerm, filterUnidade, filterProfissao, filterRole, sortBy, unidades,reviewFilter]);
 
-  const attendanceUnits = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-    disponibilidades.forEach(schedule => {
-      if (!map.has(schedule.profissionalId)) map.set(schedule.profissionalId, new Set());
-      map.get(schedule.profissionalId)!.add(schedule.unidadeId);
-    });
-    return map;
-  }, [disponibilidades]);
-
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santarem',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).reduce((a,p)=>({...a,[p.type]:p.value}),{} as Record<string,string>);
+  const todayKey=[today.year,today.month,today.day].join('-');
+  const attendanceUnits=useMemo(()=>buildCurrentStaffSchedules(disponibilidades,todayKey,new Set(unidadesVisiveis.map(u=>u.id))),[disponibilidades,todayKey,unidadesVisiveis]);
+  const unitScope=(list:FuncionarioDB[])=>list.filter(f=>filterUnidade==='all'||f.unidade_id===filterUnidade);
+  const scopedActive=unitScope(ativosList),scopedInactive=unitScope(inativosList);
+  const pendingCount=scopedActive.filter(f=>reviewStaff(f).length>0).length;
+  const dataReady=!loading&&!loadError&&loadedScope===scopeKey&&can('usuarios','can_view');
+  const selectMetric=(tab:string,role='all',review:'all'|'pending'|StaffReview='all')=>{
+    setActiveTab(tab);setSearchTerm('');setFilterProfissao('all');setFilterRole(role);setReviewFilter(review);
+  };
+  const metrics=[
+    {label:'Funcionários ativos',value:scopedActive.length,Icon:Users,tone:'blue',run:()=>selectMetric('internos'),active:activeTab==='internos'&&filterRole==='all'&&reviewFilter==='all'},
+    {label:'Perfil profissional',value:scopedActive.filter(f=>f.role==='profissional').length,Icon:Stethoscope,tone:'teal',run:()=>selectMetric('internos','profissional'),active:activeTab==='internos'&&filterRole==='profissional'&&reviewFilter==='all'},
+    {label:'Inativos',value:scopedInactive.length,Icon:UserMinus,tone:'slate',run:()=>selectMetric('inativos'),active:activeTab==='inativos'&&reviewFilter==='all'},
+    {label:'Conferência cadastral',value:pendingCount,Icon:ClipboardCheck,tone:'violet',run:()=>{selectMetric('internos','all','pending');setFiltersOpen(true);},active:activeTab==='internos'&&reviewFilter!=='all'},
+  ];
   const staffByUnit = useMemo(() => {
     const groups = unidadesVisiveis.map(unit => ({
       id: unit.id,
@@ -481,9 +489,9 @@ const Funcionarios: React.FC = () => {
     : [];
 
   const clearFilters = () => {
-    setSearchTerm(''); setFilterUnidade('all'); setFilterProfissao('all'); setFilterRole('all'); setSortBy('nome_asc');
+    setSearchTerm(''); setFilterUnidade('all'); setFilterProfissao('all'); setFilterRole('all'); setSortBy('nome_asc');setReviewFilter('all');
   };
-  const hasActiveFilters = !!searchTerm || filterUnidade !== 'all' || filterProfissao !== 'all' || filterRole !== 'all';
+  const hasActiveFilters = !!searchTerm || filterUnidade !== 'all' || filterProfissao !== 'all' || filterRole !== 'all'||reviewFilter!=='all'||sortBy!=='nome_asc';
 
   const staffListProps = {
     unidades, canManage, isUnitMaster, currentUserUnitId: user?.unidadeId,
@@ -493,11 +501,20 @@ const Funcionarios: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <PageHeader title="Funcionários" subtitle="Cadastro de funcionários internos e profissionais externos" />
+      <header className="clinical-hub-hero flex flex-wrap items-center gap-3">
+        <span className="clinical-patient-avatar flex items-center justify-center shrink-0"><Users className="w-5 h-5" aria-hidden="true"/></span>
+        <div className="flex-1 min-w-[9rem]"><p className="clinical-hub-eyebrow">Gestão administrativa</p><h1 className="clinical-hub-name text-xl font-bold font-display">Funcionários</h1><p className="clinical-patient-sub text-xs mt-1">Gestão de equipes, vínculos e profissionais</p></div>
+        <Button type="button" variant="outline" className="clinical-hub-new gap-2" disabled={loading||saving} onClick={()=>void loadFuncionarios()}><RefreshCw className="w-4 h-4"/>Atualizar equipe</Button>
+        {canCreate&&dataReady&&<Button type="button" className="clinical-hub-new gap-2" disabled={saving} onClick={()=>{setActiveTab('internos');openNew();}}><Plus className="w-4 h-4"/>Novo Funcionário</Button>}
+      </header>
+      <section className="grid grid-cols-2 xl:grid-cols-4 gap-2" aria-label="Indicadores de funcionários na lotação selecionada">
+        {metrics.map(({label,value,Icon,tone,run,active})=><button key={label} type="button" disabled={!dataReady} onClick={run} aria-pressed={active} className={`clinical-premium flex min-w-0 items-center gap-2 p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 ${active?'ring-1 ring-primary/60':''}`}><span className={'clinical-dock-icon clinical-tone-'+tone}><Icon className="w-4 h-4"/></span><span className="flex-1 min-w-0"><strong className="block text-xl tabular-nums">{dataReady?value:'—'}</strong><span className="block text-xs text-muted-foreground">{label}</span></span><ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground" aria-hidden="true"/></button>)}
+      </section>
+      <p className="text-xs text-muted-foreground">Indicadores da lotação selecionada, antes dos filtros de busca. Conferência cadastral é informativa; não bloqueia profissionais.</p>
 
       {loadError&&activeTab!=='externos'&&<div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 flex flex-wrap items-center gap-2 text-sm"><span className="flex-1 text-destructive">{loadError} Não foi possível confirmar os dados da equipe.</span><Button type="button" variant="outline" size="sm" onClick={()=>void loadFuncionarios()}>Tentar novamente</Button></div>}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full">
+      <Tabs value={activeTab} onValueChange={value=>selectMetric(value)}>
+        <TabsList className="w-full h-auto flex-wrap gap-1 clinical-premium p-1">
           <TabsTrigger value="internos" className="flex-1">
             Funcionários Internos <span className="ml-2 text-xs opacity-70">({loading||loadError?'—':ativosList.length})</span>
           </TabsTrigger>
@@ -512,25 +529,25 @@ const Funcionarios: React.FC = () => {
             <>
               <UnitScopeNavigator units={unidadesVisiveis} value={filterUnidade} onChange={setFilterUnidade} />
               {!loading && !loadError && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" aria-label="Resumo da equipe por unidade">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-2" aria-label="Resumo da equipe por unidade">
                   {summaryUnits.map(unit => {
                     const assigned = ativosList.filter(member => member.unidade_id === unit.id);
-                    const scheduled = new Set(disponibilidades.filter(schedule => schedule.unidadeId === unit.id).map(schedule => schedule.profissionalId));
+                    const scheduled = ativosList.filter(member=>member.role==='profissional'&&attendanceUnits.get(member.id)?.has(unit.id));
                     return (
-                      <Card key={unit.id} className="border shadow-sm">
-                        <CardContent className="p-4 space-y-3">
+                      <Card key={unit.id} className="clinical-premium">
+                        <CardContent className="p-3 space-y-2">
                           <div className="flex items-start justify-between gap-2">
-                            <h2 className="font-semibold text-foreground">{unit.nome}</h2>
+                            <h2 className="font-semibold text-foreground flex items-center gap-2"><span className="clinical-dock-icon clinical-tone-blue"><Building2 className="w-4 h-4"/></span>{unit.nome}</h2>
                             <Badge variant="secondary">{assigned.length} na equipe</Badge>
                           </div>
                           <p className="text-sm text-muted-foreground">
                             {assigned.filter(member => member.role === 'profissional').length} profissionais · {assigned.filter(member => member.role === 'recepcao').length} recepção · {assigned.filter(member => ['enfermagem', 'tecnico'].includes(member.role)).length} enfermagem/triagem
                           </p>
-                          <p className="text-xs text-muted-foreground">{scheduled.size} profissional(is) com horário nesta unidade, inclusive de outra lotação.</p>
+                          <p className="text-xs text-muted-foreground">{scheduled.length} profissional(is) ativos com grade vigente carregada nesta unidade, inclusive de outra lotação. Não representa presença nem vagas livres.</p>
                           <div className="flex flex-wrap gap-2">
                             <Button size="sm" variant={filterUnidade === unit.id ? 'secondary' : 'outline'} onClick={() => setFilterUnidade(unit.id)}>{filterUnidade === unit.id ? 'Unidade selecionada' : 'Ver equipe'}</Button>
-                            <Button size="sm" variant="outline" asChild><Link to={`/painel/unidades?unidade=${encodeURIComponent(unit.id)}`}>Ver salas</Link></Button>
-                            <Button size="sm" variant="outline" asChild><Link to={`/painel/disponibilidade?unidade=${encodeURIComponent(unit.id)}`}>Horários</Link></Button>
+                            {can('unidades_salas','can_view')&&<Button size="sm" variant="outline" className="clinical-record-action" asChild><Link to={`/painel/unidades?unidade=${encodeURIComponent(unit.id)}`}>Ver salas</Link></Button>}
+                            {can('disponibilidade','can_view')&&<Button size="sm" variant="outline" className="clinical-record-action" asChild><Link to={`/painel/disponibilidade?unidade=${encodeURIComponent(unit.id)}`}>Horários</Link></Button>}
                           </div>
                         </CardContent>
                       </Card>
@@ -540,17 +557,14 @@ const Funcionarios: React.FC = () => {
               )}
             </>
           )}
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-            <div className="relative w-full lg:w-72">
+          <div className="clinical-premium p-3 space-y-2"><div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Buscar por nome, e-mail, CPF..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" />
+              <Input placeholder="Buscar nome, e-mail, CPF, profissão ou CBO..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" />
             </div>
-            {canCreate && !loading && !loadError && (
-              <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Novo Funcionário</Button>
-            )}
+            <Button type="button" variant="outline" className="clinical-record-action gap-2" aria-expanded={filtersOpen} aria-controls="staff-filters" onClick={()=>setFiltersOpen(v=>!v)}><ListFilter className="w-4 h-4"/>Filtros<ChevronDown className={`w-4 h-4 transition-transform ${filtersOpen?'rotate-180':''}`}/></Button>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
+          {filtersOpen&&<div id="staff-filters" className="clinical-inset rounded-lg border p-2 flex flex-wrap items-center gap-2">
             {!isGlobalMaster && (
               <Select value={filterUnidade} onValueChange={setFilterUnidade}>
                 <SelectTrigger className="w-[180px]"><SelectValue placeholder="Unidade" /></SelectTrigger>
@@ -584,11 +598,63 @@ const Funcionarios: React.FC = () => {
                 <SelectItem value="data_cadastro">Mais recentes</SelectItem>
               </SelectContent>
             </Select>
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={clearFilters}><X className="w-4 h-4 mr-1" />Limpar filtros</Button>
-            )}
-            <span className="text-xs text-muted-foreground ml-auto">{filteredAtivos.length} funcionário(s) encontrado(s)</span>
-          </div>
+            <Select value={reviewFilter} onValueChange={v=>setReviewFilter(v as typeof reviewFilter)}><SelectTrigger className="w-full sm:w-[235px]"><SelectValue placeholder="Conferência cadastral"/></SelectTrigger><SelectContent><SelectItem value="all">Todas as situações</SelectItem><SelectItem value="pending">Com pontos para conferência</SelectItem>{Object.entries(staffReviewLabels).map(([key,label])=><SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent></Select>
+          </div>}
+          <div className="flex flex-wrap items-center gap-2">{hasActiveFilters&&<Button variant="ghost" size="sm" onClick={clearFilters}><X className="w-4 h-4 mr-1"/>Limpar filtros</Button>}{reviewFilter!=='all'&&<Badge variant="outline">{reviewFilter==='pending'?'Conferência cadastral':staffReviewLabels[reviewFilter]}</Badge>}<span className="text-xs text-muted-foreground ml-auto" role="status">{dataReady?filteredAtivos.length+' funcionário(s) encontrado(s)':'Consulta em atualização'}</span></div></div>
+
+
+
+          {loading ? (
+            <LoadingState label="Carregando funcionários..." size="lg" />
+          ) : loadError ? null : filteredAtivos.length === 0 ? (
+            <EmptyState
+              icon={<Users className="w-8 h-8 text-muted-foreground/50" />}
+              title="Nenhum funcionário"
+              description={hasActiveFilters ? 'Nenhum resultado com os filtros aplicados.' : 'Clique em "Novo Funcionário" para começar.'}
+            />
+          ) : (
+            isGlobalMaster && filterUnidade === 'all' ? (
+              <div className="space-y-5">
+                {staffByUnit.map(group => (
+                  <section key={group.id || 'sem-unidade'} aria-label={`Equipe: ${group.nome}`} className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                      <h2 className="font-semibold text-foreground">{group.nome} <span className="text-sm font-normal text-muted-foreground">({group.staff.length})</span></h2>
+                      {group.id && <Button size="sm" variant="ghost" onClick={() => setFilterUnidade(group.id)}>Ver somente esta unidade</Button>}
+                    </div>
+                    <FuncionarioList {...staffListProps} items={group.staff} />
+                  </section>
+                ))}
+              </div>
+            ) : <FuncionarioList {...staffListProps} items={filteredAtivos} />
+          )}
+        </TabsContent>
+
+        <TabsContent value="externos" className="mt-4">
+          <ProfissionaisExternos />
+        </TabsContent>
+
+        <TabsContent value="inativos" className="mt-4 space-y-4"><div className="clinical-premium p-3 flex flex-wrap gap-2 items-center"><div className="relative flex-1 min-w-[12rem]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"/><Input className="pl-9" placeholder="Buscar funcionário inativo..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/></div>{hasActiveFilters&&<Button variant="outline" size="sm" className="clinical-record-action" onClick={clearFilters}>Limpar filtros</Button>}</div>
+          {loading ? (
+            <LoadingState label="Carregando..." size="lg" />
+          ) : loadError ? null : filteredInativos.length === 0 ? (
+            <EmptyState
+              icon={<Users className="w-8 h-8 text-muted-foreground/50" />}
+              title="Nenhum funcionário inativo"
+              description="Funcionários desativados aparecerão aqui."
+            />
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">{filteredInativos.length} inativo(s) — clique em reativar para retornar ao quadro.</p>
+              <FuncionarioList
+                {...staffListProps}
+                items={filteredInativos}
+                inactive
+                onReactivate={handleToggleAtivo}
+              />
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
           <Dialog open={dialogOpen} onOpenChange={open=>{if(!writeBusy.current)setDialogOpen(open);}}>
             <DialogContent className="max-w-lg p-0 overflow-hidden">
@@ -839,58 +905,6 @@ const Funcionarios: React.FC = () => {
             </DialogContent>
           </Dialog>
 
-          {loading ? (
-            <LoadingState label="Carregando funcionários..." size="lg" />
-          ) : loadError ? null : filteredAtivos.length === 0 ? (
-            <EmptyState
-              icon={<Users className="w-8 h-8 text-muted-foreground/50" />}
-              title="Nenhum funcionário"
-              description={hasActiveFilters ? 'Nenhum resultado com os filtros aplicados.' : 'Clique em "Novo Funcionário" para começar.'}
-            />
-          ) : (
-            isGlobalMaster && filterUnidade === 'all' ? (
-              <div className="space-y-5">
-                {staffByUnit.map(group => (
-                  <section key={group.id || 'sem-unidade'} aria-label={`Equipe: ${group.nome}`} className="space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
-                      <h2 className="font-semibold text-foreground">{group.nome} <span className="text-sm font-normal text-muted-foreground">({group.staff.length})</span></h2>
-                      {group.id && <Button size="sm" variant="ghost" onClick={() => setFilterUnidade(group.id)}>Ver somente esta unidade</Button>}
-                    </div>
-                    <FuncionarioList {...staffListProps} items={group.staff} />
-                  </section>
-                ))}
-              </div>
-            ) : <FuncionarioList {...staffListProps} items={filteredAtivos} />
-          )}
-        </TabsContent>
-
-        <TabsContent value="externos" className="mt-4">
-          <ProfissionaisExternos />
-        </TabsContent>
-
-        <TabsContent value="inativos" className="mt-4 space-y-4">
-          {loading ? (
-            <LoadingState label="Carregando..." size="lg" />
-          ) : loadError ? null : filteredInativos.length === 0 ? (
-            <EmptyState
-              icon={<Users className="w-8 h-8 text-muted-foreground/50" />}
-              title="Nenhum funcionário inativo"
-              description="Funcionários desativados aparecerão aqui."
-            />
-          ) : (
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">{filteredInativos.length} inativo(s) — clique em reativar para retornar ao quadro.</p>
-              <FuncionarioList
-                {...staffListProps}
-                items={filteredInativos}
-                inactive
-                onReactivate={handleToggleAtivo}
-              />
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
-
       {/* Profile drawer */}
       <Sheet open={!!viewFuncionario && loadedScope===scopeKey && !loadError} onOpenChange={(o) => !o && setViewFuncionario(null)}>
         <SheetContent side="right" className="p-0 flex flex-col" style={{ width: '95vw', maxWidth: 480 }}>
@@ -950,25 +964,25 @@ const FuncionarioList: React.FC<FuncionarioListProps> = ({ items, unidades, canM
       const canEditThis = canEditEmployee(f);
       const canChangeStatus=canEditThis&&f.id!==currentUserId&&!isProtectedGlobalMaster(f);
       return (
-        <Card key={f.id} className="shadow-sm border hover:shadow-md transition-shadow">
-          <CardContent className="p-3 sm:p-4 flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">
+        <Card key={f.id} className="clinical-premium min-w-0">
+          <CardContent className="p-3 flex flex-wrap sm:flex-nowrap items-start gap-3">
+            <div className="clinical-patient-avatar treatment-avatar flex items-center justify-center shrink-0 font-bold">
               {f.nome.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-12 gap-x-3 gap-y-0.5 items-center">
               <div className="md:col-span-4 min-w-0">
-                <p className="font-semibold text-foreground truncate">{f.nome}</p>
-                <p className="text-xs text-muted-foreground truncate">
+                <button type="button" className="text-left font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring break-words" onClick={()=>onView(f)}>{f.nome}</button>
+                <p className="text-xs text-muted-foreground break-words">
                   {f.profissao || f.cargo || '—'}
                   {f.tipo_conselho && f.numero_conselho ? ` • ${f.tipo_conselho} ${f.numero_conselho}${f.uf_conselho ? '/' + f.uf_conselho : ''}` : ''}
                   {cd.cbo_codigo ? ` • CBO ${cd.cbo_codigo}` : ''}
                 </p>
               </div>
               <div className="md:col-span-3 min-w-0">
-                <p className="text-xs text-muted-foreground truncate">{unidadeNome || '—'}{f.setor ? ` / ${f.setor}` : ''}</p>
+                <p className="text-xs text-muted-foreground break-words">{unidadeNome || '—'}{f.setor ? ` / ${f.setor}` : ''}</p>
                 {f.role === 'profissional' && attendanceUnits && [...(attendanceUnits.get(f.id) || [])].some(unitId => unitId !== f.unidade_id) && (
-                  <p className="text-xs text-primary" title="Unidades com horário de atendimento cadastrado">
-                    Atende também: {[...(attendanceUnits.get(f.id) || [])].filter(unitId => unitId !== f.unidade_id).map(unitId => unidades.find(unit => unit.id === unitId)?.nome || 'Unidade não identificada').join(', ')}
+                  <p className="text-xs text-primary" title="Unidades com grade vigente carregada">
+                    Grade vigente também em: {[...(attendanceUnits.get(f.id) || [])].filter(unitId => unitId !== f.unidade_id).map(unitId => unidades.find(unit => unit.id === unitId)?.nome || 'Unidade não identificada').join(', ')}
                   </p>
                 )}
               </div>
@@ -984,13 +998,13 @@ const FuncionarioList: React.FC<FuncionarioListProps> = ({ items, unidades, canM
                 {f.role === 'profissional' && f.pode_agendar_retorno && (
                   <Badge variant="outline" className="text-[10px] border-success/50 text-success"><CalendarCheck className="w-3 h-3 mr-0.5" />Retorno</Badge>
                 )}
-                {!f.ativo && <Badge variant="outline" className="text-[10px]">Inativo</Badge>}
+                {!f.ativo && <Badge variant="outline" className="text-[10px]">Inativo</Badge>}{reviewStaff(f).length>0&&<Badge variant="outline" className="text-[10px]" title={reviewStaff(f).map(key=>staffReviewLabels[key]).join("; ")}>Conferir · {reviewStaff(f).length}</Badge>}
               </div>
             </div>
-            <div className="flex items-center gap-0.5 shrink-0">
-              <Button size="icon" variant="ghost" title="Ver perfil" onClick={() => onView(f)}><Eye className="w-4 h-4" /></Button>
+            <div className="flex flex-wrap items-center gap-1 shrink-0">
+              <Button size="icon" variant="outline" className="clinical-record-action" title="Ver perfil" aria-label="Ver perfil" onClick={() => onView(f)}><Eye className="w-4 h-4" /></Button>
               {canManage && canEditThis && !inactive && (
-                <Button size="icon" variant="ghost" title="Editar" onClick={() => onEdit(f)}><Pencil className="w-4 h-4" /></Button>
+                <Button size="icon" variant="outline" className="clinical-record-action clinical-action-edit" title="Editar" aria-label="Editar" disabled={saving} onClick={() => onEdit(f)}><Pencil className="w-4 h-4" /></Button>
               )}
               {inactive && canManage && canChangeStatus && onReactivate && (
                 <Button size="sm" variant="outline" disabled={saving} onClick={() => onReactivate(f)}><RotateCcw className="w-4 h-4 mr-1" />Reativar</Button>
