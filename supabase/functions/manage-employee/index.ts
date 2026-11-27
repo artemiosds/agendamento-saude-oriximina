@@ -8,6 +8,36 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
+type EmployeeAction = "can_view" | "can_create" | "can_edit" | "can_delete";
+type EmployeeActor = {id:string; usuario:string; role:string; unidade_id:string; ativo:boolean};
+type PermissionRow = {unidade_id:string; perfil?:string} & Partial<Record<EmployeeAction,boolean|null>>;
+const normalizeRole = (raw:string) => {
+  const role=String(raw||"").trim().toLowerCase();
+  return ["gestão","gestor","coordenacao","coordenador"].includes(role)?"gestao":role==="recepção"?"recepcao":role==="tecnico"?"triagem":role==="tecnico_enfermagem"?"enfermagem":role;
+};
+const owner = (actor:EmployeeActor) => actor.usuario==="admin.sms" && normalizeRole(actor.role)==="master";
+const protectedName = (value:unknown) => typeof value==="string" && value.trim().toLowerCase()==="admin.sms";
+function resolveEmployeePermission(actor:EmployeeActor, field:EmployeeAction, userRows:PermissionRow[], roleRows:PermissionRow[]) {
+  if(normalizeRole(actor.role)==="master")return true;
+  const unit=actor.unidade_id||"",profile=normalizeRole(actor.role),raw=actor.role.trim().toLowerCase();
+  const profileAt=(u:string)=>roleRows.find(row=>row.unidade_id===u&&row.perfil===profile)??roleRows.find(row=>row.unidade_id===u&&row.perfil===raw);
+  const candidates=[...(unit?[userRows.find(row=>row.unidade_id===unit)]:[]),userRows.find(row=>row.unidade_id===""),...(unit?[profileAt(unit)]:[]),profileAt("")];
+  return candidates.find(row=>row?.[field]!=null)?.[field]??(profile==="gestao"&&field!=="can_delete");
+}
+function employeeChangeError(actor:EmployeeActor,target:EmployeeActor|null,body:Record<string,unknown>):string|null {
+  const global=owner(actor),master=normalizeRole(actor.role)==="master";
+  if(!global&&(!actor.unidade_id||(target&&target.unidade_id!==actor.unidade_id)))return "Funcionário fora da sua unidade.";
+  if(!global&&target&&protectedName(target.usuario))return "Administrador global protegido.";
+  if(body.usuario!==undefined&&protectedName(body.usuario)&&(!target||!protectedName(target.usuario)))return "Usuário reservado ao administrador global.";
+  if(!global&&body.unidade_id!==undefined&&body.unidade_id!==actor.unidade_id)return "Lotação fora da sua unidade.";
+  if(!target&&!global&&body.unidade_id!==actor.unidade_id)return "Informe a sua unidade.";
+  if(!master&&(normalizeRole(String(body.role||""))==="master"||target&&normalizeRole(target.role)==="master"))return "Somente Master pode gerenciar outro Master.";
+  if(target&&protectedName(target.usuario)&&((body.usuario!==undefined&&body.usuario!==target.usuario)||(body.role!==undefined&&body.role!==target.role)||(body.unidade_id!==undefined&&body.unidade_id!==target.unidade_id)||body.ativo===false))return "Identidade e acesso do administrador global devem ser preservados.";
+  if(target?.id===actor.id&&(body.ativo===false||(body.role!==undefined&&body.role!==target.role)||(body.unidade_id!==undefined&&body.unidade_id!==target.unidade_id)))return "Não é permitido desativar ou alterar o próprio perfil ou lotação.";
+  return null;
+}
+const fail=(message:string,status=200)=>new Response(JSON.stringify({error:message}),{status,headers:corsHeaders});
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -21,8 +51,31 @@ serve(async (req) => {
 
     const body = await req.json();
     const { action } = body;
+    if(!["list","create","update","delete"].includes(action))return fail("Ação inválida.");
+    const token=(req.headers.get("Authorization")||"").replace(/^Bearer\s+/i,"").trim();
+    if(!token)return fail("Autenticação necessária.",401);
+    const {data:session,error:sessionError}=await supabaseAdmin.auth.getUser(token);
+    if(sessionError||!session.user)return fail("Sessão inválida.",401);
+    const {data:actor,error:actorError}=await supabaseAdmin.from("funcionarios").select("id,usuario,role,unidade_id,ativo").eq("auth_user_id",session.user.id).eq("ativo",true).maybeSingle();
+    if(actorError||!actor)return fail("Funcionário ativo não encontrado.",403);
+    const global=owner(actor);
+    if(!global&&!actor.unidade_id)return fail("Sua conta não possui unidade autorizada.",403);
+    let userRows:PermissionRow[]=[],roleRows:PermissionRow[]=[];
+    if(normalizeRole(actor.role)!=="master"){
+      const units=actor.unidade_id?[actor.unidade_id,""]:[""];
+      const [individual,profile]=await Promise.all([
+        supabaseAdmin.from("permissoes_usuario").select("unidade_id,can_view,can_create,can_edit,can_delete").eq("user_id",actor.id).eq("modulo","usuarios").in("unidade_id",units),
+        supabaseAdmin.from("permissoes").select("perfil,unidade_id,can_view,can_create,can_edit,can_delete").eq("modulo","usuarios").in("perfil",[normalizeRole(actor.role),actor.role.trim().toLowerCase()]).in("unidade_id",units)
+      ]);
+      if(individual.error||profile.error)return fail("Não foi possível confirmar suas permissões.",403);
+      userRows=individual.data||[];roleRows=profile.data||[];
+    }
+    const field:EmployeeAction=action==="create"?"can_create":action==="update"?"can_edit":action==="delete"?"can_delete":"can_view";
+    if(!resolveEmployeePermission(actor,"can_view",userRows,roleRows)||!resolveEmployeePermission(actor,field,userRows,roleRows))return fail("Sem permissão para esta operação.",403);
 
     if (action === "create") {
+      const scopeError=employeeChangeError(actor,null,body);
+      if(scopeError)return fail(scopeError,403);
       const { nome, usuario, email, cpf, senha, setor, unidade_id, sala_id, cargo, role, criado_por, tempo_atendimento, profissao, tipo_conselho, numero_conselho, uf_conselho, pode_agendar_retorno, coren, cbo_codigo, cbo_descricao, cns } = body;
 
       if (!nome || !usuario || !email || !senha) {
@@ -101,7 +154,7 @@ serve(async (req) => {
           cargo: cargo || "",
           role: role || "recepcao",
           ativo: true,
-          criado_por: criado_por || "",
+          criado_por: actor.id,
           tempo_atendimento: tempo_atendimento || 30,
           profissao: profissao || "",
           tipo_conselho: tipo_conselho || "",
@@ -146,7 +199,7 @@ serve(async (req) => {
       // Get current record
       const { data: current, error: fetchErr } = await supabaseAdmin
         .from("funcionarios")
-        .select("auth_user_id, email, usuario, custom_data")
+        .select("id,auth_user_id,email,usuario,custom_data,role,unidade_id,ativo")
         .eq("id", id)
         .single();
 
@@ -156,6 +209,9 @@ serve(async (req) => {
           { status: 200, headers: corsHeaders }
         );
       }
+
+      const scopeError=employeeChangeError(actor,current,body);
+      if(scopeError)return fail(scopeError,403);
 
       // Build DB update fields (exclude non-DB fields)
       const dbFields: Record<string, any> = {};
@@ -315,34 +371,17 @@ serve(async (req) => {
     }
 
     if (action === "delete") {
-      const { id } = body;
-
-      const { data: func } = await supabaseAdmin
-        .from("funcionarios")
-        .select("auth_user_id")
-        .eq("id", id)
-        .single();
-
-      if (func?.auth_user_id) {
-        await supabaseAdmin.auth.admin.deleteUser(func.auth_user_id);
-      }
-
-      await supabaseAdmin.from("funcionarios").delete().eq("id", id);
-
-      return new Response(JSON.stringify({ success: true }), {
-        headers: corsHeaders,
-      });
+      // IDs are also referenced by historical clinical records, including text IDs.
+      // Preserve the employee and authentication link; deactivation is a separate authorized update.
+      return fail("Exclusão definitiva suspensa para preservar os históricos. Utilize Desativar funcionário.");
     }
 
     if (action === "list") {
-      const { data, error } = await supabaseAdmin
-        .from("funcionarios")
-        .select("*")
-        .order("criado_em", { ascending: false });
-
-      return new Response(JSON.stringify({ funcionarios: data || [] }), {
-        headers: corsHeaders,
-      });
+      let query=supabaseAdmin.from("funcionarios").select("*").order("criado_em",{ascending:false});
+      if(!global)query=query.eq("unidade_id",actor.unidade_id).neq("usuario","admin.sms");
+      const {data,error}=await query;
+      if(error)return fail("Não foi possível consultar funcionários.");
+      return new Response(JSON.stringify({funcionarios:data||[]}),{headers:corsHeaders});
     }
 
     return new Response(
