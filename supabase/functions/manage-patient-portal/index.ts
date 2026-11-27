@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { canManagePortalPatient, portalEmail, portalAccountExclusive } from "../_shared/portal-credentials.ts";
 import { parsePortalChange, readPortalConfig, applyPortalChange, persistPortalChange } from "../_shared/portal-admin-config.ts";
+import { portalAccountDiagnosis, projectPortalHistory, PORTAL_HISTORY_ACTIONS } from "../_shared/portal-patient-detail.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -103,6 +104,51 @@ serve(async (req) => {
       }
     }
 
+    if (action === "read_patient_detail") {
+      if (typeof pacienteId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pacienteId)) return json({ error: "Paciente inválido." }, 400);
+      const global = actor.usuario === "admin.sms";
+      if (!global && !actor.unidade_id) return json({ error: "Unidade não autorizada." }, 403);
+      let patientQuery = admin.from("pacientes").select("id,nome,cpf,email,auth_user_id,unidade_id").eq("id", pacienteId);
+      if (!global) patientQuery = patientQuery.eq("unidade_id", actor.unidade_id);
+      const { data: patient, error: patientError } = await patientQuery.maybeSingle();
+      if (patientError) return json({ error: "Não foi possível consultar o cadastro." }, 503);
+      if (!patient || !canManagePortalPatient(actor, patient)) return json({ error: "Paciente não disponível na abrangência autorizada." }, 403);
+      const inspectAccount = async () => {
+        if (!patient.auth_user_id) return portalAccountDiagnosis(patient, null);
+        try {
+          const [patients, staff, external, account] = await Promise.all([
+            admin.from("pacientes").select("id").eq("auth_user_id", patient.auth_user_id).limit(2),
+            admin.from("funcionarios").select("id", { count: "exact", head: true }).eq("auth_user_id", patient.auth_user_id),
+            admin.from("profissionais_externos").select("id", { count: "exact", head: true }).eq("auth_user_id", patient.auth_user_id),
+            admin.auth.admin.getUserById(patient.auth_user_id),
+          ]);
+          if (patients.error || staff.error || external.error || account.error || !patients.data || staff.count === null || external.count === null || !account.data?.user)
+            return portalAccountDiagnosis(patient, null);
+          return portalAccountDiagnosis(patient, { patientIds: patients.data.map(p => p.id), staffCount: staff.count,
+            externalCount: external.count, accountEmail: account.data.user.email ?? null, confirmedAt: account.data.user.email_confirmed_at ?? null,
+            lastSignIn: account.data.user.last_sign_in_at ?? null });
+        } catch { return portalAccountDiagnosis(patient, null); }
+      };
+      const readHistory = async () => {
+        try {
+          let q = admin.from("action_logs").select("id,acao,created_at,user_nome,status,unidade_id,entidade_id,entidade,modulo")
+            .eq("entidade_id", pacienteId).eq("entidade", "paciente").eq("modulo", "portal_paciente").in("acao", [...PORTAL_HISTORY_ACTIONS]);
+          if (!global) q = q.eq("unidade_id", actor.unidade_id);
+          const { data, error } = await q.order("created_at", { ascending: false }).order("id", { ascending: false }).limit(21);
+          if (error || !data) return null;
+          const rows = projectPortalHistory(data, pacienteId, global ? null : actor.unidade_id);
+          return { entries: rows.slice(0, 20), hasMore: rows.length > 20 };
+        } catch { return null; }
+      };
+      const [diagnosis, history] = await Promise.all([inspectAccount(), readHistory()]);
+      // Revalidate scope and identity fields after privileged reads; discard a changed snapshot.
+      const { data: latest, error: latestError } = await admin.from("pacientes").select("id,nome,cpf,email,auth_user_id,unidade_id").eq("id", pacienteId).maybeSingle();
+      if (latestError || !latest || !canManagePortalPatient(actor, latest) || latest.unidade_id !== patient.unidade_id ||
+          latest.auth_user_id !== patient.auth_user_id || latest.email !== patient.email)
+        return json({ error: "Cadastro alterado durante a consulta. Atualize e tente novamente." }, 409);
+      return json({ success: true, patient: latest, diagnosis, history });
+    }
+
     if (typeof pacienteId !== "string" || !pacienteId) return json({ error: "Paciente não informado." }, 400);
     if (typeof motivo !== "string" || motivo.trim().length < 3 || motivo.trim().length > 500) return json({ error: "Informe o motivo da alteração." }, 400);
     if (!["reset_password", "create_access"].includes(action)) return json({ error: "Ação inválida." }, 400);
@@ -167,7 +213,7 @@ serve(async (req) => {
     }
 
     const { error: auditError } = await admin.from("action_logs").insert({
-      user_id: actor.id, user_nome: actor.nome, role: actor.role,
+      user_id: actor.id, user_nome: actor.nome, role: actor.role, unidade_id: pac.unidade_id || "",
       acao: action === "reset_password" ? "portal_redefinir_senha" : "portal_criar_acesso",
       entidade: "paciente", entidade_id: pacienteId, modulo: "portal_paciente", status: "sucesso",
       detalhes: { paciente_nome: pac.nome, motivo_alteracao: motivo.trim() },

@@ -9,9 +9,11 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import PortalPatientDetail from '@/components/portal/PortalPatientDetail';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { KeyRound, Loader2, Search, ShieldCheck, Ban, UserPlus, Unlock, Eye, EyeOff, Wand2, UsersRound, Mail, CreditCard, RefreshCw, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
+import { KeyRound, Loader2, Search, ShieldCheck, Ban, UserPlus, Unlock, Eye, EyeOff, Wand2, UsersRound, Mail, CreditCard, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 import { PORTAL_PERMISSOES_PADRAO, type PortalPermissoes } from '@/types';
 import { PORTAL_FILTERS, PORTAL_PAGE_SIZES, isPortalId, portalSearchExpression, maskPortalCpf, maskPortalEmail, portalPageRange, portalLastPage, portalLinkRate, type PortalFilter, type PortalPageSize, type PortalCounts } from '@/lib/portalAccessDirectory';
@@ -66,6 +68,7 @@ const PortalAcessos: React.FC = () => {
   const settingsSeq = useRef(0);
   const operation = useRef(false);
 
+  const [selectedPatient, setSelectedPatient] = useState<{ scope: string; patient: Pac } | null>(null);
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<PortalFilter>('todos');
   const [page, setPage] = useState(1);
@@ -186,7 +189,7 @@ const PortalAcessos: React.FC = () => {
   useEffect(() => {
     setDlg(null); setSenha(''); setMotivo(''); setVerSenha(false);
     setConfigDlg(null); setConfigMotivo(''); setPage(1); setBusca(''); setFiltro('todos');
-    setDirectory(null); setSummary(null); setDirectoryError(null);
+    setDirectory(null); setSummary(null); setDirectoryError(null); setSelectedPatient(null);
   }, [scope]);
 
   const closeConfig = () => { if (!operation.current) { setConfigDlg(null); setConfigMotivo(''); } };
@@ -350,16 +353,15 @@ const PortalAcessos: React.FC = () => {
                       <p className="text-xs text-muted-foreground">CPF: {maskPortalCpf(p.cpf)} · Login: {maskPortalEmail(p.email)}</p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
-                      {p.auth_user_id ? (
-                        <Button size="sm" variant="outline" disabled={salvando} onClick={() => abrir(p, 'reset_password')}><KeyRound className="w-4 h-4 mr-1" />Redefinir senha</Button>
-                      ) : (
-                        <Button size="sm" variant="outline" disabled={!p.email || salvando} title={!p.email ? 'Cadastre um e-mail no paciente' : ''} onClick={() => abrir(p, 'create_access')}><UserPlus className="w-4 h-4 mr-1" />Criar acesso</Button>
-                      )}
-                      {p.auth_user_id && (
-                        <Button size="sm" variant={st === 'bloqueado' ? 'default' : 'outline'} disabled={!settingsReady || settingsLoading || salvando} onClick={() => toggleBloqueio(p)}>
-                          {st === 'bloqueado' ? <><Unlock className="w-4 h-4 mr-1" />Desbloquear</> : <><Ban className="w-4 h-4 mr-1" />Bloquear</>}
-                        </Button>
-                      )}
+                      <Button size="sm" variant="outline" disabled={salvando} aria-label={'Gerenciar acesso de ' + p.nome} onClick={()=>setSelectedPatient({scope,patient:p})}>Gerenciar acesso<ChevronRight className="h-4 w-4 ml-1"/></Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild><Button size="sm" variant="ghost" disabled={salvando} aria-label={'Ações rápidas de ' + p.nome}><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {p.auth_user_id ? <DropdownMenuItem onSelect={()=>abrir(p,'reset_password')}><KeyRound className="h-4 w-4 mr-2"/>Redefinir senha</DropdownMenuItem> :
+                            <DropdownMenuItem disabled={!p.email} onSelect={()=>abrir(p,'create_access')}><UserPlus className="h-4 w-4 mr-2"/>Criar acesso</DropdownMenuItem>}
+                          {p.auth_user_id && <DropdownMenuItem disabled={!settingsReady || settingsLoading} onSelect={()=>toggleBloqueio(p)}>{st==='bloqueado'?<Unlock className="h-4 w-4 mr-2"/>:<Ban className="h-4 w-4 mr-2"/>}{st==='bloqueado'?'Desbloquear':'Bloquear'}</DropdownMenuItem>}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 );
@@ -405,6 +407,11 @@ const PortalAcessos: React.FC = () => {
         </TabsContent>
       </Tabs>
 
+      {authorized && selectedPatient?.scope===scope && <PortalPatientDetail key={scope+':'+selectedPatient.patient.id} patient={selectedPatient.patient}
+        unitId={unitId} blockedIds={bloqueados} settingsReady={settingsReady && !settingsLoading} enabled={confirmed?.enabled} busy={salvando}
+        onClose={()=>setSelectedPatient(null)}
+        onCredential={(p,action)=>{setSelectedPatient(null);abrir(p,action);}}
+        onBlock={p=>{setSelectedPatient(null);toggleBloqueio(p);}}/>}
       <Dialog open={!!configDlg && authorized} onOpenChange={open => { if (!open) closeConfig(); }}>
         <DialogContent>
           <DialogHeader>
