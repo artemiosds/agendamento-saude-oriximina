@@ -30,6 +30,7 @@ import { useCustomFields } from '@/hooks/useCustomFields';
 import CboAutocomplete, { CboValue } from '@/components/CboAutocomplete';
 import { formatCNS, unmaskCNS, validateCNS } from '@/lib/cnsUtils';
 import { Link } from 'react-router-dom';
+import { openPrintDocument } from '@/lib/printLayout';
 import { UnitScopeNavigator } from '@/components/operacional/UnitScopeNavigator';
 import { useOperationalUnitScope } from '@/hooks/useOperationalUnitScope';
 const roleLabels: Record<string, string> = {
@@ -83,6 +84,8 @@ const Funcionarios: React.FC = () => {
   const scopeKey=JSON.stringify([user?.id||'',user?.unidadeId||'',user?.role||'',isGlobalMaster]);
   const scopeRef=useRef(scopeKey); scopeRef.current=scopeKey;
   const [saving, setSaving] = useState(false);
+  const [printing,setPrinting]=useState(false);
+  const printBusy=useRef(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [showSenha, setShowSenha] = useState(false);
@@ -362,21 +365,12 @@ const Funcionarios: React.FC = () => {
   };
 
   /** Print employee profile card */
-  const handlePrintFuncionario = (f: FuncionarioDB) => {
-    if(!canEditEmployee(f))return;
+  const handlePrintFuncionario = async (f: FuncionarioDB) => {
+    if(!canEditEmployee(f)||printBusy.current)return;
     const escapeHtml=(value:unknown)=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]||char));
-    const unidadeNome = unidades.find(u => u.id === f.unidade_id)?.nome || '—';
-    const cd = (f.custom_data as any) || {};
-    const w = window.open('', '_blank', 'width=800,height=900');
-    if (!w) return;
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Ficha — ${escapeHtml(f.nome)}</title>
-      <style>body{font-family:Georgia,serif;padding:32px;color:#1a1a1a;max-width:720px;margin:auto}
-      h1{font-size:20px;border-bottom:2px solid #2A6F97;padding-bottom:8px;color:#2A6F97}
-      h2{font-size:14px;margin-top:24px;color:#2A6F97;text-transform:uppercase;letter-spacing:1px}
-      table{width:100%;border-collapse:collapse;margin-top:8px} td{padding:6px 8px;border-bottom:1px solid #eee;font-size:13px;vertical-align:top}
-      td:first-child{font-weight:600;width:35%;color:#555} .foot{margin-top:32px;font-size:11px;color:#888;text-align:center}</style></head><body>
-      <h1>Ficha do Funcionário</h1>
-      <h2>Dados Pessoais</h2><table>
+    const unidadeNome=unidades.find(u=>u.id===f.unidade_id)?.nome||'—';
+    const cd=f.custom_data||{};
+    const body=`<style>.staff-ficha{font-size:10pt;line-height:1.25}.staff-ficha h2{font-size:10pt;color:#163d53;margin:8px 0 3px;break-after:avoid}.staff-ficha table{width:100%;border-collapse:collapse;margin:0 0 6px}.staff-ficha td{font-size:10pt;padding:4px 6px;border:1px solid #d5e0e7;overflow-wrap:anywhere}.staff-ficha td:first-child{width:34%;font-weight:bold;background:#f2f7fa}.staff-ficha tr{break-inside:avoid}</style><div class="staff-ficha"><h2>Dados Pessoais</h2><table>
       <tr><td>Nome</td><td>${escapeHtml(f.nome)}</td></tr>
       <tr><td>CPF</td><td>${escapeHtml(f.cpf || '—')}</td></tr>
       <tr><td>E-mail</td><td>${escapeHtml(f.email || '—')}</td></tr>
@@ -400,9 +394,11 @@ const Funcionarios: React.FC = () => {
       <tr><td>Turno</td><td>${escapeHtml(cd.turno_trabalho || '—')}</td></tr>
       <tr><td>Data de Cadastro</td><td>${escapeHtml(f.criado_em ? new Date(f.criado_em).toLocaleDateString('pt-BR') : '—')}</td></tr>
       </table>
-      <div class="foot">Documento emitido por GestorPlantão — SMS Oriximiná — ${escapeHtml(new Date().toLocaleString('pt-BR'))}</div>
-      <script>window.onload=()=>{window.print();}</script></body></html>`);
-    w.document.close();
+      </div>`;
+    printBusy.current=true;setPrinting(true);
+    try {await openPrintDocument('Ficha do Funcionário',body,{Unidade:escapeHtml(unidadeNome),Finalidade:'Conferência administrativa · uso interno'});}
+    catch{toast.error('Não foi possível preparar a ficha de impressão.');}
+    finally{printBusy.current=false;setPrinting(false);}
   };
 
   /** Apply unit-scope and master protection (used by all tabs) */
@@ -657,10 +653,11 @@ const Funcionarios: React.FC = () => {
       </Tabs>
 
           <Dialog open={dialogOpen} onOpenChange={open=>{if(!writeBusy.current)setDialogOpen(open);}}>
-            <DialogContent className="max-w-lg p-0 overflow-hidden">
+            <DialogContent className="w-[96vw] sm:max-w-3xl p-0 overflow-hidden">
               <div className="modal-shell">
-                <DialogHeader className="px-4 sm:px-6 pt-5 pb-3 border-b shrink-0"><DialogTitle className="font-display pr-6">{editId ? 'Editar' : 'Cadastrar'} Funcionário</DialogTitle></DialogHeader>
-                <div className="modal-body px-4 sm:px-6 py-4 space-y-3">
+                <DialogHeader className="clinical-hub-hero m-3 shrink-0 pr-10"><DialogTitle className="clinical-hub-name font-display">{editId ? 'Editar' : 'Cadastrar'} Funcionário</DialogTitle><p className="clinical-patient-sub text-xs">Identificação, acesso, atuação profissional e vínculo.</p></DialogHeader>
+                <div className="modal-body px-4 sm:px-6 py-3 space-y-3">
+                <div className="triage-section-title"><Users className="w-4 h-4"/>Identificação e acesso</div>
                 <div><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} /></div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Usuário *</Label><Input value={form.usuario} onChange={e => setForm(p => ({ ...p, usuario: e.target.value }))} /></div>
@@ -697,6 +694,7 @@ const Funcionarios: React.FC = () => {
                     </Select>
                   </div>
                 </div>
+                <div className="triage-section-title"><Building2 className="w-4 h-4"/>Lotação e atendimento</div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Setor</Label><Input value={form.setor} onChange={e => setForm(p => ({ ...p, setor: e.target.value }))} /></div>
                   <div><Label>Unidade {isUnitMaster ? '(fixada)' : ''}</Label>
@@ -738,9 +736,7 @@ const Funcionarios: React.FC = () => {
                 </div>
                 {(form.role === 'profissional' || form.role === 'tecnico' || form.role === 'enfermagem') && (
                   <>
-                    <div className="border-t pt-3 mt-2">
-                      <p className="text-sm font-semibold text-foreground mb-2">Conselho Profissional</p>
-                    </div>
+                    <div className="triage-section-title"><Stethoscope className="w-4 h-4"/>Dados profissionais e conselho</div>
                     <div>
                       <Label>CBO (Classificação Brasileira de Ocupações) *</Label>
                       <CboAutocomplete
@@ -833,15 +829,13 @@ const Funcionarios: React.FC = () => {
                     </div>
                   </div>
                 )}
-                <div className="border-t pt-3 mt-2">
-                  <p className="text-sm font-semibold text-foreground mb-2">Vínculo & Configurações Internas</p>
-                </div>
+                <div className="triage-section-title"><ClipboardCheck className="w-4 h-4"/>Vínculo e configurações internas</div>
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label className="text-sm font-semibold">Status</Label>
                     <p className="text-xs text-muted-foreground">{form.ativo ? 'Ativo' : 'Inativo'}</p>
                   </div>
-                  <Switch checked={form.ativo} onCheckedChange={v => setForm(p => ({ ...p, ativo: v }))} />
+                  <Switch checked={form.ativo} disabled={!editId||editId===user?.id||form.usuario==='admin.sms'} onCheckedChange={v=>{if(v||window.confirm('Desativar este funcionário? Confira horários futuros. O histórico será mantido.'))setForm(p=>({...p,ativo:v}));}} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -896,7 +890,7 @@ const Funcionarios: React.FC = () => {
                 )}
                 </div>
                 <div className="modal-footer px-4 sm:px-6">
-                  <Button onClick={handleSave} disabled={saving||loading||!!loadError} className="w-full gradient-primary text-primary-foreground">
+                  <Button onClick={handleSave} disabled={saving||loading||!!loadError} className="w-full clinical-action-main gradient-primary text-primary-foreground">
                     {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                     {editId ? 'Salvar' : 'Cadastrar'}
                   </Button>
@@ -907,21 +901,21 @@ const Funcionarios: React.FC = () => {
 
       {/* Profile drawer */}
       <Sheet open={!!viewFuncionario && loadedScope===scopeKey && !loadError} onOpenChange={(o) => !o && setViewFuncionario(null)}>
-        <SheetContent side="right" className="p-0 flex flex-col" style={{ width: '95vw', maxWidth: 480 }}>
-          <SheetHeader className="p-4 pb-2 border-b">
-            <SheetTitle className="font-display text-lg break-words pr-8">{viewFuncionario?.nome}</SheetTitle>
-            <SheetDescription className="sr-only">Perfil do funcionário</SheetDescription>
+        <SheetContent side="right" className="p-0 flex flex-col" style={{ width: '95vw', maxWidth: 680 }}>
+          <SheetHeader className="clinical-hub-hero m-3 pr-10">
+            <SheetTitle className="clinical-hub-name font-display text-lg break-words">{viewFuncionario?.nome}</SheetTitle>
+            <SheetDescription className="clinical-patient-sub text-xs">Central individual do funcionário</SheetDescription>
           </SheetHeader>
           {viewFuncionario && (
             <ScrollArea className="flex-1">
               <div className="p-4 space-y-5">
-                <ProfilePanel f={viewFuncionario} unidadeNome={unidades.find(u => u.id === viewFuncionario.unidade_id)?.nome || '—'} />
+                <ProfilePanel key={viewFuncionario.id} f={viewFuncionario} unidadeNome={unidades.find(u => u.id === viewFuncionario.unidade_id)?.nome || '—'} scheduleUnits={[...(attendanceUnits.get(viewFuncionario.id)||[])].map(id=>unidadesVisiveis.find(u=>u.id===id)?.nome||'Unidade não identificada')} canSchedule={can('disponibilidade','can_view')}/>
               </div>
             </ScrollArea>
           )}
           {viewFuncionario && canEditEmployee(viewFuncionario) && (
             <div className="border-t p-3 flex flex-wrap gap-2 justify-end">
-              <Button variant="outline" size="sm" onClick={() => handlePrintFuncionario(viewFuncionario)}><Printer className="w-4 h-4 mr-1" />Imprimir</Button>
+              <Button variant="outline" size="sm" disabled={printing||saving} onClick={() => void handlePrintFuncionario(viewFuncionario)}><Printer className="w-4 h-4 mr-1" />Imprimir</Button>
               <Button variant="outline" size="sm" disabled={saving||viewFuncionario.id===user?.id||isProtectedGlobalMaster(viewFuncionario)} onClick={() => {if(!viewFuncionario.ativo||window.confirm('Desativar este funcionário? Confira os horários futuros. O histórico será mantido.'))void handleToggleAtivo(viewFuncionario);}}>
                 {viewFuncionario.ativo ? <><Power className="w-4 h-4 mr-1" />Desativar</> : <><RotateCcw className="w-4 h-4 mr-1" />Reativar</>}
               </Button>
@@ -1041,19 +1035,24 @@ const Row: React.FC<{ label: string; value?: React.ReactNode }> = ({ label, valu
   </div>
 );
 
-const ProfilePanel: React.FC<{ f: FuncionarioDB; unidadeNome: string }> = ({ f, unidadeNome }) => {
+const ProfilePanel: React.FC<{ f: FuncionarioDB; unidadeNome: string; scheduleUnits:string[]; canSchedule:boolean }> = ({ f, unidadeNome,scheduleUnits,canSchedule }) => {
   const cd = (f.custom_data as any) || {};
   const dataCadastro = f.criado_em ? new Date(f.criado_em).toLocaleDateString('pt-BR') : '—';
+  const [section,setSection]=useState('dados');
+  const review=reviewStaff(f);
   return (
-    <>
-      <section>
+    <div className="clinical-hub space-y-3">
+      <div className="clinical-premium p-3 flex flex-wrap items-center gap-3"><span className="clinical-dock-icon clinical-tone-teal"><UserCog className="w-4 h-4"/></span><div className="flex-1"><p className="font-semibold">{f.profissao||f.cargo||roleLabels[f.role]||f.role}</p><p className="text-xs text-muted-foreground">{unidadeNome}</p></div><Badge variant="outline">{f.ativo?'Ativo':'Inativo'}</Badge></div>
+      <nav className="clinical-hub-tabs" aria-label="Seções do perfil">{[{id:'dados',label:'Dados',Icon:Users},{id:'vinculo',label:'Vínculo',Icon:Building2},{id:'horarios',label:'Horários',Icon:CalendarDays},{id:'acesso',label:'Acesso',Icon:UserCog}].map(({id,label,Icon})=><Button key={id} type="button" variant="ghost" className="clinical-hub-tab gap-1.5" aria-pressed={section===id} onClick={()=>setSection(id)}><Icon className="w-4 h-4"/>{label}</Button>)}</nav>
+      {review.length>0&&<div className="clinical-inset rounded-lg border p-2 text-xs"><strong>Conferência cadastral (informativa)</strong><p>{review.map(k=>staffReviewLabels[k]).join(' · ')}</p></div>}
+      {section==='dados'&&<><section className="clinical-premium p-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground mb-1">Dados Pessoais</h3>
         <Row label="Nome" value={f.nome} />
         <Row label="CPF" value={f.cpf} />
         <Row label="E-mail" value={f.email} />
         <Row label="Usuário" value={f.usuario} />
       </section>
-      <section>
+      <section className="clinical-premium p-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground mb-1">Dados Profissionais</h3>
         <Row label="Profissão" value={f.profissao} />
         <Row label="Cargo" value={f.cargo} />
@@ -1065,8 +1064,9 @@ const ProfilePanel: React.FC<{ f: FuncionarioDB; unidadeNome: string }> = ({ f, 
         <Row label="Setor" value={f.setor} />
         <Row label="Tempo de Atendimento" value={f.role === 'profissional' && f.tempo_atendimento ? `${f.tempo_atendimento} min` : ''} />
       </section>
-      <section>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground mb-1">Configurações</h3>
+      </>}
+      {section==='vinculo'&&<><section className="clinical-premium p-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground mb-1">Vínculo e configurações</h3>
         <Row label="Status" value={<Badge variant="outline" className={f.ativo ? 'text-success border-success/50' : ''}>{f.ativo ? 'Ativo' : 'Inativo'}</Badge>} />
         <Row label="Tipo de Vínculo" value={cd.tipo_vinculo} />
         <Row label="Data de Admissão" value={cd.data_admissao ? new Date(cd.data_admissao + 'T12:00:00').toLocaleDateString('pt-BR') : ''} />
@@ -1075,12 +1075,14 @@ const ProfilePanel: React.FC<{ f: FuncionarioDB; unidadeNome: string }> = ({ f, 
         <Row label="Permissão de Retorno" value={f.pode_agendar_retorno ? 'Sim' : 'Não'} />
       </section>
       {cd.observacoes_internas && (
-        <section>
+        <section className="clinical-premium p-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground mb-1">Observações Internas</h3>
           <p className="text-sm text-foreground whitespace-pre-wrap">{cd.observacoes_internas}</p>
         </section>
-      )}
-    </>
+      )}</>}
+      {section==='horarios'&&<section className="clinical-premium p-3 space-y-2"><h3 className="font-semibold text-sm">Grade vigente carregada</h3><p className="text-xs text-muted-foreground">Não representa presença, vagas livres ou escala informativa. Consulte Disponibilidade para conferência completa.</p>{scheduleUnits.length?scheduleUnits.map(u=><Row key={u} label="Local" value={u}/>):<p className="text-sm text-muted-foreground">Nenhum horário vigente identificado nos dados carregados.</p>}{canSchedule&&<Button asChild variant="outline" className="clinical-record-action"><Link to="/painel/disponibilidade">Consultar disponibilidade</Link></Button>}</section>}
+      {section==='acesso'&&<section className="clinical-premium p-3"><h3 className="font-semibold text-sm mb-2">Identificação do acesso</h3><Row label="Usuário" value={f.usuario}/><Row label="Perfil" value={roleLabels[f.role]||f.role}/><Row label="Vínculo de autenticação" value={f.auth_user_id?'Cadastrado':'Não informado'}/><Row label="Status cadastral" value={f.ativo?'Ativo':'Inativo'}/><p className="text-xs text-muted-foreground mt-2">A situação cadastral não comprova sessão ativa nem permissões efetivas.</p></section>}
+    </div>
   );
 };
 
