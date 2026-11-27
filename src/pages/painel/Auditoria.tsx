@@ -24,6 +24,9 @@ import { auditService } from '@/services/auditService';
 import { getAuditActorLabel } from '@/lib/auditActor';
 import AuditOverview from '@/components/audit/AuditOverview';
 import AuditRelatedTimeline from '@/components/audit/AuditRelatedTimeline';
+import AuditEventFeed, {type AuditFeedEvent} from '@/components/audit/AuditEventFeed';
+import {auditFeedCounts} from '@/lib/auditEventFeed';
+import {List,Table2,CheckCircle2,AlertCircle,Clock} from 'lucide-react';
 import {auditExportEligibility,readFilteredExport,EXPORT_LIMITS,exportSafeText,auditExportCsv,auditExportHtml,type ExportFormat,type ExportScope} from '@/lib/auditDocumentExport';
 import { auditMunicipalDate } from '@/lib/auditOverview';
 import { auditReportDays, readAuditReport, REPORT_LIMIT, REPORT_MAX_DAYS, REPORT_METRICS, reportMetricCells, type AuditReport, type ReportEvent } from '@/lib/auditActivityReport';
@@ -370,6 +373,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
   const [directory,setDirectory] = useState<{key:string;rows:EnrichedLog[];count:number;warning:string;error:string;apply?: (q:any)=>any;partial?:boolean}|null>(null);
   const [revision,setRevision] = useState(0);
   const [page, setPage] = useState(0);
+  const [recordsView,setRecordsView]=useState<'feed'|'table'>('feed');
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [exportRequest, setExportRequest] = useState<'csv' | 'pdf' | 'report_csv' | 'report_pdf' | null>(null);
@@ -600,6 +604,20 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
   },[queryKey,page,filterDateFrom,filterDateTo,filterUser,filterRole,filterModulo,filterAcao,filterStatus,filterUnidade,filterCpf,filterEventoGrupo,search,unitId,unitFilter,enrichPage]);
 
   const totalPages=Math.ceil(totalCount/ITEMS_PER_PAGE);
+  const feedEvents=useMemo<AuditFeedEvent[]>(()=> (current?.rows||[]).map(log=>({
+    id:log.id,createdAt:log.created_at,status:log.status,
+    action:exportSafeText(log.acao_legivel||formatAuditAction(log.acao)),
+    module:exportSafeText(moduloLabels[log.modulo]||log.modulo||log.entidade),
+    actor:exportSafeText(getAuditActorLabel(log)),role:exportSafeText(log.role||'Perfil não informado'),
+    entity:exportSafeText(log.nome_entidade||log.entidade_id||log.entidade),
+    entityType:exportSafeText(log.entidade||''),entitySubtitle:exportSafeText(log.entidade_resolvida?.subtitulo||''),
+    unit:exportSafeText(log.unidade_nome||log.unidade_id||'Unidade não registrada'),
+    device:exportSafeText(formatDispositivo(log)),summary:exportSafeText(generateHumanSummary(log)),
+    error:exportSafeText(log.error_message||''),
+    fields:Array.isArray(log.campos_alterados)?[...new Set(log.campos_alterados.filter((f):f is string=>typeof f==='string'&&!!f.trim()))].map(f=>isAuditSecret(f)?'Campo protegido':exportSafeText(formatAuditFieldLabel(f))):[]
+  })),[current]);
+  const feedCounts=useMemo(()=>auditFeedCounts(feedEvents),[feedEvents]);
+  const openFeedEvent=(id:string)=>{const log=logs.find(row=>row.id===id);if(log){setDetailState(null);setSelectedLog(log);}};
   const comparisons=useMemo(()=>selectedLog?auditComparisons(selectedLog):[],[selectedLog]);
   const comparisonValue=(field:string,v:AuditValue)=>!v.present?'Não registrado':v.value===null?'Nulo registrado':v.value===''?'Vazio registrado':typeof v.value==='boolean'?(v.value?'Verdadeiro':'Falso'):formatAuditValue(field,v.value);
   const detailConfirmed=!!selectedLog&&detailState?.id===selectedLog.id&&detailState.full===true;
@@ -995,10 +1013,25 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
         </div>
       </details>}
       {/* Table */}
-      <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3">
-          <h2 className="font-semibold flex items-center gap-2"><History className="h-4 w-4 text-primary"/>Registros de auditoria</h2>
-          <p role="status" className="text-xs text-muted-foreground">{loading?'Consultando registros…':queryError?'Total não confirmado':totalCount.toLocaleString('pt-BR')+' registros no recorte consultado'}</p>
+      <Card className="overflow-hidden rounded-xl border-border">
+        <div className="border-b border-border bg-card p-3 sm:p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="rounded-xl bg-primary/10 p-2.5 text-primary"><History className="h-5 w-5" aria-hidden="true"/></div>
+              <div className="min-w-0"><h2 className="text-base sm:text-lg font-bold tracking-tight">Registros de auditoria</h2><p role="status" className="text-xs text-muted-foreground">{loading?'Consultando registros…':queryError?'Total não confirmado':totalCount.toLocaleString('pt-BR')+' registros no recorte consultado · '+logs.length+' nesta página'}</p></div>
+            </div>
+            <div className="inline-flex rounded-lg border border-border bg-muted/40 p-1 gap-1" aria-label="Visualização dos registros">
+              <Button type="button" size="sm" variant={recordsView==='feed'?'default':'ghost'} aria-pressed={recordsView==='feed'} className="h-8 gap-1.5" onClick={()=>setRecordsView('feed')}><List className="h-4 w-4" aria-hidden="true"/>Linha do tempo</Button>
+              <Button type="button" size="sm" variant={recordsView==='table'?'default':'ghost'} aria-pressed={recordsView==='table'} className="h-8 gap-1.5" onClick={()=>setRecordsView('table')}><Table2 className="h-4 w-4" aria-hidden="true"/>Tabela</Button>
+            </div>
+          </div>
+          {!loading&&!queryError&&logs.length>0&&<div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 pt-3 text-xs">
+            <span className="font-semibold text-muted-foreground">Nesta página</span>
+            <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true"/><strong className="tabular-nums">{feedCounts.success}</strong> sucessos</span>
+            <span className="inline-flex items-center gap-1.5"><AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true"/><strong className="tabular-nums">{feedCounts.failure}</strong> erros/falhas</span>
+            <span className="inline-flex items-center gap-1.5"><Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden="true"/><strong className="tabular-nums">{feedCounts.other}</strong> demais situações</span>
+            <span className="sm:ml-auto text-muted-foreground">Mais recentes primeiro · Horário de Oriximiná</span>
+          </div>}
         </div>
         <CardContent className="p-0">
           {queryError ? <div role="alert" className="py-12 px-4 text-center space-y-3"><p className="text-sm text-muted-foreground">{queryError}</p><Button size="sm" variant="outline" onClick={()=>setRevision(n=>n+1)}>Tentar novamente</Button></div> : loading ? (
@@ -1007,7 +1040,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
             </div>
           ) : logs.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">Nenhum registro encontrado.</div>
-          ) : (
+          ) : recordsView==='feed' ? <AuditEventFeed events={feedEvents} onOpen={openFeedEvent}/> : (
             <div>
               <div className="md:hidden divide-y divide-border">
                 {logs.map(log=><button key={log.id} type="button" onClick={()=>{setDetailState(null);setSelectedLog(log);}} className="block w-full text-left p-3 space-y-2 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring">
