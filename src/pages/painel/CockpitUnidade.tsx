@@ -75,12 +75,12 @@ function ShiftSummary({ build, stale, onOpen }: {
         <p>Registros a conferir; as categorias podem se sobrepor e não devem ser somadas. Nenhum dado é corrigido automaticamente.</p>
         <div className="cockpit-quality-grid">
           {[
-            {label:'Aguardando sem chegada válida', count:quality.missingArrival, total:input.waitingTotal, id:'indicador:espera'},
-            {label:'Aptos sem horário de classificação', count:quality.missingClearance, total:input.ready.length, id:'aguardando-consulta'},
-            {label:'Aptos sem profissão informada', count:quality.missingProfession, total:input.ready.length, id:'aguardando-consulta'},
-            {label:'Em atendimento sem início válido', count:quality.missingStart, total:input.inProgress.length, id:'indicador:salas'},
-            {label:'Em atendimento sem sala ativa vinculada', count:quality.missingRoom, total:input.inProgress.length, id:'sem-sala'},
-            {label:'Concluídos sem horário válido hoje', count:quality.missingCompletion, total:input.completed.length, id:'indicador:concluidos'},
+            {label:'Aguardando sem chegada válida', count:quality.missingArrival, total:input.waitingTotal, id:'qualidade:chegada'},
+            {label:'Aptos sem horário de classificação', count:quality.missingClearance, total:input.ready.length, id:'qualidade:classificacao'},
+            {label:'Aptos sem profissão informada', count:quality.missingProfession, total:input.ready.length, id:'qualidade:profissao'},
+            {label:'Em atendimento sem início válido', count:quality.missingStart, total:input.inProgress.length, id:'qualidade:inicio'},
+            {label:'Em atendimento sem sala ativa vinculada', count:quality.missingRoom, total:input.inProgress.length, id:'qualidade:sala'},
+            {label:'Concluídos sem horário válido hoje', count:quality.missingCompletion, total:input.completed.length, id:'qualidade:conclusao'},
           ].map(item => <button type="button" className="cockpit-quality-item" key={item.label} data-attention={item.count > 0}
             onClick={event => onOpen(item.id, event.currentTarget)} aria-haspopup="dialog">
             <span>{item.label}</span><strong>{item.count}<small>/{item.total}</small></strong><ChevronRight size={14} aria-hidden="true"/>
@@ -469,7 +469,28 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
           describeTriage(itemById.get(entry.agendamento_id)!, entry))} />
       </>;
     };
-    if (zone === 'indicador:presentes') {
+    if (zone.startsWith('qualidade:')) {
+      const key = zone.slice('qualidade:'.length);
+      const completedTimeInvalid = (a: Item) => {
+        const time = Date.parse(a.concluido_em || '');
+        return !Number.isFinite(time) || time > now || cockpitDay(time) !== day;
+      };
+      const inProgress = active.filter(a => a.stage === 'consultation');
+      const issues = {
+        chegada: { title: 'Aguardando sem chegada válida', entries: waiting.filter(a => elapsedMinutes(a.arrival, now) === null), reason: 'Chegada ausente ou inválida' },
+        classificacao: { title: 'Aptos sem horário de classificação', entries: readyQueue.map(({a}) => a).filter(a => clearedWait(a) === null), reason: 'Horário da classificação ausente ou inválido' },
+        profissao: { title: 'Aptos sem profissão informada', entries: readyQueue.map(({a}) => a).filter(a => !cockpitLabel(staff.get(a.profissional_id)?.profissao)), reason: 'Profissão não localizada no cadastro vinculado' },
+        inicio: { title: 'Em atendimento sem início válido', entries: inProgress.filter(a => visitMinutes(a) === null), reason: 'Início ausente ou inválido' },
+        sala: { title: 'Em atendimento sem sala ativa vinculada', entries: unmapped, reason: 'Sala não identificada no cadastro ativo da unidade' },
+        conclusao: { title: 'Concluídos sem horário válido hoje', entries: done.filter(completedTimeInvalid), reason: 'Conclusão ausente, inválida ou fora da data operacional' },
+      };
+      const issue = issues[key as keyof typeof issues];
+      if (issue) detail = { title: issue.title, body: <>
+        <span className="planta-badge">{issue.entries.length} registros a conferir</span>
+        <p>Consulta administrativa dos dados disponíveis. A ausência de um vínculo ou horário não confirma falha no atendimento e não altera registros.</p>
+        <RecordList empty="Nenhum registro nesta condição na leitura atual." records={issue.entries.map(a => asRecord(a, [issue.reason, a.profissional_nome].filter(Boolean).join(' · '), 'warning'))}/>
+      </> };
+    } else if (zone === 'indicador:presentes') {
       const stageLabels: Record<Item['stage'], string> = {
         outside: 'Fora do fluxo', done: 'Concluído', reception: 'Aguardando triagem',
         triage: 'Em classificação', ready: 'Apto para consulta', calling: 'Chamado',
@@ -666,8 +687,8 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
       <span>{theater ? 'Modo telão · Sem nomes de pacientes' : 'Selecione um setor para abrir os detalhes.'}</span>
       <span>Salas do cadastro e ocupação pela Agenda · Disposição e mobiliário ilustrativos.</span>
     </div>}
-    {detail && <Details key={zone} title={detail.title} onClose={closeZone} indicator={zone?.startsWith('indicador:')}>
-      {zone?.startsWith('indicador:') && stale && <p className="planta-indicator-stale">Dados da última leitura · atualização parcial ou indisponível.</p>}{detail.body}
+    {detail && <Details key={zone} title={detail.title} onClose={closeZone} indicator={zone?.startsWith('indicador:') || zone?.startsWith('qualidade:')}>
+      {(zone?.startsWith('indicador:') || zone?.startsWith('qualidade:')) && stale && <p className="planta-indicator-stale">Dados da última leitura · atualização parcial ou indisponível.</p>}{detail.body}
     </Details>}
   </div>;
 }
