@@ -162,3 +162,53 @@ export function previewEscalaConflicts(input: {
   }
   return result;
 }
+
+
+export type EscalaViewCategory = 'people' | 'grade' | 'manual' | 'blocked' | 'conflict';
+
+export interface EscalaViewEntry {
+  personId: string;
+  person: string;
+  hours: string;
+  minutes: number;
+  informational?: boolean;
+  reason?: string;
+  conflict?: boolean;
+  currentInactive?: boolean;
+}
+
+/** Presentation only: all views and counters use the already scoped calendar. */
+export function matchesEscalaCategory(entry: EscalaViewEntry, category: EscalaViewCategory) {
+  switch (category) {
+    case 'people': return true;
+    case 'grade': return !entry.informational;
+    case 'manual': return !!entry.informational;
+    case 'blocked': return !!entry.reason;
+    case 'conflict': return !!entry.conflict;
+  }
+}
+
+export function buildEscalaView<T extends EscalaViewEntry>(calendar: readonly {day: Date; entries: T[]}[]) {
+  const people = new Map<string, {id:string; name:string; inactive:boolean; cells: Map<string,T[]>; minutes:number}>();
+  const totals = {people:0,grade:0,manual:0,blocked:0,conflict:0};
+  for(const {day,entries} of calendar) {
+    const key=dateKeyEscala(day);
+    for(const entry of entries) {
+      let person=people.get(entry.personId);
+      if(!person) {
+        person={id:entry.personId,name:entry.person,inactive:!!entry.currentInactive,cells:new Map(),minutes:0};
+        people.set(entry.personId,person);
+      }
+      const cell=person.cells.get(key)??[];
+      cell.push(entry);person.cells.set(key,cell);
+      for(const category of ['grade','manual','blocked','conflict'] as const) {
+        if(matchesEscalaCategory(entry,category)) totals[category]++;
+      }
+    }
+  }
+  for(const person of people.values()) {
+    person.minutes=[...person.cells.values()].reduce((sum,entries)=>sum+summarizeEscalaDay(entries).uniqueMinutes,0);
+  }
+  totals.people=people.size;
+  return {totals,rows:[...people.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')||a.id.localeCompare(b.id))};
+}
