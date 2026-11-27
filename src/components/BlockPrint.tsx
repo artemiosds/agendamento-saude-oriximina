@@ -1,0 +1,23 @@
+import {Button} from '@/components/ui/button';
+import {Printer} from 'lucide-react';
+import {type BlockEntry,type BlockFilter,validBlockDate} from '@/lib/blockDirectory';
+import {blockCalendarMonth} from '@/lib/blockCalendar';
+
+const esc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));
+const fmt=(v:string)=>validBlockDate(v)?v.split('-').reverse().join('/'): 'A conferir';
+const labels:Record<string,string>={feriado:'Feriado',ferias:'Recesso / Férias',reuniao:'Reunião',indisponibilidade:'Indisponibilidade',vigente:'Vigente',futuro:'Futuro',encerrado:'Encerrado',invalido:'A conferir'};
+export default function BlockPrint({entries,filter,today,limited,scopeLabel,month}:{entries:readonly BlockEntry[];filter:BlockFilter;today:string;limited:boolean;scopeLabel:string;month?:string}){
+ const print=()=>{
+  const w=window.open('','_blank','width=1000,height=800');
+  if(!w){window.alert('Permita a abertura da janela de impressão.');return;}
+  w.opener=null;
+  const validMonth=month&&validBlockDate(month+'-01')?month:null;
+  const data=validMonth?blockCalendarMonth(validMonth,entries,filter.year,filter.month):null;
+  const calendar=data?'<h2>Calendário '+esc(validMonth)+'</h2><div class="calendar">'+['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(x=>'<b>'+x+'</b>').join('')+Array.from({length:data.offset},()=>'<div></div>').join('')+data.days.map(d=>'<div class="day"><strong>'+Number(d.date.slice(8))+'</strong><small>'+(d.entries.length?d.entries.length+' bloqueio(s)':'')+'</small></div>').join('')+'</div><p>Os números representam registros por dia, não vagas. Dias sem marcação não significam disponibilidade.</p>':'';
+  const rows=entries.map(({block:b,status,scope,person,unit,issues})=>'<tr><td>'+esc(fmt(b.dataInicio)+' — '+fmt(b.dataFim))+'</td><td>'+esc(b.titulo)+'<small>'+esc(labels[b.tipo]||'Tipo a conferir')+'</small></td><td>'+esc(scope==='global'?'Global':scope==='unidade'?unit||'Unidade não localizada':person||'Profissional não localizado')+'</td><td>'+esc(b.diaInteiro?'Dia inteiro':b.horaInicio+' – '+b.horaFim)+'</td><td>'+esc(labels[status]||status)+'<small>'+esc(issues.join(' · '))+'</small></td></tr>').join('');
+  w.document.open();
+  w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Feriados e Bloqueios</title><style>@page{size:A4 portrait;margin:12mm}*{box-sizing:border-box}body{font:11px Arial,sans-serif;color:#172b37;margin:0}header{border-bottom:3px solid #176b69;padding-bottom:10px;margin-bottom:12px}h1{font-size:22px;margin:4px 0}h2{font-size:15px}p{line-height:1.45}table{width:100%;border-collapse:collapse;table-layout:fixed}td,th{border:1px solid #bac9ce;padding:6px;text-align:left;overflow-wrap:anywhere;vertical-align:top}th{background:#e4efee}thead{display:table-header-group}tr{break-inside:avoid}small{display:block;margin-top:3px;color:#40535b}.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;break-inside:avoid}.day{border:1px solid #bac9ce;min-height:36px;padding:4px}.calendar b{text-align:center}footer{margin-top:12px;border-top:1px solid #bac9ce;padding-top:6px}button{margin:10px 0;padding:8px 14px}@media print{button{display:none}body{print-color-adjust:exact}}</style></head><body><header><strong>PREFEITURA DE ORIXIMINÁ · SECRETARIA MUNICIPAL DE SAÚDE</strong><h1>Feriados e Bloqueios</h1><div>Relatório administrativo · '+esc(scopeLabel)+' · '+esc(fmt(today))+'</div></header><button id="print">Imprimir / Salvar PDF</button><p><strong>'+entries.length+' registros na seleção.</strong> Filtros: '+esc([filter.year||'Todos os anos',filter.month==='todos'?'Todos os meses':filter.month,labels[filter.status]||filter.status,labels[filter.type]||filter.type,filter.scope,filter.search].filter(Boolean).join(' · '))+'</p>'+(limited?'<p>ATENÇÃO: consulta possivelmente limitada aos registros carregados.</p>':'')+calendar+'<h2>Relação de bloqueios filtrados</h2><table><thead><tr><th>Período</th><th>Motivo / tipo</th><th>Abrangência</th><th>Horário</th><th>Situação</th></tr></thead><tbody>'+ (rows||'<tr><td colspan="5">Nenhum registro na seleção.</td></tr>')+'</tbody></table><footer>Documento informativo. Não confirma suspensão de serviços essenciais, vagas livres ou cancelamento de atendimentos.</footer></body></html>');
+  w.document.close();w.document.getElementById('print')?.addEventListener('click',()=>w.print());
+ };
+ return <Button type="button" size="sm" variant="outline" onClick={print}><Printer className="w-4 h-4 mr-1"/>{month?'Imprimir calendário A4':'Imprimir relatório A4'}</Button>;
+}
