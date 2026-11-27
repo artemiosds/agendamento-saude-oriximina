@@ -11,8 +11,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Building2, DoorOpen, Pencil, Tv, Copy, Video, X, Upload, Loader2, Search, Users, CalendarDays, Activity, ChevronRight, RefreshCw, Eye, LayoutGrid, List, MapPin, Phone, ShieldCheck, Printer, ClipboardList, Image as ImageIcon } from 'lucide-react';
+import { Plus, Building2, DoorOpen, Pencil, Tv, Copy, Video, X, Upload, Loader2, Search, Users, CalendarDays, Activity, ChevronRight, RefreshCw, Eye, LayoutGrid, List, MapPin, Phone, ShieldCheck, Printer, ClipboardList, Image as ImageIcon, ArrowUp, ArrowDown, Play, ExternalLink } from 'lucide-react';
 import { linkPainelTV, videoSeguro, playlistPainel } from '@/lib/painelVideo';
+import { moveVideoEntry, videoEntryLabel, playlistDraftChanged, videoPreviewAllowed } from '@/lib/structureVideoAdmin';
 import { buildRoomStaff, filterStructureRooms, summarizeStructure, OPEN_ROOM_APPOINTMENT_EXCLUSIONS, type RoomStaff, type RoomKind, type RoomState, type UnitMetadata } from '@/lib/structureDirectory';
 import { toast } from 'sonner';
 import { buildUnitProfilePrint, escapeStructureHtml, safeStructureLogo } from '@/lib/structureProfilePrint';
@@ -269,16 +270,21 @@ const UnidadesSalas: React.FC = () => {
   const [videoUnit, setVideoUnit] = useState<{ id: string; nome: string } | null>(null);
   const [videoUrl, setVideoUrl] = useState('');
   const [videoList, setVideoList] = useState<string[]>([]);
+  const initialVideoList=useRef<string[]>([]);
+  const [previewIndex,setPreviewIndex]=useState<number|null>(null);
+  const [previewStatus,setPreviewStatus]=useState<'loading'|'ready'|'error'>('loading');
+  const videoDirty=playlistDraftChanged(videoList,initialVideoList.current,videoUrl);
+  const clearVideoPreview=()=>{setPreviewIndex(null);setPreviewStatus('loading');};
+  const previewUrl=previewIndex===null?undefined:videoList[previewIndex];
+  const openVideoPreview=(index:number)=>{if(!videoPreviewAllowed(videoList[index]))return;setPreviewStatus('loading');setPreviewIndex(index);};
   const addUrl = () => {
     const v = videoUrl.trim();
     if (!v) return;
     if (!videoSeguro(v)) { toast.error('Informe um endereço https://'); return; }
-    setVideoList(l => [...l, v]); setVideoUrl('');
+    clearVideoPreview();setVideoList(l => [...l, v]); setVideoUrl('');
   };
-  const moverVideo = (i: number, d: number) => setVideoList(l => {
-    const j = i + d; if (j < 0 || j >= l.length) return l;
-    const n = [...l]; [n[i], n[j]] = [n[j], n[i]]; return n;
-  });
+  const moverVideo = (i:number,d:number)=>{clearVideoPreview();setVideoList(list=>moveVideoEntry(list,i,d));};
+  const retirarVideo=(index:number)=>{if(!window.confirm('Retirar este vídeo da sequência? O arquivo não será excluído; a TV só receberá a mudança ao salvar.'))return;clearVideoPreview();setVideoList(list=>list.filter((_,i)=>i!==index));};
   const [enviando, setEnviando] = useState(false);
 
   const linkTV = (id: string) => {
@@ -291,7 +297,7 @@ const UnidadesSalas: React.FC = () => {
   const abrirVideo=async(id:string,nome:string)=>{
     if(!canWrite('can_edit',id)||!startForm())return;
     const seq=formSequence.current,scope=scopeKey;
-    setVideoUnit({id,nome});setVideoUrl('');setVideoList([]);setFormLoading(true);
+    clearVideoPreview();initialVideoList.current=[];setVideoUnit({id,nome});setVideoUrl('');setVideoList([]);setFormLoading(true);
     try{
       const {data,error}=await supabase.from('unidades').select('custom_data').eq('id',id).single();
       if(seq!==formSequence.current||scopeRef.current!==scope)return;
@@ -299,7 +305,7 @@ const UnidadesSalas: React.FC = () => {
       const cd=(data.custom_data||{}) as Record<string,any>;
       original.current=cd;
       const list=Array.isArray(cd.video_urls)?cd.video_urls.filter((x:unknown)=>typeof x==='string'&&x):cd.video_url?[String(cd.video_url)]:[];
-      setVideoList(list);
+      initialVideoList.current=[...list];setVideoList(list);
     }catch(e){if(seq===formSequence.current&&scopeRef.current===scope)setFormError(readError(e));}
     finally{if(seq===formSequence.current&&scopeRef.current===scope)setFormLoading(false);}
   };
@@ -316,7 +322,7 @@ const UnidadesSalas: React.FC = () => {
       const { data, error: e2 } = await supabase.storage.from('painel-videos').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
       if (e2 || !data) throw e2;
       if(seq!==formSequence.current||scopeRef.current!==scope)return;
-      setVideoList(l => [...l, data.signedUrl]);
+      clearVideoPreview();setVideoList(l => [...l, data.signedUrl]);
       toast.success('Vídeo adicionado à lista. Clique em Salvar Configuração.');
     } catch (e: any) {
       toast.error('Falha no envio: ' + (e?.message || 'erro'));
@@ -332,12 +338,12 @@ const UnidadesSalas: React.FC = () => {
       await saveStructure('video',id,'',{video_urls:lista},original.current);
       await refreshStructure();
       void avisarVideoAtualizado(id);
-      if(scopeRef.current===scope){toast.success('Vídeo salvo! A TV atualiza sozinha.');setVideoUnit(null);}
+      if(scopeRef.current===scope){toast.success('Configuração de vídeo salva. A atualização foi solicitada; confira a TV.');clearVideoPreview();setVideoUnit(null);}
     }catch(e){if(scopeRef.current===scope)toast.error(readError(e));}
     finally{busy.current=false;setSaving(false);}
   };
   const closeForm=(close:()=>void)=>{if(busy.current||enviando||enviandoLogo)return;formSequence.current++;setFormLoading(false);setFormError('');close();};
-  useEffect(()=>{formSequence.current++;setUnitDialog(false);setRoomDialog(false);setVideoUnit(null);setFormError('');setFormLoading(false);},[scopeKey]);
+  useEffect(()=>{formSequence.current++;setUnitDialog(false);setRoomDialog(false);setVideoUnit(null);setVideoList([]);setVideoUrl('');initialVideoList.current=[];clearVideoPreview();setFormError('');setFormLoading(false);},[scopeKey]);
 
   const selectedUnit=directoryReady&&unitProfile?.scope===visibleScope?visibleUnits.find(u=>u.id===unitProfile.id):undefined;
   const selectedMeta=selectedUnit&&configReady?unitMeta.get(selectedUnit.id):undefined;
@@ -501,9 +507,9 @@ const UnidadesSalas: React.FC = () => {
                     </div>
                     <p className="text-xs font-semibold border-t pt-2">Painel de Chamadas</p>
                     <div className="flex flex-wrap gap-1.5">
-                      <Button size="sm" variant="outline" className="clinical-record-action gap-1.5 h-8" onClick={()=>window.open(linkTV(u.id),'_blank')}><Tv className="w-3.5 h-3.5"/>Painel</Button>
+                      <Button size="sm" variant="outline" className="clinical-record-action gap-1.5 h-8" onClick={()=>window.open(linkTV(u.id),'_blank','noopener,noreferrer')}><Tv className="w-3.5 h-3.5"/>Painel</Button>
                       <Button size="sm" variant="outline" className="clinical-record-action gap-1.5 h-8" onClick={()=>copiarLink(u.id)}><Copy className="w-3.5 h-3.5"/>Link TV</Button>
-                      {canWrite('can_edit',u.id)&&<Button size="sm" variant="outline" className="clinical-record-action gap-1.5 h-8" disabled={saving} onClick={()=>abrirVideo(u.id,u.nome)}><Video className="w-3.5 h-3.5"/>Vídeo</Button>}
+                      {canWrite('can_edit',u.id)&&<Button size="sm" variant="outline" className="clinical-record-action gap-1.5 h-8" disabled={saving} onClick={()=>abrirVideo(u.id,u.nome)}><Video className="w-3.5 h-3.5"/>Gerenciar vídeos</Button>}
                     </div>
                   </div>
                 </div>
@@ -719,40 +725,29 @@ const UnidadesSalas: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!videoUnit} onOpenChange={o=>{if(!o)closeForm(()=>setVideoUnit(null));}}>
-        <DialogContent>
-          <DialogHeader><DialogTitle className="font-display">Vídeo do Painel — {videoUnit?.nome}</DialogTitle></DialogHeader>
-          {formStatus}<fieldset disabled={blocked||enviando} className="space-y-4">
-            <div>
-              <Label>Lista de vídeos ({videoList.length})</Label>
-              <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
-                {videoList.length === 0 && <p className="text-xs text-muted-foreground">Nenhum vídeo na lista.</p>}
-                {videoList.map((u, i) => (
-                  <div key={i + u} className="flex items-center gap-1 border rounded px-2 py-1 text-xs">
-                    <span className="font-semibold w-5">{i + 1}.</span>
-                    <span className="flex-1 truncate" title={u}>{u.split('?')[0].split('/').pop() || 'Vídeo'}</span>
-                    <Button size="icon" variant="ghost" className="h-6 w-6" disabled={i === 0} onClick={() => moverVideo(i, -1)}>↑</Button>
-                    <Button size="icon" variant="ghost" className="h-6 w-6" disabled={i === videoList.length - 1} onClick={() => moverVideo(i, 1)}>↓</Button>
-                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => setVideoList(l => l.filter((_, k) => k !== i))}><X className="w-3 h-3" /></Button>
-                  </div>
-                ))}
+      <Dialog open={!!videoUnit} onOpenChange={o=>{if(!o&&!busy.current&&!enviando){if(videoDirty&&!window.confirm('Descartar as alterações não salvas da sequência de vídeos?'))return;closeForm(()=>{clearVideoPreview();setVideoUnit(null);});}}}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-3xl gap-3">
+          <DialogHeader className="clinical-hub-hero text-left pr-9"><div className="flex items-start gap-3"><span className="clinical-patient-avatar flex items-center justify-center shrink-0"><Tv className="w-5 h-5"/></span><div className="min-w-0"><p className="clinical-hub-eyebrow">Painel de Chamadas · administração</p><DialogTitle className="clinical-hub-name font-display break-words">Vídeos de espera</DialogTitle><DialogDescription className="clinical-patient-sub text-xs">{videoUnit?.nome} · Configuração da sequência de reprodução</DialogDescription></div></div></DialogHeader>
+          {formStatus}
+          {videoUnit&&<section className="clinical-premium p-3 space-y-2"><h3 className="font-semibold text-sm flex items-center gap-2"><Tv className="w-4 h-4 text-primary"/>Acesso à TV</h3><div className="flex flex-wrap gap-2"><Input readOnly className="flex-1 min-w-[12rem] text-xs" aria-label="Endereço do painel da unidade" value={linkTV(videoUnit.id)} onFocus={e=>e.target.select()}/><Button type="button" size="sm" variant="outline" className="clinical-record-action gap-1.5" onClick={()=>void copiarLink(videoUnit.id)}><Copy className="w-4 h-4"/>Copiar link</Button><Button type="button" size="sm" variant="outline" className="clinical-record-action gap-1.5" onClick={()=>window.open(linkTV(videoUnit.id),'_blank','noopener,noreferrer')}><ExternalLink className="w-4 h-4"/>Abrir painel</Button></div><p className="text-xs text-muted-foreground">O link mantém o modo de áudio padrão. A configuração não indica se a TV está ligada ou conectada.</p></section>}
+          <fieldset disabled={blocked||enviando} className="space-y-3 min-w-0">
+            <section className="clinical-premium p-3 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-semibold flex items-center gap-2"><List className="w-4 h-4 text-primary"/>Sequência de reprodução</h3><span className="text-xs text-muted-foreground">{formLoading||formError?'Não confirmada':videoDirty?'Alterações não salvas':'Lista carregada'}</span></div>
+              <div className="grid grid-cols-2 gap-2"><div className="clinical-inset border rounded-lg p-2"><strong className="block text-xl tabular-nums">{formLoading||formError?'—':videoList.length}</strong><span className="text-xs text-muted-foreground">Vídeos na lista</span></div><div className="clinical-inset border rounded-lg p-2 min-w-0"><span className="text-xs text-muted-foreground">Primeiro da sequência</span><strong className="block truncate text-sm">{formLoading||formError?'—':videoList.length?videoEntryLabel(videoList[0],0):'Nenhum'}</strong></div></div>
+              <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                {!formLoading&&!formError&&videoList.length===0&&<p className="text-sm text-muted-foreground py-2">Nenhum vídeo local na lista. Adicione um arquivo ou endereço HTTPS.</p>}
+                {videoList.map((u,i)=><div key={i} className={`clinical-inset border rounded-lg p-2 flex flex-wrap items-center gap-2 ${previewIndex===i?'ring-1 ring-primary':''}`}><span className="clinical-dock-icon clinical-tone-blue shrink-0"><span className="text-xs font-semibold">{i+1}</span></span><div className="flex-1 min-w-[8rem]"><p className="text-sm font-medium break-all">{videoEntryLabel(u,i)}</p><p className="text-xs text-muted-foreground">{i===0?'Primeiro vídeo':'Posição '+(i+1)} · {videoPreviewAllowed(u)?'HTTPS':'Endereço a conferir'}</p></div><div className="flex items-center gap-1 ml-auto"><Button type="button" size="icon" variant="outline" className="h-8 w-8" disabled={!videoPreviewAllowed(u)||blocked||enviando} title="Pré-visualizar" aria-label={`Pré-visualizar vídeo ${i+1}`} onClick={()=>previewIndex===i?clearVideoPreview():openVideoPreview(i)}><Play className="w-3.5 h-3.5"/></Button><Button type="button" size="icon" variant="outline" className="h-8 w-8" disabled={i===0||blocked||enviando} aria-label={`Subir vídeo ${i+1}`} title="Mover para cima" onClick={()=>moverVideo(i,-1)}><ArrowUp className="w-3.5 h-3.5"/></Button><Button type="button" size="icon" variant="outline" className="h-8 w-8" disabled={i===videoList.length-1||blocked||enviando} aria-label={`Descer vídeo ${i+1}`} title="Mover para baixo" onClick={()=>moverVideo(i,1)}><ArrowDown className="w-3.5 h-3.5"/></Button><Button type="button" size="icon" variant="outline" className="h-8 w-8 text-destructive" disabled={blocked||enviando} aria-label={`Retirar vídeo ${i+1}`} title="Retirar da sequência" onClick={()=>retirarVideo(i)}><X className="w-3.5 h-3.5"/></Button></div></div>)}
               </div>
-              <p className="text-[11px] text-muted-foreground mt-1">Os vídeos tocam em sequência e recomeçam do primeiro. Recomendado: MP4 H.264, 1080p, até 100 MB cada.</p>
-            </div>
-            <div>
-              <Label>Adicionar por URL (MP4)</Label>
-              <div className="flex gap-2 items-center mt-1">
-                <Input value={videoUrl} onChange={e => setVideoUrl(e.target.value)} placeholder="https://.../video.mp4" />
-                <Button size="sm" variant="outline" onClick={addUrl}><Plus className="w-4 h-4" /></Button>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground"><div className="flex-1 border-t" />OU FAÇA UPLOAD<div className="flex-1 border-t" /></div>
-            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-6 cursor-pointer hover:bg-muted/50 text-sm">
-              {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-              {enviando ? 'Enviando vídeo...' : 'Clique para selecionar MP4'}
-              <input type="file" accept="video/mp4" className="hidden" disabled={enviando} onChange={e => { const f = e.target.files?.[0]; if (f) enviarVideo(f); e.target.value = ''; }} />
-            </label>
-            <Button onClick={salvarVideo} disabled={blocked||enviando} className="w-full gradient-primary text-primary-foreground">{saving?'Salvando...':'Salvar Configuração'}</Button>
+              {previewUrl&&videoPreviewAllowed(previewUrl)&&<div className="clinical-inset border rounded-lg p-2 space-y-2"><div className="flex items-center justify-between gap-2"><strong className="text-xs">Prévia local · {videoEntryLabel(previewUrl,previewIndex??0)}</strong><Button type="button" size="sm" variant="ghost" onClick={clearVideoPreview}>Fechar prévia</Button></div><video key={previewUrl} src={previewUrl} controls muted playsInline preload="metadata" className="w-full max-h-56 bg-black rounded-md" onLoadedMetadata={()=>setPreviewStatus('ready')} onError={()=>setPreviewStatus('error')}/>{previewStatus==='loading'&&<p role="status" className="text-xs text-muted-foreground">Carregando informações do vídeo...</p>}{previewStatus==='error'&&<p role="alert" className="text-xs text-destructive">Não foi possível reproduzir a prévia neste navegador. O arquivo e a sequência permanecem intactos.</p>}<p className="text-xs text-muted-foreground">Prévia apenas neste computador, sem reprodução automática. Não comprova compatibilidade com a TV.</p></div>}
+              <p className="text-xs text-muted-foreground">A regra existente de reprodução em sequência e repetição permanece igual. Nenhum arquivo é excluído ao retirar uma entrada.</p>
+            </section>
+            <section className="clinical-premium p-3 space-y-2">
+              <h3 className="text-sm font-semibold flex items-center gap-2"><Plus className="w-4 h-4 text-primary"/>Adicionar vídeo</h3>
+              <Label htmlFor="structure-video-url">Endereço HTTPS do MP4</Label><div className="flex flex-wrap items-center gap-2"><Input id="structure-video-url" className="flex-1 min-w-[12rem]" value={videoUrl} onChange={e=>setVideoUrl(e.target.value)} placeholder="https://.../video.mp4"/><Button type="button" size="sm" variant="outline" disabled={!videoUrl.trim()||blocked||enviando} onClick={addUrl}><Plus className="w-4 h-4 mr-1"/>Adicionar à lista</Button></div>
+              <label className="clinical-inset flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-4 cursor-pointer hover:bg-muted/50 text-sm">{enviando?<Loader2 className="w-5 h-5 animate-spin"/>:<Upload className="w-5 h-5 text-primary"/>}<span>{enviando?'Enviando vídeo...':'Selecionar arquivo MP4'}</span><span className="text-xs text-muted-foreground">Até 100 MB · recomendado H.264, 1080p</span><input type="file" accept="video/mp4" className="sr-only" disabled={blocked||enviando} onChange={e=>{const f=e.target.files?.[0];if(f)void enviarVideo(f);e.target.value='';}}/></label>
+            </section>
+            <p className="text-xs text-muted-foreground">A TV recebe a nova sequência somente depois que o servidor confirma o salvamento. {videoUrl.trim()?'O endereço ainda digitado também será incluído ao salvar.':''}</p>
+            <Button type="button" onClick={salvarVideo} disabled={blocked||enviando||!videoDirty} className="w-full gradient-primary text-primary-foreground">{saving?'Salvando...':'Salvar configuração'}</Button>
           </fieldset>
         </DialogContent>
       </Dialog>
