@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {monitorCount,monitorCoverage,monitorCacheFresh,monitorPeriodStatus,monitorPool} from '@/lib/monitoringEngine';
+import {auditCsvCell} from '@/lib/auditSecurity';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -75,6 +77,9 @@ interface TableStats {
   recent7d: number | null;
   recent30d: number | null;
   error?: string;
+  periodError?:string;
+  periodChecked?:boolean;
+  durationMs?:number;
 }
 
 interface StorageStats {
@@ -89,6 +94,12 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('visao_geral');
+  const summaryRequest=useRef<AbortController|null>(null);
+  const periodRequest=useRef<AbortController|null>(null);
+  const periodCache=useRef<number|null>(null);
+  const [periodCheckedAt,setPeriodCheckedAt]=useState<number|null>(null);
+  const [periodLoading,setPeriodLoading]=useState(false);
+  const [periodError,setPeriodError]=useState<string|null>(null);
   
   const [dbStats, setDbStats] = useState<TableStats[]>([]);
   const [storageStats, setStorageStats] = useState<StorageStats[]>([]);
@@ -111,86 +122,101 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
   const isMaster = user?.role?.toLowerCase().trim() === 'master';
 
   const fetchStats = useCallback(async () => {
-    setRefreshing(true);
-    const started = performance.now();
-    try {
-      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
-      const statsPromises = TABLES.map(async ({ name, date }): Promise<TableStats> => {
-        try {
-          const base = supabase.from(name);
-          const [total, recent7, recent30] = await Promise.all([
-            base.select('id', { count: 'exact', head: true }),
-            date ? base.select('id', { count: 'exact', head: true }).gte(date, sevenDaysAgo) : Promise.resolve(null),
-            date ? base.select('id', { count: 'exact', head: true }).gte(date, thirtyDaysAgo) : Promise.resolve(null),
-          ]);
-          const error = total.error || recent7?.error || recent30?.error;
-          return {
-            name,
-            count: total.error ? null : total.count,
-            recent7d: recent7?.error ? null : recent7?.count ?? null,
-            recent30d: recent30?.error ? null : recent30?.count ?? null,
-            error: error?.message,
-          };
-        } catch (error) {
-          return { name, count: null, recent7d: null, recent30d: null, error: error instanceof Error ? error.message : 'Consulta indisponível.' };
-        }
-      });
-
-      const [results, alertResult, usageResult] = await Promise.all([
-        Promise.all(statsPromises),
-        isMaster
-          ? supabase.from('system_monitoring_alerts').select('id,title,description,severity').eq('resolved', false).order('created_at', { ascending: false })
-          : Promise.resolve(null),
-        isGlobalAdmin ? (async () => {
-          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-          if (sessionError || !session) throw new Error('Sessão expirada. Entre novamente para consultar o armazenamento.');
-          const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/get_system_monitoring_usage`, {
-            method: 'POST',
-            headers: {
-              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-              Authorization: `Bearer ${session.access_token}`,
-              'Content-Type': 'application/json',
-            },
-            body: '{}',
-          });
-          if (!response.ok) throw new Error(response.status === 404 ? 'Medidor de armazenamento ainda não disponível neste ambiente.' : `Consulta de armazenamento indisponível (${response.status}).`);
-          return usageSchema.parse(await response.json());
-        })().then(data => ({ data, error: null as string | null }))
-          .catch(error => ({ data: null, error: error instanceof Error ? error.message : 'Falha ao medir o armazenamento.' }))
-          : Promise.resolve({ data: null, error: 'Visão global de armazenamento disponível apenas para o Master Global.' }),
+    if(summaryRequest.current)return;
+    periodRequest.current?.abort();periodRequest.current=null;periodCache.current=null;
+    setPeriodCheckedAt(null);setPeriodLoading(false);setPeriodError(null);
+    setDbStats([]);setStorageStats([]);setAlerts([]);setDatabaseBytes(null);setLastCheck(null);setRefreshDurationMs(null);
+    setStorageError('Consulta em andamento.');setAlertsError('Consulta em andamento.');setSystemStatus('parcial');
+    const controller=new AbortController();summaryRequest.current=controller;
+    const signal=controller.signal,current=()=>summaryRequest.current===controller;
+    const timeout=setTimeout(()=>controller.abort(),45_000);
+    setRefreshing(true);const started=performance.now();
+    try{
+      const results=await monitorPool(TABLES,async ({name}):Promise<TableStats>=>{
+        const begin=performance.now();
+        try{
+          const total=await supabase.from(name).select('id',{count:'exact',head:true}).abortSignal(signal);
+          const count=monitorCount(total);
+          return {name,count,recent7d:null,recent30d:null,error:count===null?(total.error?.message||'Contagem não confirmada.'):undefined,durationMs:Math.round(performance.now()-begin)};
+        }catch{return {name,count:null,recent7d:null,recent30d:null,error:'Consulta indisponível.',durationMs:Math.round(performance.now()-begin)};}
+      },signal);
+      const [alertResult,usageResult]=await Promise.all([
+        isMaster?(async()=>{
+          try{
+            const result=await supabase.from('system_monitoring_alerts').select('id,title,description,severity',{count:'exact'}).eq('resolved',false).order('created_at',{ascending:false}).limit(100).abortSignal(signal);
+            return {data:result.error?null:result.data,error:result.error?.message||(!result.data||result.count===null?'Consulta de alertas não confirmada.':result.count!==result.data.length?'Lista parcial de alertas (limite de 100).':null)};
+          }catch{return {data:null,error:'Consulta de alertas indisponível.'};}
+        })():Promise.resolve({data:null,error:'Alertas restritos ao perfil Master.'}),
+        isGlobalAdmin?(async()=>{
+          try{
+            const {data:{session},error:sessionError}=await supabase.auth.getSession();
+            if(sessionError||!session||signal.aborted)throw Error('Sessão não confirmada para consultar armazenamento.');
+            const response=await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/get_system_monitoring_usage`,{
+              method:'POST',signal,headers:{apikey:import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,Authorization:`Bearer ${session.access_token}`,'Content-Type':'application/json'},body:'{}',
+            });
+            if(!response.ok)throw Error(response.status===404?'Medidor de armazenamento ainda não disponível neste ambiente.':`Consulta de armazenamento indisponível (${response.status}).`);
+            return {data:usageSchema.parse(await response.json()),error:null as string|null};
+          }catch(error){return {data:null,error:error instanceof Error?error.message:'Falha ao medir o armazenamento.'};}
+        })():Promise.resolve({data:null,error:'Visão global de armazenamento disponível apenas para o Master Global.'}),
       ]);
-      setDbStats(results);
-      setAlerts(alertResult?.error ? [] : alertResult?.data ?? []);
-      setAlertsError(isMaster ? alertResult?.error?.message ?? (!alertResult?.data ? 'Consulta de alertas não confirmada.' : null) : 'Alertas restritos ao perfil Master.');
+      if(!current()||signal.aborted)throw Error('Consulta cancelada.');
+      setDbStats(results);setAlerts(alertResult.data??[]);setAlertsError(alertResult.error);
       setStorageError(usageResult.error);
-      setStorageStats(usageResult.data?.buckets.map(bucket => ({
-        bucket: bucket.name,
-        fileCount: bucket.file_count,
-        usedBytes: bucket.used_bytes,
-        unknownSizeCount: bucket.unknown_size_count,
-      })) ?? []);
-      setDatabaseBytes(usageResult.data?.database_bytes ?? null);
-      setLastCheck(new Date());
-      const successful = results.filter(result => result.count !== null).length;
-      const incomplete=results.some((result,index)=>!!result.error||result.count===null||(TABLES[index].date!==null&&(result.recent7d===null||result.recent30d===null)));
-      setSystemStatus(successful === 0 ? "erro" : incomplete || !!usageResult.error || !usageResult.data || usageResult.data.buckets.some(bucket=>bucket.unknown_size_count>0) || !isMaster || !!alertResult?.error || !alertResult?.data ? "parcial" : "verificado");
-    } catch (err) {
-      console.error('Error fetching system stats:', err);
-      toast.error('Erro ao atualizar dados de monitoramento');
+      setStorageStats(usageResult.data?.buckets.map(bucket=>({bucket:bucket.name,fileCount:bucket.file_count,usedBytes:bucket.used_bytes,unknownSizeCount:bucket.unknown_size_count}))??[]);
+      setDatabaseBytes(usageResult.data?.database_bytes??null);setLastCheck(new Date());
+      setSystemStatus(monitorCoverage(results,TABLES.length,!isMaster||!isGlobalAdmin||!!alertResult.error||!!usageResult.error||!usageResult.data||usageResult.data.buckets.some(b=>b.unknown_size_count>0)));
+    }catch{
+      if(!current())return;
       setDbStats([]);setStorageStats([]);setAlerts([]);setDatabaseBytes(null);setLastCheck(null);
-      setStorageError('Consulta indisponível.');setAlertsError('Consulta indisponível.');
-      setSystemStatus('erro');
-    } finally {
-      setRefreshDurationMs(Math.round(performance.now() - started));
-      setRefreshing(false);
-      setLoading(false);
+      setStorageError('Consulta indisponível.');setAlertsError('Consulta indisponível.');setSystemStatus('erro');
+      toast.error(signal.aborted?'Tempo limite da consulta atingido.':'Erro ao atualizar dados de monitoramento');
+    }finally{
+      clearTimeout(timeout);
+      if(current()){summaryRequest.current=null;setRefreshDurationMs(Math.round(performance.now()-started));setRefreshing(false);setLoading(false);}
     }
-  }, [isMaster, isGlobalAdmin]);
+  },[isMaster,isGlobalAdmin]);
 
-  useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
+  useEffect(()=>{
+    void fetchStats();
+    return ()=>{const previous=summaryRequest.current;summaryRequest.current=null;previous?.abort();const detail=periodRequest.current;periodRequest.current=null;detail?.abort();periodCache.current=null;};
+  },[fetchStats]);
+
+  const fetchPeriods=useCallback(async(force=false)=>{
+    if(summaryRequest.current||periodRequest.current||(!force&&monitorCacheFresh(periodCache.current,Date.now())))return;
+    const controller=new AbortController();periodRequest.current=controller;
+    const signal=controller.signal,current=()=>periodRequest.current===controller;
+    const timeout=setTimeout(()=>controller.abort(),45_000);
+    setPeriodLoading(true);setPeriodError(null);periodCache.current=null;setPeriodCheckedAt(null);
+    setDbStats(rows=>rows.map(row=>({...row,recent7d:null,recent30d:null,periodError:undefined,periodChecked:false})));
+    const cutoff=new Date(),seven=new Date(cutoff.getTime()-7*86400000).toISOString(),thirty=new Date(cutoff.getTime()-30*86400000).toISOString();
+    try{
+      const measured=await monitorPool(TABLES.filter(table=>table.date!==null),async ({name,date})=>{
+        let recent7d:number|null=null,recent30d:number|null=null;
+        try{
+          if(!date)throw Error('Sem campo temporal.');
+          recent7d=monitorCount(await supabase.from(name).select('id',{head:true,count:'exact'}).gte(date,seven).lte(date,cutoff.toISOString()).abortSignal(signal));
+          if(!signal.aborted)recent30d=monitorCount(await supabase.from(name).select('id',{head:true,count:'exact'}).gte(date,thirty).lte(date,cutoff.toISOString()).abortSignal(signal));
+        }catch{/* Unavailable counts stay null. */}
+        const periodError=recent7d===null||recent30d===null||recent7d>recent30d?'Contagens do período não confirmadas.':undefined;
+        return {name,recent7d,recent30d,periodError,periodChecked:true};
+      },signal);
+      if(!current()||signal.aborted)throw Error('Consulta cancelada.');
+      const byName=new Map<string,(typeof measured)[number]>(measured.map(row=>[row.name,row]));
+      setDbStats(rows=>rows.map(row=>({...row,...byName.get(row.name)})));
+      if(measured.some(row=>row.periodError))setPeriodError('Há períodos com dados incompletos. Atualize os períodos para tentar novamente.');
+      periodCache.current=Date.now();setPeriodCheckedAt(periodCache.current);
+    }catch{
+      if(current())setPeriodError(signal.aborted?'Tempo limite da consulta de períodos atingido.':'Períodos indisponíveis.');
+    }finally{
+      clearTimeout(timeout);if(current()){periodRequest.current=null;setPeriodLoading(false);}
+    }
+  },[]);
+
+  useEffect(()=>{
+    if(activeTab!=='banco_dados'||refreshing||!lastCheck)return;
+    void fetchPeriods();
+    return ()=>{const previous=periodRequest.current;if(previous){periodRequest.current=null;previous.abort();setPeriodLoading(false);}};
+  },[activeTab,refreshing,lastCheck,fetchPeriods]);
 
   const storageBytes = storageStats.reduce((sum, bucket) => sum + bucket.usedBytes, 0);
   const unknownSizeCount = storageStats.reduce((sum, bucket) => sum + bucket.unknownSizeCount, 0);
@@ -212,12 +238,17 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
   };
 
   const exportReport = () => {
+    if(summaryRequest.current||periodRequest.current||!dbStats.length)return;
     const lines = [
-      ['Tipo', 'Item', 'Total', '7 dias', '30 dias', 'Status'],
-      ...dbStats.map(table => ['Tabela', table.name, table.count ?? 'Indisponível', table.recent7d ?? 'N/D', table.recent30d ?? 'N/D', table.error ? 'Falha' : 'Consultado']),
-      ...storageStats.map(bucket => ['Storage', bucket.bucket, bucket.fileCount, '', '', `${bucket.usedBytes} bytes`]),
+      ['Tipo', 'Item', 'Total', '7 dias', '30 dias', 'Status', 'Períodos'],
+      ['Consulta geral',lastCheck?.toISOString()??'Não concluída','','','',systemStatus,''],
+      ['Consulta de períodos',periodCheckedAt===null?'Não concluída':new Date(periodCheckedAt).toISOString(),'','','',periodError??(periodCheckedAt===null?'Sob demanda':'Consulte status por tabela'),''],
+      ...dbStats.map(table => ['Tabela', table.name, table.count ?? 'Indisponível', table.recent7d ?? 'N/D', table.recent30d ?? 'N/D', table.error ? 'Falha' : 'Consultado',monitorPeriodStatus(table,TABLES.some(t=>t.name===table.name&&t.date!==null))]),
+      ['Alertas','Consulta',alertsError?'Não confirmado':alerts.length,'','',alertsError??'Consultado',''],
+      ['Storage','Consulta',databaseBytes??'Não medido','','',storageError??'Consultado',''],
+      ...storageStats.map(bucket => ['Storage', bucket.bucket, bucket.fileCount, '', '', `${bucket.usedBytes} bytes medidos`,`${bucket.unknownSizeCount} sem tamanho informado`]),
     ];
-    const csv = lines.map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    const csv = lines.map(row => row.map(auditCsvCell).join(';')).join('\r\n');
     const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;
@@ -241,7 +272,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
           {embedded?<h2 className="text-xl font-bold font-display text-foreground flex items-center gap-2"><Activity className="w-5 h-5 text-primary" aria-hidden="true"/>Monitoramento do Sistema</h2>:
           <h1 className="text-2xl font-bold font-display text-foreground flex items-center gap-2"><Activity className="w-6 h-6 text-primary" aria-hidden="true"/>Monitoramento do Sistema</h1>}
           <p className="text-muted-foreground text-sm">
-            Acompanhe o uso do banco de dados, armazenamento, arquivos e saúde geral da aplicação.
+            Acompanhe as medições disponíveis nesta sessão. O diagnóstico não equivale à disponibilidade global do sistema.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -254,7 +285,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
             Atualizar análise
           </Button>
-          <Button variant="outline" size="sm" onClick={exportReport} disabled={dbStats.length === 0}>
+          <Button variant="outline" size="sm" onClick={exportReport} disabled={refreshing||periodLoading||dbStats.length === 0}>
             <Download className="w-4 h-4 mr-2" />
             Exportar relatório
           </Button>
@@ -284,7 +315,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wide">Banco de Dados</p>
-              <p className="text-base sm:text-lg font-bold tabular-nums break-words">{checkedTables}/{TABLES.length} tabelas</p>
+              <p className="text-base sm:text-lg font-bold tabular-nums break-words">{refreshing?'Consultando…':checkedTables+'/'+TABLES.length+' tabelas'}</p>
             </div>
           </CardContent>
         </Card>
@@ -317,13 +348,13 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
         <Card className="clinical-premium min-w-0">
           <CardContent className="p-3 flex items-center gap-2.5 min-w-0">
             <div className={`w-9 h-9 rounded-lg shrink-0 flex items-center justify-center ${
-              alerts.length > 0 ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+              alertsError ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300' : alerts.length > 0 ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
             }`}>
               <ShieldAlert className="w-5 h-5" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wide">Alertas</p>
-              <p className="text-base sm:text-lg font-bold tabular-nums break-words">{alertsError ? 'Não verificado' : `${alerts.length} ativos`}</p>
+              <p className="text-base sm:text-lg font-bold tabular-nums break-words">{alertsError ? (alerts.length>0?alerts.length+' retornados · parcial':'Não verificado') : `${alerts.length} ativos`}</p>
             </div>
           </CardContent>
         </Card>
@@ -355,14 +386,13 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
                 <CardDescription>Pendências e recomendações técnicas</CardDescription>
               </CardHeader>
               <CardContent className="p-3 sm:p-4 pt-0">
-                {alertsError ? (
-                  <Alert><AlertTriangle className="h-4 w-4" /><AlertTitle>Alertas não verificados</AlertTitle><AlertDescription>{alertsError}</AlertDescription></Alert>
-                ) : alerts.length === 0 ? (
+                {alertsError&&<Alert className="mb-2"><AlertTriangle className="h-4 w-4" /><AlertTitle>Consulta de alertas não integral</AlertTitle><AlertDescription>{alertsError}</AlertDescription></Alert>}
+                {!alertsError&&alerts.length === 0 ? (
                   <div className="clinical-inset rounded-xl border py-6 px-3 text-center text-muted-foreground">
                     <CheckCircle2 className="w-7 h-7 text-emerald-600 dark:text-emerald-400 mx-auto mb-2" />
                     <p>Nenhum alerta ativo retornado pela consulta.</p>
                   </div>
-                ) : (
+                ) : alerts.length>0?(
                   <div className="space-y-3">
                     {alerts.map((alert) => (
                       <Alert key={alert.id} variant={alert.severity === 'critico' ? 'destructive' : 'default'}>
@@ -371,7 +401,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
                       </Alert>
                     ))}
                   </div>
-                )}
+                ):null}
               </CardContent>
             </Card>
 
@@ -379,12 +409,12 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
               <CardHeader className="p-3 sm:p-4">
                 <CardTitle className="text-base font-display flex items-center gap-2">
                   <RefreshCw className="w-5 h-5 text-primary" />
-                  Últimas Atividades de Auditoria
+                  Logs &amp; Auditoria
                 </CardTitle>
                 <CardDescription>Acesso ao histórico de eventos registrados</CardDescription>
               </CardHeader>
               <CardContent className="p-3 sm:p-4 pt-0">
-                <p className="text-sm text-muted-foreground">Acesse a aba 'Logs & Auditoria' no menu Administração para ver o histórico completo.</p>
+                <p className="text-sm text-muted-foreground">Os eventos estão na central de Logs &amp; Auditoria, com as permissões próprias. Nenhum evento individual é carregado nesta visão.</p>
                 <Button variant="link" className="p-0 h-auto mt-4" onClick={() => window.location.href='/painel/auditoria'}>
                   Ver todos os logs →
                 </Button>
@@ -397,9 +427,14 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
           <Card className="clinical-premium min-w-0">
             <CardHeader className="p-3 sm:p-4">
               <CardTitle>Estatísticas das Tabelas</CardTitle>
-              <CardDescription>Contagens reais dos registros visíveis ao seu perfil. Períodos móveis de 7 e 30 dias.</CardDescription>
+              <CardDescription>Contagens dos registros visíveis ao seu perfil. Períodos móveis de 7 e 30 dias carregados sob demanda.</CardDescription>
             </CardHeader>
             <CardContent className="p-3 sm:p-4 pt-0">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <p role="status" className="text-xs text-muted-foreground">{periodLoading?'Consultando períodos…':periodCheckedAt!==null?'Períodos consultados em '+format(new Date(periodCheckedAt),'dd/MM/yyyy HH:mm:ss'):'Períodos não consultados'}</p>
+                <Button size="sm" variant="outline" onClick={()=>void fetchPeriods(true)} disabled={refreshing||periodLoading||!lastCheck}>Atualizar períodos</Button>
+              </div>
+              {periodError&&<Alert className="mb-3"><AlertTriangle className="h-4 w-4"/><AlertTitle>Períodos incompletos</AlertTitle><AlertDescription>{periodError}</AlertDescription></Alert>}
               <div className="overflow-x-auto rounded-lg border">
               <Table className="min-w-[620px]">
                 <TableHeader className="clinical-inset">
@@ -408,7 +443,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
                     <TableHead className="text-right tabular-nums">Registros Totais</TableHead>
                     <TableHead className="text-right tabular-nums">Últimos 7 dias</TableHead>
                     <TableHead className="text-right tabular-nums">Últimos 30 dias</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Status total</TableHead><TableHead>Períodos</TableHead><TableHead className="text-right">Tempo (total)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -423,6 +458,8 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
                           {table.error ? 'Falha na consulta' : 'Consultado'}
                         </Badge>
                       </TableCell>
+                      <TableCell className="text-xs" title={table.periodError}>{monitorPeriodStatus(table,TABLES.some(t=>t.name===table.name&&t.date!==null))}</TableCell>
+                      <TableCell className="text-right tabular-nums">{table.durationMs===undefined?'—':table.durationMs+' ms'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -482,7 +519,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
             <CardContent className="space-y-3 p-3 sm:p-4 pt-0">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="clinical-inset p-3 border rounded-xl min-w-0">
-                  <p className="text-sm text-muted-foreground mb-1">Duração da atualização</p>
+                  <p className="text-sm text-muted-foreground mb-1">Duração da consulta geral</p>
                   <p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{refreshDurationMs === null ? '—' : `${refreshDurationMs.toLocaleString('pt-BR')} ms`}</p>
                 </div>
                 <div className="clinical-inset p-3 border rounded-xl min-w-0">
@@ -490,15 +527,15 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
                   <p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{checkedTables}/{TABLES.length}</p>
                 </div>
                 <div className="clinical-inset p-3 border rounded-xl min-w-0">
-                  <p className="text-sm text-muted-foreground mb-1">Falhas nesta atualização</p>
-                  <p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{dbStats.filter(table => table.error).length + Number(Boolean(isGlobalAdmin && storageError)) + Number(Boolean(isMaster && alertsError))}</p>
+                  <p className="text-sm text-muted-foreground mb-1">Falhas na consulta geral</p>
+                  <p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{refreshing||!lastCheck?'—':dbStats.filter(table => table.error).length + Number(Boolean(isGlobalAdmin && storageError)) + Number(Boolean(isMaster && alertsError))}</p>
                 </div>
               </div>
               
               <Alert>
                 <Info className="w-4 h-4" />
                 <AlertTitle>Recomendação</AlertTitle>
-                <AlertDescription>O tempo acima mede apenas as consultas desta página. Histórico de disponibilidade, erros em 24 horas e desempenho de todos os usuários exigem telemetria própria; não são inferidos daqui.</AlertDescription>
+                <AlertDescription>O tempo acima mede apenas a consulta geral desta página; os períodos são consultados separadamente. Histórico de disponibilidade, erros em 24 horas e desempenho de todos os usuários exigem telemetria própria; não são inferidos daqui.</AlertDescription>
               </Alert>
             </CardContent>
           </Card>
@@ -543,11 +580,11 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
               <div className="grid grid-cols-1 min-[360px]:grid-cols-2 lg:grid-cols-4 gap-2">
                 <div className="clinical-inset p-3 border rounded-xl text-left min-w-0">
                   <p className="text-xs text-muted-foreground uppercase">Database</p>
-                  <p className="text-sm font-bold">{checkedTables > 0 ? 'Consulta respondeu' : 'Não verificado'}</p>
+                  <p className="text-sm font-bold">{refreshing?'Consultando':checkedTables===TABLES.length?'Consultas confirmadas':checkedTables>0?'Consultas parciais':'Não verificado'}</p>
                 </div>
                 <div className="clinical-inset p-3 border rounded-xl text-left min-w-0">
                   <p className="text-xs text-muted-foreground uppercase">Auth</p>
-                  <p className="text-sm font-bold">Sessão ativa</p>
+                  <p className="text-sm font-bold">Sessão da aplicação · não testada</p>
                 </div>
                 <div className="clinical-inset p-3 border rounded-xl text-left min-w-0">
                   <p className="text-xs text-muted-foreground uppercase">Storage</p>
@@ -596,7 +633,7 @@ const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) =
 
       <div className="clinical-premium text-center py-2 px-3">
         <p className="text-xs text-muted-foreground">
-          Última consulta: {lastCheck ? format(lastCheck, "HH:mm:ss 'em' dd/MM/yyyy", { locale: ptBR }) : 'ainda não concluída'}
+          Última consulta geral: {lastCheck ? format(lastCheck, "HH:mm:ss 'em' dd/MM/yyyy", { locale: ptBR }) : 'ainda não concluída'}
         </p>
       </div>
     </div>
