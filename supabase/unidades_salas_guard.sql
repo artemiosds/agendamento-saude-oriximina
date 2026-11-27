@@ -105,6 +105,11 @@ BEGIN
      IF NOT FOUND OR s.unidade_id IS DISTINCT FROM target THEN RAISE EXCEPTION 'Sala não localizada nesta unidade.'; END IF;
      IF s.nome IS DISTINCT FROM p_expected->>'nome' OR (room_map->p_id) IS DISTINCT FROM (p_expected->'config') THEN RAISE EXCEPTION 'Sala alterada por outro usuário. Reabra a edição.'; END IF;
    ELSIF room_map ? p_id THEN RAISE EXCEPTION 'Identificador de sala já utilizado.'; END IF;
+   -- Renaming a room must not normalize or discard legacy diagnostic metadata.
+   IF p_action='room_edit' AND p_data->'preserve_config'='true'::jsonb THEN
+     UPDATE public.salas SET nome=trim(p_data->>'nome') WHERE id=p_id;
+     RETURN p_id;
+   END IF;
    IF p_data->>'finalidade'='aparelho_diagnostico' THEN
      v:=p_data->'config';
      IF jsonb_typeof(v) IS DISTINCT FROM 'object' OR v->>'finalidade' IS DISTINCT FROM 'aparelho_diagnostico' OR jsonb_typeof(v->'exames') IS DISTINCT FROM 'array' THEN RAISE EXCEPTION 'Configuração de exames inválida.'; END IF;
