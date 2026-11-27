@@ -21,6 +21,8 @@ import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { supabase } from '@/integrations/supabase/client';
 import { DEFAULT_DIAGNOSTIC_ROOM_CONFIG, DIAGNOSTIC_EXAM_CATALOG, createDiagnosticExamConfig, normalizeDiagnosticRoomConfig, type DiagnosticRoomConfig } from '@/lib/diagnosticExams';
+import { normalizeExamSearch, examReview, roomReview, newExamId } from '@/lib/diagnosticDirectoryReview';
+import DiagnosticSigtapLookup from '@/components/DiagnosticSigtapLookup';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
@@ -72,10 +74,13 @@ const UnidadesSalas: React.FC = () => {
   const [customData, setCustomData] = useState<Record<string, any>>({});
   const [unitDialog, setUnitDialog] = useState(false);
   const [roomDialog, setRoomDialog] = useState(false);
+  const [examSearch,setExamSearch]=useState('');
+  useEffect(()=>{if(roomDialog)setExamSearch('');},[roomDialog]);
   const [editUnitId, setEditUnitId] = useState<string | null>(null);
   const [editRoomId, setEditRoomId] = useState<string | null>(null);
   const [unitForm, setUnitForm] = useState({ nome: '', nomeExibicao: '', endereco: '', telefone: '', whatsapp: '', cnes: '' });
   const [roomForm, setRoomForm] = useState({ nome: '', unidadeId: '', config: { ...DEFAULT_DIAGNOSTIC_ROOM_CONFIG } as DiagnosticRoomConfig });
+  const diagnosticReview=roomReview(roomForm.config);
   const [roomConfigs, setRoomConfigs] = useState<Record<string, DiagnosticRoomConfig>>({});
   const [roomFilter,setRoomFilter]=useState<RoomKind>('todas');
   const [roomState,setRoomState]=useState<RoomState>('all');
@@ -249,6 +254,7 @@ const UnidadesSalas: React.FC = () => {
     if(editRoomId&&salas.find(s=>s.id===editRoomId)?.unidadeId!==roomForm.unidadeId){toast.error('A transferência de sala exige revisão dos vínculos.');return;}
     const preserveConfig=!!editRoomId&&JSON.stringify(roomForm.config)===JSON.stringify(normalizeDiagnosticRoomConfig(original.current.config));
     if(!preserveConfig&&roomForm.config.finalidade==='aparelho_diagnostico'&&(!roomForm.config.exames.length||roomForm.config.exames.some(exam=>!exam.tipoExame.trim()))){toast.error('Selecione pelo menos um exame e informe o nome dos exames personalizados.');return;}
+    if(!preserveConfig&&roomForm.config.finalidade==='aparelho_diagnostico'&&roomReview(roomForm.config).duplicateIds){toast.error('Há identificadores de exames repetidos. Confira as modalidades antes de salvar a configuração.');return;}
     const id=editRoomId||'s'+crypto.randomUUID(),scope=scopeKey;
     busy.current=true;setSaving(true);
     try{
@@ -517,6 +523,7 @@ const UnidadesSalas: React.FC = () => {
           <DialogHeader className="clinical-hub-hero text-left"><div className="flex items-start gap-2.5"><span className="clinical-patient-avatar flex items-center justify-center shrink-0"><DoorOpen className="w-5 h-5" aria-hidden="true"/></span><div className="min-w-0"><p className="clinical-hub-eyebrow">Estrutura física · consulta</p><DialogTitle className="clinical-hub-name font-display break-words">{selectedRoom?.nome}</DialogTitle><DialogDescription className="clinical-patient-sub text-xs mt-1">Consulta administrativa dos vínculos existentes, sem alterações na agenda.</DialogDescription></div></div></DialogHeader>
           {selectedRoom&&<>
             <div className="clinical-premium p-3 space-y-2"><p className="font-medium flex items-start gap-2"><Building2 className="w-4 h-4 mt-0.5 text-primary shrink-0"/><span className="break-words">{visibleUnits.find(u=>u.id===selectedRoom.unidadeId)?.nome||'Unidade não identificada'}</span></p><p className="text-sm text-muted-foreground">{selectedRoom.ativo?'Ativa':'Inativa'} · {configReady?(devices.has(selectedRoom.id)?'Aparelho / exame diagnóstico':'Consultório clínico'):'Finalidade não confirmada'}</p>{configReady&&roomConfigs[selectedRoom.id]&&<p className="text-sm">Exames cadastrados: {examNames.get(selectedRoom.id)||'Nenhum exame identificado'}</p>}</div>
+            {configReady&&roomConfigs[selectedRoom.id]&&<section className="clinical-premium p-3 space-y-2"><h3 className="font-semibold text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-primary"/>Modalidades diagnósticas cadastradas</h3><p className="text-xs text-muted-foreground">Horário configurado: {roomConfigs[selectedRoom.id].horarioInicio} – {roomConfigs[selectedRoom.id].horarioFim}. Não representa vagas livres.</p>{roomConfigs[selectedRoom.id].exames.map((exam,index)=><details key={exam.id+'-'+index} className="clinical-inset border rounded-lg p-2"><summary className="cursor-pointer text-sm font-medium break-words">{exam.tipoExame} · {exam.duracaoSlot} min</summary><dl className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs"><div><dt className="text-muted-foreground">SIGTAP cadastrado</dt><dd>{exam.codigoSigtap||'Não informado'}</dd></div><div><dt className="text-muted-foreground">Prazo cadastrado</dt><dd>{exam.prazoResultadoDias} dia(s)</dd></div><div><dt className="text-muted-foreground">Contraste</dt><dd>{exam.exigeContraste==='sim'?'Sim':exam.exigeContraste==='opcional'?'Opcional':'Não'}</dd></div><div><dt className="text-muted-foreground">Preparo prévio</dt><dd>{exam.exigePreparo?'Sim':'Não'}</dd></div>{exam.exigePreparo&&<div className="sm:col-span-2"><dt className="text-muted-foreground">Instruções cadastradas pela unidade</dt><dd className="whitespace-pre-wrap break-words">{exam.instrucoesPreparo||'Não informadas'}</dd></div>}</dl>{examReview(exam).length>0&&<p className="text-xs text-amber-800 dark:text-amber-300 mt-2">{examReview(exam).join(' · ')}</p>}</details>)}</section>}
             {canReadStaff&&<section className="clinical-premium p-3 space-y-2"><h3 className="font-semibold flex gap-2 items-center"><Users className="w-4 h-4"/>Equipe vinculada {staffReady&&`(${roomStaff.get(selectedRoom.id)?.length||0})`}</h3><p className="text-xs text-muted-foreground">Funcionários ativos com vínculo direto à sala e à mesma unidade, nos registros acessíveis. Não indica presença ou escala.</p>{staffQuery.isError?<div role="alert" className="text-sm text-destructive">Consulta não confirmada. <Button size="sm" variant="outline" onClick={()=>void staffQuery.refetch()}>Tentar novamente</Button></div>:!staffReady?<p role="status" className="text-sm text-muted-foreground">Consultando equipe...</p>:!(roomStaff.get(selectedRoom.id)?.length)?<p className="text-sm text-muted-foreground">Nenhum funcionário ativo com esse vínculo identificado.</p>:<div className="max-h-40 overflow-y-auto divide-y">{(roomStaff.get(selectedRoom.id)||[]).map(f=><div key={f.id} className="py-2 text-sm"><strong>{f.nome}</strong><p className="text-xs text-muted-foreground">{f.profissao||f.cargo||'Função não informada'}</p></div>)}</div>}</section>}
             {canReadAgenda&&<section className="clinical-premium p-3 space-y-2"><h3 className="font-semibold flex items-center gap-2"><CalendarDays className="w-4 h-4"/>Agendamentos vinculados</h3><p className="text-xs text-muted-foreground">De hoje em diante, excluindo cancelados, remarcados, concluídos e faltas. Somente registros acessíveis com vínculo explícito à sala; não representa ocupação, presença ou vagas livres.</p>{appointmentsQuery.isError?<div role="alert" className="text-sm text-destructive">Consulta não confirmada. <Button size="sm" variant="outline" onClick={()=>void appointmentsQuery.refetch()}>Tentar novamente</Button></div>:appointmentsQuery.isFetching?<p role="status" className="text-sm text-muted-foreground">Consultando agendamentos...</p>:appointmentsQuery.isSuccess?<><p className="text-sm font-semibold">{appointmentsQuery.data.total} registro(s) não encerrado(s)</p>{appointmentsQuery.data.rows.length>0&&<div className="max-h-60 overflow-y-auto divide-y">{appointmentsQuery.data.rows.map(item=><div key={item.id} className="py-2 flex flex-wrap gap-x-3 gap-y-1 items-start text-xs"><span className="font-medium tabular-nums">{item.data.split('-').reverse().join('/')} · {item.hora.slice(0,5)}</span><span className="flex-1 min-w-[8rem]">{item.profissional_nome||'Profissional não informado'}</span><span className="text-muted-foreground">{item.status.replaceAll('_',' ')}</span></div>)}</div>}{appointmentsQuery.data.total>appointmentsQuery.data.rows.length&&<p className="text-xs text-muted-foreground">Exibindo os primeiros {appointmentsQuery.data.rows.length} registros; consulte a Agenda para a lista completa.</p>}</>:<p className="text-sm text-muted-foreground">Consulta em preparação...</p>}<Button size="sm" variant="outline" asChild><Link to="/painel/agenda">Consultar Agenda</Link></Button></section>}
             {(!canReadStaff||!canReadAgenda)&&<p className="text-xs text-muted-foreground">As consultas de equipe e Agenda dependem das permissões correspondentes.</p>}
@@ -650,52 +657,59 @@ const UnidadesSalas: React.FC = () => {
               </Select>
             </div>
             {roomForm.config.finalidade === 'aparelho_diagnostico' && (
-              <div className="space-y-3 rounded-lg border p-3">
+              <div className="clinical-inset space-y-3 rounded-lg border p-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="clinical-premium p-2.5"><strong className="block text-xl tabular-nums">{diagnosticReview.total}</strong><span className="text-xs text-muted-foreground">Modalidades selecionadas</span></div>
+                  <div className="clinical-premium p-2.5"><strong className="block text-xl tabular-nums">{diagnosticReview.review}</strong><span className="text-xs text-muted-foreground">Modalidades a conferir</span></div>
+                </div>
+                {diagnosticReview.duplicateIds>0&&<p role="alert" className="text-xs text-destructive">Identificadores repetidos. Não serão renumerados automaticamente, pois podem estar vinculados a agendamentos.</p>}
                 <div className="space-y-2">
                   <Label>Exames disponíveis nesta sala *</Label>
-                  <p className="text-xs text-muted-foreground">Marque todos os exames realizados neste aparelho. Cada um terá duração, preparo e prazo próprios.</p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {DIAGNOSTIC_EXAM_CATALOG.map(item => {
+                  <p className="text-xs text-muted-foreground">Marque os exames realizados neste aparelho. Cada modalidade mantém configuração própria. Os alertas de conferência são informativos.</p>
+                  <div className="relative"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" aria-label="Buscar modalidade no catálogo" placeholder="Buscar modalidade (ex.: ECG, ultrassom...)" value={examSearch} onChange={e=>setExamSearch(e.target.value)}/></div>
+                  <div className="grid gap-2 sm:grid-cols-2 max-h-64 overflow-y-auto">
+                    {DIAGNOSTIC_EXAM_CATALOG.filter(item=>normalizeExamSearch(item.label+' '+item.keywords).includes(normalizeExamSearch(examSearch))).map(item => {
                       const selected = roomForm.config.exames.some(exam => exam.tipoExame === item.label);
                       return <label key={item.label} className="flex items-center gap-2 rounded-md border p-2 text-sm cursor-pointer">
-                        <Checkbox checked={selected} onCheckedChange={checked => setRoomForm(prev => {
-                          const exames = checked
-                            ? [...prev.config.exames, createDiagnosticExamConfig(item.label)]
-                            : prev.config.exames.filter(exam => exam.tipoExame !== item.label);
-                          return { ...prev, config: { ...prev.config, exames } };
-                        })} />
+                        <Checkbox disabled={blocked} checked={selected} onCheckedChange={checked => {
+                          if(checked!==true&&!window.confirm('Retirar esta modalidade da configuração? Os agendamentos existentes não serão alterados.'))return;
+                          setRoomForm(prev => {
+                            const entry=createDiagnosticExamConfig(item.label);
+                            const exames=checked===true?(prev.config.exames.some(exam=>exam.tipoExame===item.label)?prev.config.exames:[...prev.config.exames,{...entry,id:newExamId(prev.config.exames,entry.id,()=>crypto.randomUUID())}]):prev.config.exames.filter(exam=>exam.tipoExame!==item.label);
+                            return {...prev,config:{...prev.config,exames}};
+                          });
+                        }} />
                         <span>{item.label}</span>
                       </label>;
                     })}
                   </div>
-                  <div className="flex items-center gap-2 rounded-md border p-2">
-                    <Checkbox checked={roomForm.config.exames.some(exam => !DIAGNOSTIC_EXAM_CATALOG.some(item => item.label === exam.tipoExame))} onCheckedChange={checked => setRoomForm(prev => ({
-                      ...prev,
-                      config: { ...prev.config, exames: checked
-                        ? [...prev.config.exames, createDiagnosticExamConfig('')]
-                        : prev.config.exames.filter(exam => DIAGNOSTIC_EXAM_CATALOG.some(item => item.label === exam.tipoExame)) }
-                    }))} />
-                    <span className="text-sm font-medium">Outro — cadastrar manualmente</span>
-                  </div>
+                  {!DIAGNOSTIC_EXAM_CATALOG.some(item=>normalizeExamSearch(item.label+' '+item.keywords).includes(normalizeExamSearch(examSearch)))&&<p className="text-xs text-muted-foreground">Nenhuma modalidade do catálogo corresponde à busca.</p>}
+                  <Button type="button" variant="outline" size="sm" className="clinical-record-action gap-1.5" disabled={blocked} onClick={()=>setRoomForm(prev=>({...prev,config:{...prev.config,exames:[...prev.config.exames,createDiagnosticExamConfig('', 'exam-'+crypto.randomUUID())]}}))}><Plus className="w-4 h-4"/>Adicionar exame personalizado</Button>
+                  <p className="text-xs text-muted-foreground">Abra cada modalidade abaixo para editar seus dados. Nenhuma orientação de preparo ou código é sugerido automaticamente.</p>
                   {roomForm.config.exames.map((exam, index) => (
-                    <div key={exam.id} className="space-y-3 rounded-md border bg-background p-3">
-                      <div className="flex items-center justify-between gap-2"><strong className="text-sm">{exam.tipoExame || 'Novo exame personalizado'}</strong><Button type="button" size="sm" variant="ghost" onClick={() => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.filter(item => item.id !== exam.id) } }))}><X className="h-4 w-4" /> Remover</Button></div>
-                      {!DIAGNOSTIC_EXAM_CATALOG.some(item => item.label === exam.tipoExame) && <div><Label>Nome do exame *</Label><Input value={exam.tipoExame} onChange={e => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map(item => item.id === exam.id ? { ...item, tipoExame: e.target.value } : item) } }))} placeholder="Digite o nome do exame" /></div>}
+                    <details key={exam.id+'-'+index} className="clinical-premium rounded-lg border p-3" open={undefined}>
+                      <summary className="cursor-pointer text-sm font-semibold break-words">{exam.tipoExame || 'Novo exame personalizado'}<span className="ml-2 text-xs font-normal text-muted-foreground">{exam.duracaoSlot} min · {exam.prazoResultadoDias} dia(s) · {examReview(exam).length?examReview(exam).length+' ponto(s) a conferir':'Campos conferidos'}</span></summary>
+                      <div className="mt-3 space-y-3">
+                      {examReview(exam).length>0&&<p className="text-xs text-amber-800 dark:text-amber-300">{examReview(exam).join(' · ')}</p>}
+                      <div className="flex justify-end"><Button type="button" size="sm" variant="outline" disabled={blocked} onClick={() => {if(window.confirm('Remover esta modalidade da configuração? Os agendamentos existentes não serão alterados.'))setRoomForm(prev=>({...prev,config:{...prev.config,exames:prev.config.exames.filter((_,i)=>i!==index)}}));}}><X className="h-4 w-4" /> Remover modalidade</Button></div>
+                      {!DIAGNOSTIC_EXAM_CATALOG.some(item => item.label === exam.tipoExame) && <div><Label>Nome do exame *</Label><Input value={exam.tipoExame} onChange={e => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map((item,i) => i === index ? { ...item, tipoExame: e.target.value } : item) } }))} placeholder="Digite o nome do exame" /></div>}
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <div><Label>Duração do slot</Label><Select value={String(exam.duracaoSlot)} onValueChange={v => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map(item => item.id === exam.id ? { ...item, duracaoSlot: Number(v) } : item) } }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[10,15,20,30,45].map(n => <SelectItem key={n} value={String(n)}>{n} minutos</SelectItem>)}</SelectContent></Select></div>
-                        <div><Label>Prazo do resultado (dias)</Label><Input type="number" min="0" max="90" value={exam.prazoResultadoDias} onChange={e => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map(item => item.id === exam.id ? { ...item, prazoResultadoDias: Math.min(90, Math.max(0, Number(e.target.value) || 0)) } : item) } }))} /></div>
-                        <div className="sm:col-span-2"><Label>Código SIGTAP (BPA-I)</Label><Input inputMode="numeric" maxLength={10} value={exam.codigoSigtap || ''} onChange={e => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map(item => item.id === exam.id ? { ...item, codigoSigtap: e.target.value.replace(/\D/g, '').slice(0, 10) } : item) } }))} placeholder="10 dígitos, ex.: código oficial do exame" /><p className="text-xs text-muted-foreground mt-1">Sem código válido, o exame não entra na produção BPA-I.</p></div>
+                        <div><Label>Duração do slot</Label><Select disabled={blocked} value={String(exam.duracaoSlot)} onValueChange={v => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map((item,i) => i === index ? { ...item, duracaoSlot: Number(v) } : item) } }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[10,15,20,30,45].map(n => <SelectItem key={n} value={String(n)}>{n} minutos</SelectItem>)}</SelectContent></Select></div>
+                        <div><Label>Prazo do resultado (dias)</Label><Input type="number" min="0" max="90" value={exam.prazoResultadoDias} onChange={e => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map((item,i) => i === index ? { ...item, prazoResultadoDias: Math.min(90, Math.max(0, Number(e.target.value) || 0)) } : item) } }))} /></div>
+                        <div className="sm:col-span-2"><Label>Código SIGTAP (BPA-I)</Label><Input inputMode="numeric" maxLength={10} value={exam.codigoSigtap || ''} onChange={e => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map((item,i) => i === index ? { ...item, codigoSigtap: e.target.value.replace(/\D/g, '').slice(0, 10) } : item) } }))} placeholder="10 dígitos, ex.: código oficial do exame" /><p className="text-xs text-muted-foreground mt-1">Formato de 10 dígitos não confirma validade oficial. A regra de exportação BPA-I permanece a mesma.</p><div className="mt-2"><DiagnosticSigtapLookup key={scopeKey+exam.id+index} code={exam.codigoSigtap||''} scope={scopeKey} disabled={blocked||!canWrite(editRoomId?'can_edit':'can_create',roomForm.unidadeId)} onSelect={code=>setRoomForm(prev=>({...prev,config:{...prev.config,exames:prev.config.exames.map((item,i)=>i===index?{...item,codigoSigtap:code}:item)}}))}/></div></div>
                       </div>
-                      <div className="flex items-center justify-between"><Label>Exige preparo prévio?</Label><Switch checked={exam.exigePreparo} onCheckedChange={v => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map(item => item.id === exam.id ? { ...item, exigePreparo: v } : item) } }))} /></div>
-                      {exam.exigePreparo && <div><Label>Instruções de preparo</Label><Textarea rows={3} value={exam.instrucoesPreparo} onChange={e => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map(item => item.id === exam.id ? { ...item, instrucoesPreparo: e.target.value } : item) } }))} placeholder="Preencha as orientações oficiais da unidade para este exame." /></div>}
-                      <div><Label>Exige contraste?</Label><Select value={exam.exigeContraste} onValueChange={v => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map(item => item.id === exam.id ? { ...item, exigeContraste: v as DiagnosticRoomConfig['exigeContraste'] } : item) } }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="nao">Não</SelectItem><SelectItem value="sim">Sim</SelectItem><SelectItem value="opcional">Opcional</SelectItem></SelectContent></Select></div>
-                    </div>
+                      <div className="flex items-center justify-between"><Label>Exige preparo prévio?</Label><Switch disabled={blocked} checked={exam.exigePreparo} onCheckedChange={v => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map((item,i) => i === index ? { ...item, exigePreparo: v } : item) } }))} /></div>
+                      {exam.exigePreparo && <div><Label>Instruções de preparo</Label><Textarea rows={3} value={exam.instrucoesPreparo} onChange={e => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map((item,i) => i === index ? { ...item, instrucoesPreparo: e.target.value } : item) } }))} placeholder="Preencha as orientações oficiais da unidade para este exame." /></div>}
+                      <div><Label>Exige contraste?</Label><Select disabled={blocked} value={exam.exigeContraste} onValueChange={v => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map((item,i) => i === index ? { ...item, exigeContraste: v as DiagnosticRoomConfig['exigeContraste'] } : item) } }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="nao">Não</SelectItem><SelectItem value="sim">Sim</SelectItem><SelectItem value="opcional">Opcional</SelectItem></SelectContent></Select></div>
+                      </div>
+                    </details>
                   ))}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Início da agenda</Label><Input type="time" value={roomForm.config.horarioInicio || '07:00'} onChange={e => setRoomForm(p => ({ ...p, config: { ...p.config, horarioInicio: e.target.value } }))} /></div>
                   <div><Label>Fim da agenda</Label><Input type="time" value={roomForm.config.horarioFim || '17:00'} onChange={e => setRoomForm(p => ({ ...p, config: { ...p.config, horarioFim: e.target.value } }))} /></div>
                 </div>
+                {diagnosticReview.invalidWindow&&<p role="status" className="text-xs text-amber-800 dark:text-amber-300">Confira o horário: a regra atual não gera slots quando o fim não é posterior ao início.</p>}
                 <p className="text-xs text-muted-foreground">Os horários de funcionamento são compartilhados pela sala; cada exame selecionado mantém duração, preparo, contraste e prazo independentes. Consultórios comuns permanecem inalterados.</p>
               </div>
             )}
