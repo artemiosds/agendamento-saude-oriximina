@@ -21,7 +21,7 @@ export function CockpitAlerts({ alerts, acknowledged, theater, stale, onOpen, on
   const [limit, setLimit] = useState(3);
   const [collapsed, setCollapsed] = useState(false);
   const contentId = useId();
-  const showContent = theater || !collapsed;
+  const showContent = theater || !collapsed || alerts.length === 0;
   const critical = alerts.filter(alert => alert.tone === 'danger').length;
   const visible = theater ? 3 : limit;
   return <section className="cockpit-alerts" aria-labelledby="cockpit-alert-title">
@@ -48,8 +48,7 @@ export function CockpitAlerts({ alerts, acknowledged, theater, stale, onOpen, on
             onClick={() => onAcknowledge(alert.id)}><Check size={14} aria-hidden="true" />{ciente ? 'Ciente nesta tela' : 'Ciente'}</button>
         </div>}
       </li>;
-    })}</ul> : <p className="planta-empty">{stale ? 'Nenhum alerta na última leitura.' : 'Nenhum alerta operacional ativo.'}</p>}
-    )}
+    })}</ul> : <p className="planta-empty">{stale ? 'Nenhum alerta na última leitura.' : 'Nenhum alerta operacional ativo.'}</p>)}
     {showContent && alerts.length > 3 && <div className="cockpit-alert-more">
       {theater ? <span>{alerts.length - 3} alertas adicionais</span> : <>
         {alerts.length > visible && <button type="button" className="planta-action" onClick={() => setLimit(visible + 6)}>
