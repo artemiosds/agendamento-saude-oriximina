@@ -22,6 +22,8 @@ import { toast } from 'sonner';
 import { openPrintDocument } from '@/lib/printLayout';
 import { auditService } from '@/services/auditService';
 import { getAuditActorLabel } from '@/lib/auditActor';
+import AuditOverview from '@/components/audit/AuditOverview';
+import { auditDateBounds, auditModuleDistribution, AUDIT_FAILURE_STATUSES, AUDIT_CLASSIFIED_STATUSES } from '@/lib/auditOverview';
 import { auditScope, auditDeviceLabel, auditCsvCell, auditEscapeHtml, auditSafeText, isAuditSecret, redactAuditData, maskAuditIdentifier } from '@/lib/auditSecurity';
 import { AUDIT_PAGE_SIZE, AUDIT_LOOKUP_LIMIT, AUDIT_RELATED_LIMIT, auditSearchTerm, auditLike, auditQuote, auditCpfVariants, auditActorCpfSearch, auditRelatedSearch, auditTextSearch, auditEntityRef, auditPageRange, auditLastPage, AuditReadCache, type AuditEntityKind } from '@/lib/auditDirectory';
 
@@ -136,6 +138,12 @@ const moduloLabels: Record<string, string> = {
   auth: 'Autenticação',
   relatorio: 'Relatórios',
   portal: 'Portal Paciente',
+  portal_paciente: 'Portal do Paciente',
+  agenda: 'Agenda',
+  agendamentos: 'Agendamentos',
+  tratamentos: 'Tratamentos',
+  triagem: 'Triagem',
+  auditoria: 'Auditoria',
 };
 
 const formatAuditAction = (acao: string): string => {
@@ -481,15 +489,18 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
         if(search.trim()&&!term) throw Error('Informe um termo de pesquisa válido.');
         if(filterDateFrom&&filterDateTo&&filterDateFrom>filterDateTo) throw Error('A data inicial deve ser anterior ou igual à final.');
         let q=supabase.from('action_logs').select(AUDIT_LIST_FIELDS,{count:'exact'}).order('created_at',{ascending:false}).order('id',{ascending:false});
-        if(filterDateFrom) q=q.gte('created_at',filterDateFrom+'T00:00:00');
-        if(filterDateTo) q=q.lte('created_at',filterDateTo+'T23:59:59');
+        const bounds=auditDateBounds(filterDateFrom,filterDateTo);
+        if(bounds.start) q=q.gte('created_at',bounds.start);
+        if(bounds.end) q=q.lt('created_at',bounds.end);
         const actorTerm=auditSearchTerm(filterUser);
         if(filterUser.trim()&&!actorTerm)throw Error('Informe um nome de usuário válido.');
         if(actorTerm)q=q.ilike('user_nome',auditLike(actorTerm));
         if(filterRole)q=q.eq('role',filterRole);
         if(filterModulo)q=q.eq('modulo',filterModulo);
         if(filterAcao)q=q.eq('acao',filterAcao);
-        if(filterStatus)q=q.eq('status',filterStatus);
+        if(filterStatus==='_failures')q=q.in('status',AUDIT_FAILURE_STATUSES);
+        else if(filterStatus==='_other')q=q.not('status','in','('+AUDIT_CLASSIFIED_STATUSES.join(',')+')');
+        else if(filterStatus)q=q.eq('status',filterStatus);
         if(filterUnidade)q=q.eq('unidade_id',filterUnidade);
         if(unitId)q=q.eq('unidade_id',unitId);
         if(filterEventoGrupo&&filterEventoGrupo!=='todos'){
@@ -567,6 +578,21 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
     setSearch(''); setPage(0);
   };
 
+  const activeFilters = [
+    {label:filterDateFrom?'De '+filterDateFrom.split('-').reverse().join('/'):'',clear:()=>setFilterDateFrom('')},
+    {label:filterDateTo?'Até '+filterDateTo.split('-').reverse().join('/'):'',clear:()=>setFilterDateTo('')},
+    {label:search?'Pesquisa textual':'',clear:()=>setSearch('')},
+    {label:filterUser?'Usuário informado':'',clear:()=>setFilterUser('')},
+    {label:filterCpf?'CPF informado':'',clear:()=>setFilterCpf('')},
+    {label:filterRole?'Perfil: '+filterRole:'',clear:()=>setFilterRole('')},
+    {label:filterModulo?'Módulo: '+(moduloLabels[filterModulo]||filterModulo):'',clear:()=>setFilterModulo('')},
+    {label:filterAcao?'Ação: '+formatAuditAction(filterAcao):'',clear:()=>setFilterAcao('')},
+    {label:filterStatus?'Status: '+(filterStatus==='_failures'?'Erros e falhas':filterStatus==='_other'?'Demais situações':filterStatus):'',clear:()=>setFilterStatus('')},
+    {label:filterUnidade?'Unidade informada':'',clear:()=>setFilterUnidade('')},
+    {label:filterEventoGrupo&&filterEventoGrupo!=='todos'?'Evento: '+(eventoGrupos[filterEventoGrupo]?.label||filterEventoGrupo):'',clear:()=>setFilterEventoGrupo('')},
+  ].filter(item=>item.label);
+  const modules=useMemo(()=>auditModuleDistribution(current?.rows||[]),[current]);
+  const moduleOptions=[...new Set([...Object.keys(moduloLabels).filter(Boolean),...modules.map(m=>m.key).filter(Boolean),...(filterModulo?[filterModulo]:[])])];
   const getCpfDisplay = (log: LogEntry) => {
     const cpf = String((log.detalhes as any)?.usuario_cpf || '');
     if (!cpf) return '-';
@@ -583,8 +609,9 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (filterDateFrom) query = query.gte('created_at', `${filterDateFrom}T00:00:00`);
-      if (filterDateTo) query = query.lte('created_at', `${filterDateTo}T23:59:59`);
+      const bounds=auditDateBounds(filterDateFrom,filterDateTo);
+      if(bounds.start)query=query.gte('created_at',bounds.start);
+      if(bounds.end)query=query.lt('created_at',bounds.end);
       if (unitId) query = query.eq('unidade_id', unitId);
 
       const { data, error } = await query;
@@ -800,17 +827,24 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Logs & Auditoria</h1>
-          <p className="text-sm text-muted-foreground">{loading?'Consultando registros…':queryError?'Total não confirmado':totalCount.toLocaleString('pt-BR')+' registros no recorte consultado'}</p>
+      <header className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="rounded-xl bg-primary/10 text-primary p-2.5 shrink-0"><Shield className="h-6 w-6" aria-hidden="true"/></div>
+            <div className="min-w-0">
+              <p className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Secretaria Municipal de Saúde · Rastreabilidade</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-foreground">Logs & Auditoria</h1>
+              <p className="text-sm text-muted-foreground">Central de acompanhamento e investigação administrativa</p>
+            </div>
+          </div>
+          <Badge variant="outline">{unitId?'Minha unidade':'Rede municipal'}</Badge>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap border-t border-border pt-3">
           <Button variant="outline" size="sm" disabled={exportBusy} onClick={() => { cacheRef.current.clear(); setPage(0); setRevision(n=>n+1); }}>
             <RefreshCw className="w-4 h-4 mr-1" /> Atualizar
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
-            <Filter className="w-4 h-4 mr-1" /> Filtros
+          <Button variant="outline" size="sm" aria-expanded={showFilters} onClick={() => setShowFilters(!showFilters)}>
+            <Filter className="w-4 h-4 mr-1" /> Filtros {activeFilters.length>0?"("+activeFilters.length+")":""}
           </Button>
           <Button variant="outline" size="sm" onClick={generateReport} disabled={reportLoading || !canExport}>
             <BarChart3 className="w-4 h-4 mr-1" /> {reportLoading ? 'Gerando...' : 'Relatório por Profissional'}
@@ -822,7 +856,10 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
             <FileText className="w-4 h-4 mr-1" /> PDF
           </Button>
         </div>
-      </div>
+      </header>
+      <AuditOverview unitId={unitId} revision={revision} disabled={exportBusy}
+        activeRange={{from:filterDateFrom,to:filterDateTo,status:filterStatus,hasOtherFilters:!!(search||filterUser||filterCpf||filterRole||filterModulo||filterAcao||filterUnidade||filterEventoGrupo)}}
+        onApply={(range,status)=>{clearFilters();setFilterDateFrom(range.from);setFilterDateTo(range.to);setFilterStatus(status);}}/>
 
       <Dialog open={!!exportRequest} onOpenChange={(o) => { if (!o && !exportLock.current) { setExportRequest(null); setExportMotivo(''); } }}>
         <DialogContent>
@@ -865,15 +902,22 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
       </Dialog>
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Pesquisar por usuário, ação, entidade..."
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-          className="pl-10"
-        />
-      </div>
+      <section className="rounded-xl border border-border bg-card p-3 space-y-3" aria-label="Busca e filtros">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true"/>
+          <Input aria-label="Pesquisar eventos de auditoria" placeholder="Pesquisar usuário, paciente, CPF, ação ou registro..." maxLength={100} value={search}
+            onChange={e=>{setSearch(e.target.value);setPage(0);}} className="pl-10 pr-20"/>
+          {search&&<Button size="sm" variant="ghost" className="absolute right-1 top-1/2 -translate-y-1/2 h-7" onClick={()=>{setSearch('');setPage(0);}}>Limpar</Button>}
+        </div>
+        <div className="flex flex-wrap gap-1" aria-label="Filtros rápidos de status">
+          {[['','Todos'],['sucesso','Sucesso'],['_failures','Erros e falhas'],['tentativa','Tentativas'],['_other','Demais situações']].map(([value,label])=><Button key={value} type="button" size="sm" variant={filterStatus===value?'default':'outline'} aria-pressed={filterStatus===value} onClick={()=>{setFilterStatus(value);setPage(0);}}>{label}</Button>)}
+        </div>
+        {!!activeFilters.length&&<div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-2" aria-label="Filtros ativos">
+          <span className="text-xs text-muted-foreground">Filtros ativos:</span>
+          {activeFilters.map((item,i)=><Button key={i+':'+item.label} variant="outline" size="sm" className="h-auto min-h-7 text-xs whitespace-normal" aria-label={'Remover filtro '+item.label} onClick={()=>{item.clear();setPage(0);}}>{item.label}<X className="h-3 w-3 ml-1 shrink-0"/></Button>)}
+          <Button size="sm" variant="ghost" onClick={clearFilters}>Limpar todos</Button>
+        </div>}
+      </section>
 
       {/* Filters */}
       {showFilters && (
@@ -929,8 +973,8 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                   <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="_all">Todos</SelectItem>
-                    {Object.entries(moduloLabels).filter(([k]) => k).map(([k, v]) => (
-                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    {moduleOptions.map(k => (
+                      <SelectItem key={k} value={k}>{moduloLabels[k]||k}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -942,11 +986,18 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                   <SelectContent>
                     <SelectItem value="_all">Todos</SelectItem>
                     <SelectItem value="sucesso">Sucesso</SelectItem>
+                    <SelectItem value="_failures">Erros e falhas</SelectItem>
                     <SelectItem value="erro">Erro</SelectItem>
+                    <SelectItem value="falha">Falha</SelectItem>
                     <SelectItem value="tentativa">Tentativa</SelectItem>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="bloqueado">Bloqueado</SelectItem>
+                    <SelectItem value="_other">Demais situações</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              <div><label htmlFor="audit-action" className="text-xs font-medium text-muted-foreground mb-1 block">Código exato da ação</label><Input id="audit-action" maxLength={100} value={filterAcao} onChange={e=>{setFilterAcao(e.target.value);setPage(0);}} placeholder="Ex.: login_sucesso"/></div>
+              {!unitId&&<div><label htmlFor="audit-unit" className="text-xs font-medium text-muted-foreground mb-1 block">ID da unidade</label><Input id="audit-unit" maxLength={120} value={filterUnidade} onChange={e=>{setFilterUnidade(e.target.value);setPage(0);}} placeholder="Identificador exato"/></div>}
               <div className="flex items-end">
                 <Button variant="ghost" size="sm" onClick={clearFilters} className="w-full">
                   <X className="w-4 h-4 mr-1" /> Limpar Filtros
@@ -958,8 +1009,20 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
       )}
 
       {searchWarning && <div role="status" className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">{searchWarning} A contagem corresponde somente ao recorte consultado.</div>}
+      {!loading&&!queryError&&modules.length>0&&<details className="rounded-xl border border-border bg-card p-3">
+        <summary className="cursor-pointer text-sm font-medium">Distribuição por módulo · {logs.length} eventos desta página</summary>
+        <div className="mt-3 space-y-2"><p className="text-xs text-muted-foreground">Apenas a página exibida, não o total histórico. Clique em um módulo para filtrar a lista.</p>
+          {modules.map(m=><button type="button" key={m.key||'_missing'} disabled={!m.key} onClick={()=>{setFilterModulo(m.key);setPage(0);}} className="w-full grid grid-cols-[minmax(0,130px)_1fr_44px] gap-2 items-center text-left text-xs rounded-md p-1 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring">
+            <span className="truncate" title={moduloLabels[m.key]||m.key||'Não informado'}>{moduloLabels[m.key]||m.key||'Não informado'}</span><span className="h-2 rounded-full bg-muted overflow-hidden"><span className="block h-full bg-primary rounded-full" style={{width:m.percent+'%'}}/></span><span className="text-right tabular-nums">{m.count}</span>
+          </button>)}
+        </div>
+      </details>}
       {/* Table */}
-      <Card>
+      <Card className="overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3">
+          <h2 className="font-semibold flex items-center gap-2"><History className="h-4 w-4 text-primary"/>Registros de auditoria</h2>
+          <p role="status" className="text-xs text-muted-foreground">{loading?'Consultando registros…':queryError?'Total não confirmado':totalCount.toLocaleString('pt-BR')+' registros no recorte consultado'}</p>
+        </div>
         <CardContent className="p-0">
           {queryError ? <div role="alert" className="py-12 px-4 text-center space-y-3"><p className="text-sm text-muted-foreground">{queryError}</p><Button size="sm" variant="outline" onClick={()=>setRevision(n=>n+1)}>Tentar novamente</Button></div> : loading ? (
             <div className="flex items-center justify-center py-16">
@@ -968,9 +1031,18 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
           ) : logs.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">Nenhum registro encontrado.</div>
           ) : (
-            <div className="overflow-x-auto">
+            <div>
+              <div className="md:hidden divide-y divide-border">
+                {logs.map(log=><button key={log.id} type="button" onClick={()=>{setDetailState(null);setSelectedLog(log);}} className="block w-full text-left p-3 space-y-2 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring">
+                  <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-muted-foreground tabular-nums">{format(new Date(log.created_at),'dd/MM/yy HH:mm:ss')}</span><Badge className={'text-[10px] '+(statusBadge[log.status]||'bg-muted text-muted-foreground')}>{log.status}</Badge></div>
+                  <div className="flex justify-between items-center gap-2"><span className="font-semibold text-sm break-words min-w-0">{formatAuditAction(log.acao)}</span><ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground"/></div>
+                  <div className="grid grid-cols-2 gap-2 text-xs"><div className="min-w-0"><p className="text-muted-foreground">Usuário · {log.role||'Perfil não informado'}</p><p className="font-medium break-words">{getAuditActorLabel(log)}</p></div><div className="min-w-0"><p className="text-muted-foreground">Registro afetado</p><p className="font-medium break-words">{log.nome_entidade||log.entidade_id||log.entidade}</p></div></div>
+                  <div className="flex flex-wrap gap-2 items-center"><Badge variant="outline">{moduloLabels[log.modulo]||log.modulo||log.entidade}</Badge><span className="text-xs text-muted-foreground">{formatDispositivo(log)}</span></div>
+                </button>)}
+              </div>
+              <div className="hidden md:block overflow-x-auto">
               <Table>
-                <TableHeader>
+                <TableHeader className="bg-muted/40">
                   <TableRow>
                     <TableHead className="whitespace-nowrap">Data/Hora</TableHead>
                     <TableHead>Usuário</TableHead>
@@ -984,7 +1056,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                 </TableHeader>
                 <TableBody>
                   {logs.map((log) => (
-                    <TableRow key={log.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => {setDetailState(null);setSelectedLog(log);}}>
+                    <TableRow key={log.id} className="cursor-pointer hover:bg-muted/50 even:bg-muted/15 transition-colors" onClick={() => {setDetailState(null);setSelectedLog(log);}}>
                       <TableCell className="whitespace-nowrap text-[11px] font-mono">
                         {format(new Date(log.created_at), 'dd/MM/yy HH:mm:ss')}
                       </TableCell>
@@ -1000,7 +1072,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                             {formatAuditAction(log.acao)}
                           </span>
                           {(log as any).human_summary && (
-                            <span className="text-[9px] text-muted-foreground line-clamp-1 italic" title={(log as any).human_summary}>
+                            <span className="text-[11px] text-muted-foreground line-clamp-1" title={(log as any).human_summary}>
                               "{(log as any).human_summary}"
                             </span>
                           )}
@@ -1035,7 +1107,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                         {formatDispositivo(log)}
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-full hover:bg-primary/10">
+                        <Button variant="ghost" size="sm" aria-label="Ver detalhes do evento" className="h-8 w-8 p-0 rounded-full hover:bg-primary/10" onClick={e=>{e.stopPropagation();setDetailState(null);setSelectedLog(log);}}>
                           <Eye className="w-4 h-4 text-primary" />
                         </Button>
                       </TableCell>
@@ -1043,6 +1115,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                   ))}
                 </TableBody>
               </Table>
+              </div>
             </div>
           )}
         </CardContent>
@@ -1050,19 +1123,19 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between">
+        <nav aria-label="Paginação da auditoria" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card p-3">
           <p className="text-sm text-muted-foreground">
             Página {page + 1} de {totalPages} · {Math.min(page*ITEMS_PER_PAGE+1,totalCount)}–{Math.min((page+1)*ITEMS_PER_PAGE,totalCount)} de {totalCount.toLocaleString('pt-BR')}
           </p>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={loading || page === 0 || exportBusy} onClick={() => setPage(p => p - 1)}>
+            <Button variant="outline" size="sm" aria-label="Página anterior" disabled={loading || page === 0 || exportBusy} onClick={() => setPage(p => p - 1)}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="sm" disabled={loading || page >= totalPages - 1 || exportBusy} onClick={() => setPage(p => p + 1)}>
+            <Button variant="outline" size="sm" aria-label="Próxima página" disabled={loading || page >= totalPages - 1 || exportBusy} onClick={() => setPage(p => p + 1)}>
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
-        </div>
+        </nav>
       )}
 
       {/* Detail Side Panel */}
