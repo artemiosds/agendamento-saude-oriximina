@@ -23,6 +23,7 @@ import { openPrintDocument } from '@/lib/printLayout';
 import { auditService } from '@/services/auditService';
 import { getAuditActorLabel } from '@/lib/auditActor';
 import { auditScope, auditDeviceLabel, auditCsvCell, auditEscapeHtml, auditSafeText, isAuditSecret, redactAuditData, maskAuditIdentifier } from '@/lib/auditSecurity';
+import { AUDIT_PAGE_SIZE, AUDIT_LOOKUP_LIMIT, AUDIT_RELATED_LIMIT, auditSearchTerm, auditLike, auditQuote, auditCpfVariants, auditActorCpfSearch, auditRelatedSearch, auditTextSearch, auditEntityRef, auditPageRange, auditLastPage, AuditReadCache, type AuditEntityKind } from '@/lib/auditDirectory';
 
 async function sha256Hex(text: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -51,6 +52,8 @@ interface LogEntry {
   profissional_id?: string;
   profissional_nome?: string;
   agendamento_id?: string;
+  prontuario_id?: string;
+  documento_id?: string;
   status: string;
   error_message?: string;
   ip: string;
@@ -91,7 +94,31 @@ interface EnrichedLog extends LogEntry {
 }
 
 
-const ITEMS_PER_PAGE = 25;
+const ITEMS_PER_PAGE = AUDIT_PAGE_SIZE;
+// Keep fields needed for the existing list/export; full before/after/changes are fetched on demand.
+const AUDIT_LIST_FIELDS = 'id,acao,acao_legivel,tipo_evento,modulo,entidade,entidade_id,user_id,user_nome,origem,role,unidade_id,unidade_nome,paciente_id,paciente_nome,profissional_id,profissional_nome,agendamento_id,prontuario_id,documento_id,status,error_message,ip,navegador,dispositivo,sistema_operacional,user_agent,rota,detalhes,campos_alterados,created_at';
+const AUDIT_ENTITY_TABLES = {paciente:'pacientes',agendamento:'agendamentos',prontuario:'prontuarios',profissional:'funcionarios'} as const;
+const AUDIT_ENTITY_FIELDS = {paciente:'id,nome,cpf,cns',agendamento:'id,data,hora,paciente_nome,profissional_nome',prontuario:'id,data_atendimento,paciente_nome,profissional_nome',profissional:'id,nome,profissao,cargo,cpf'} as const;
+const AUDIT_DETAIL_FIELDS = {...AUDIT_ENTITY_FIELDS,paciente:'id,nome,cpf,cns,telefone,data_nascimento,sexo,unidade_id',agendamento:'id,data,hora,paciente_nome,profissional_nome,status,unidade_id'};
+const recordedEntityName = (log:LogEntry,kind?:AuditEntityKind) => log.entidade_nome || (typeof log.detalhes?.entidade_nome==='string'?log.detalhes.entidade_nome:'') || ((kind==='paciente'||kind==='agendamento'||kind==='prontuario') ? log.paciente_nome : kind==='profissional' ? log.profissional_nome : '') || '';
+const entityCacheKey = (kind:AuditEntityKind,id:string)=>JSON.stringify([kind,id]);
+function currentEntity(kind:AuditEntityKind,row:any): ResolvedEntity {
+  const date=(v:unknown)=>typeof v==='string' && Number.isFinite(Date.parse(v+'T12:00:00')) ? format(new Date(v+'T12:00:00'),'dd/MM/yyyy') : '';
+  const titulo = (kind==='paciente'||kind==='profissional' ? row.nome : row.paciente_nome) || row.id;
+  const subtitle=kind==='paciente' ? 'CPF: '+maskAuditIdentifier(row.cpf,'cpf')+' | CNS: '+maskAuditIdentifier(row.cns,'cns') :
+    kind==='profissional' ? (row.profissao||row.cargo||'Funcionário')+' | CPF: '+maskAuditIdentifier(row.cpf,'cpf') :
+    [row.profissional_nome,date(kind==='agendamento'?row.data:row.data_atendimento),kind==='agendamento'?row.hora:''].filter(Boolean).join(' · ');
+  return {tipo:kind,titulo:auditSafeText(String(titulo)),subtitulo:'Cadastro atual: '+auditSafeText(subtitle),idTecnico:row.id};
+}
+function enrichAuditRow(log:EnrichedLog, current?:ResolvedEntity):EnrichedLog {
+  const ref=auditEntityRef(log);
+  const title=recordedEntityName(log,ref?.kind);
+  const entity:ResolvedEntity={tipo:ref?.kind||'desconhecido',titulo:title||current?.titulo||log.entidade_id||log.entidade,idTecnico:log.entidade_id,
+    subtitulo:current?.subtitulo,detalhes:current?.detalhes};
+  if(!title && current?.titulo) entity.subtitulo='Cadastro atual (não histórico) · '+(current.subtitulo||'');
+  const enriched={...log,entidade_resolvida:entity,nome_entidade:entity.titulo,detalhes_resolvidos:{paciente:entity.titulo,unidade:log.unidade_nome}};
+  return {...enriched,human_summary:generateHumanSummary(enriched)} as EnrichedLog;
+}
 
 const moduloLabels: Record<string, string> = {
   '': 'Todos',
@@ -292,10 +319,11 @@ const generateHumanSummary = (log: EnrichedLog) => {
   if (log.tipo_evento === 'criacao') return `${user} cadastrou ${entityType} "${entidade}" na ${unidade} em ${data}.`;
   
   if (log.tipo_evento === 'edicao') {
-    const changesCount = log.campos_alterados?.length || log.changes ? Object.keys(log.changes || {}).length : 0;
+    const changesCount = log.campos_alterados?.length ?? Object.keys(log.changes || {}).length;
     const campos = log.campos_alterados?.map(formatAuditFieldLabel).join(', ') || 
                    (log.changes ? Object.keys(log.changes).map(formatAuditFieldLabel).join(', ') : 'campos');
     
+    if (!log.campos_alterados && !log.changes) return `${user} editou ${entityType} "${entidade}" na ${unidade} em ${data}.`;
     return `${user} editou ${entityType} "${entidade}", alterando ${changesCount} ${changesCount === 1 ? 'campo' : 'campos'} (${campos}), na ${unidade} em ${data}.`;
   }
   
@@ -321,9 +349,8 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
   const exportLock = useRef(false);
   useEffect(()=>{active.current=true;return()=>{active.current=false;requestId.current++;};},[]);
   const unitFilter = useMemo<Record<string,string>>(()=>unitId ? {unidade_id:unitId} : {},[unitId]);
-  const [logs, setLogs] = useState<EnrichedLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [totalCount, setTotalCount] = useState(0);
+  const [directory,setDirectory] = useState<{key:string;rows:EnrichedLog[];count:number;warning:string;error:string}|null>(null);
+  const [revision,setRevision] = useState(0);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -349,115 +376,75 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
         quantidade_registros: report ? reportData.length : logs.length,
         total_filtrado: report ? undefined : totalCount,
         abrangencia: report ? 'relatorio_profissionais_recorte_consultado' : 'pagina_atual',
+        aviso_consulta: report ? undefined : searchWarning || undefined,
         filtros: report ? reportPeriod : { de: filterDateFrom, ate: filterDateTo, usuario:filterUser, perfil:filterRole, modulo:filterModulo, acao:filterAcao, status:filterStatus, unidade:filterUnidade, grupo:filterEventoGrupo, cpf_informado:!!filterCpf, busca_informada:!!search, pagina:page+1 },
       },
     }, {requireConfirmation:true});
     if (!active.current) throw Error('A sessão ou abrangência foi alterada.');
   };
   const [selectedLog, setSelectedLog] = useState<EnrichedLog | null>(null);
-  const [isResolving, setIsResolving] = useState(false);
+  const [detailState,setDetailState] = useState<{id:string;error:string}|null>(null);
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState<any[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportPeriod,setReportPeriod] = useState({de:'',ate:''});
 
 
-  const cacheRef = useRef<Record<string, any>>({});
+  const cacheRef = useRef(new AuditReadCache<ResolvedEntity>());
+  const readEntity = useCallback(async (log:EnrichedLog,signal:AbortSignal) => {
+    const ref=auditEntityRef(log);
+    if(!ref) return enrichAuditRow(log);
+    // Current details are read only on opening; never cache the full patient record.
+    const {data,error}=await (supabase as any).from(AUDIT_ENTITY_TABLES[ref.kind]).select(AUDIT_DETAIL_FIELDS[ref.kind]).match(unitFilter).eq('id',ref.id).abortSignal(signal).maybeSingle();
+    if(error) throw Error('Cadastro atual não confirmado.');
+    if(!data) return enrichAuditRow(log);
+    return enrichAuditRow(log,{...currentEntity(ref.kind,data),detalhes:redactAuditData(data)});
+  },[unitFilter]);
 
-  const resolveEntity = useCallback(async (log: EnrichedLog): Promise<ResolvedEntity> => {
-    const id = log.paciente_id || log.entidade_id;
-    const entidade = log.entidade;
-    const cacheKey = `${entidade}_${id}`;
-    
-    if (cacheRef.current[cacheKey]) return cacheRef.current[cacheKey];
-
-    const result: ResolvedEntity = {
-      tipo: "desconhecido",
-      titulo: log.entidade_nome || log.entidade_id || log.entidade,
-      idTecnico: log.entidade_id,
-    };
-
-    try {
-      if (entidade === 'paciente' || id?.startsWith('p')) {
-        result.tipo = "paciente";
-        const { data } = await supabase.from('pacientes').select('nome, cpf, cns, telefone, data_nascimento, sexo, unidade_id').eq('id', id).match(unitFilter).maybeSingle();
-        if (data) {
-          result.titulo = data.nome;
-          result.subtitulo = `CPF: ${maskCpf(data.cpf)} | CNS: ${maskAuditIdentifier(data.cns,'cns')}`;
-          result.detalhes = data;
-        }
-      } else if (entidade === 'agendamento' || id?.startsWith('ag')) {
-        result.tipo = "agendamento";
-        const { data: ag } = await supabase.from('agendamentos').select('data, hora, paciente_nome, profissional_nome, status, unidade_id').eq('id', id).match(unitFilter).maybeSingle();
-        if (ag) {
-          result.titulo = ag.paciente_nome;
-          result.subtitulo = `${ag.profissional_nome} | ${format(new Date(ag.data + 'T12:00:00'), 'dd/MM/yyyy')} às ${ag.hora}`;
-          result.detalhes = ag;
-        }
-      } else if (entidade === 'prontuario') {
-        result.tipo = "prontuario";
-        const { data: pr } = await supabase.from('prontuarios').select('data_atendimento, paciente_nome, profissional_nome').eq('id', id).match(unitFilter).maybeSingle();
-        if (pr) {
-          result.titulo = pr.paciente_nome;
-          result.subtitulo = `${pr.profissional_nome} | ${format(new Date(pr.data_atendimento + 'T12:00:00'), 'dd/MM/yyyy')}`;
-          result.detalhes = pr;
-        }
-
-      } else if (entidade === 'funcionario' || entidade === 'profissional') {
-        result.tipo = "profissional";
-        const { data: f } = await supabase.from('funcionarios').select('nome, profissao, cargo, cpf').eq('id', id).match(unitFilter).maybeSingle();
-        if (f) {
-          result.titulo = f.nome;
-          result.subtitulo = `${f.profissao || f.cargo || 'Funcionário'} | CPF: ${maskCpf(f.cpf)}`;
-          result.detalhes = f;
-        }
-      }
-    } catch (err) {
-      console.warn('Error resolving entity:', err);
+  const enrichPage=useCallback(async (rows:EnrichedLog[],signal:AbortSignal) => {
+    const groups=new Map<AuditEntityKind,Set<string>>();
+    for(const log of rows) {
+      const ref=auditEntityRef(log);
+      if(!ref || recordedEntityName(log,ref.kind) || cacheRef.current.get(entityCacheKey(ref.kind,ref.id))) continue;
+      const ids=groups.get(ref.kind)||new Set<string>(); ids.add(ref.id);groups.set(ref.kind,ids);
     }
+    let unavailable=false;
+    await Promise.all([...groups].map(async ([kind,ids])=>{
+      try {
+        const {data,error}=await (supabase as any).from(AUDIT_ENTITY_TABLES[kind]).select(AUDIT_ENTITY_FIELDS[kind]).match(unitFilter).in('id',[...ids]).abortSignal(signal);
+        if(signal.aborted) return;
+        if(error||!data){unavailable=true;return;}
+        for(const row of data) cacheRef.current.set(entityCacheKey(kind,row.id),currentEntity(kind,row));
+      } catch { if(!signal.aborted) unavailable=true; }
+    }));
+    return {rows:rows.map(log=>{
+      const ref=auditEntityRef(log);
+      return enrichAuditRow(log,ref&&!recordedEntityName(log,ref.kind)?cacheRef.current.get(entityCacheKey(ref.kind,ref.id)):undefined);
+    }),unavailable};
+  },[unitFilter]);
 
-    cacheRef.current[cacheKey] = result;
-    return result;
-  }, [unitFilter]);
-
-  // Helper to enrich a single log with names
-  const enrichLog = useCallback(async (log: EnrichedLog) => {
-    const enriched: EnrichedLog = { ...log };
-    
-    // Resolve entity details
-    enriched.entidade_resolvida = await resolveEntity(log);
-    
-    // Legacy support
-    enriched.detalhes_resolvidos = {
-      paciente: enriched.entidade_resolvida.titulo,
-      unidade: log.unidade_nome
-    };
-
-    enriched.nome_entidade = enriched.entidade_resolvida.titulo;
-    
-    // Add summary to log object for easier use in list
-    (enriched as any).human_summary = generateHumanSummary(enriched);
-    
-    return enriched;
-  }, [resolveEntity]);
-
-
-
-
-  useEffect(() => {
-    if (selectedLog && !selectedLog.detalhes_resolvidos) {
-      let current = true;
-      const run = async () => {
-        setIsResolving(true);
+  const detailId=selectedLog?.id;
+  useEffect(()=>{
+    if(!detailId) return;
+    const controller=new AbortController();
+    setDetailState(null);
+    void(async()=>{
+      try {
+        const {data,error}=await supabase.from('action_logs').select('*').eq('id',detailId).match(unitFilter).abortSignal(controller.signal).maybeSingle();
+        if(controller.signal.aborted || !active.current) return;
+        if(error||!data||data.id!==detailId) throw Error('Evento completo não confirmado.');
+        const full=redactAuditData(data) as EnrichedLog;
+        setSelectedLog(previous=>previous?.id===detailId?enrichAuditRow(full,previous.entidade_resolvida):previous);
+        let warning='';
         try {
-          const enriched = await enrichLog(selectedLog);
-          if(current && active.current) setSelectedLog(previous=>previous?.id===enriched.id?enriched:previous);
-        } finally { if(current && active.current) setIsResolving(false); }
-      };
-      void run();
-      return ()=>{current=false;};
-    }
-  }, [selectedLog, enrichLog]);
+          const enriched=await readEntity(full,controller.signal);
+          if(!controller.signal.aborted&&active.current) setSelectedLog(previous=>previous?.id===detailId?enriched:previous);
+        } catch {warning='Cadastro atual não confirmado; os dados registrados no evento foram preservados.';}
+        if(!controller.signal.aborted&&active.current)setDetailState({id:detailId,error:warning});
+      } catch {if(!controller.signal.aborted&&active.current)setDetailState({id:detailId,error:'Não foi possível consultar o evento completo. Abra novamente para tentar.'});}
+    })();
+    return()=>controller.abort();
+  },[detailId,readEntity,unitFilter]);
 
   // Filters
   const [filterDateFrom, setFilterDateFrom] = useState('');
@@ -472,126 +459,106 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
   const [filterEventoGrupo, setFilterEventoGrupo] = useState('');
 
 
-  const loadLogs = useCallback(async () => {
-    if(!active.current) return;
+  const queryKey=JSON.stringify([page,revision,filterDateFrom,filterDateTo,filterUser,filterRole,filterModulo,filterAcao,filterStatus,filterUnidade,filterCpf,filterEventoGrupo,search]);
+  const current=directory?.key===queryKey?directory:null;
+  const logs=current?.rows??[];
+  const totalCount=current?.count??0;
+  const loading=!current;
+  const queryError=current?.error||'';
+  const searchWarning=current?.warning||'';
+
+  useEffect(()=>{
+    const controller=new AbortController();
     const seq=++requestId.current;
-    setLoading(true); setLogs([]); setTotalCount(0);
-    try {
-      let query = supabase
-        .from('action_logs' as any)
-        .select('*', { count: 'exact' })
-        .order('created_at', { ascending: false })
-        .range(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE - 1);
-
-      if (filterDateFrom) query = query.gte('created_at', `${filterDateFrom}T00:00:00`);
-      if (filterDateTo) query = query.lte('created_at', `${filterDateTo}T23:59:59`);
-      if (filterUser) query = query.ilike('user_nome', `%${filterUser}%`);
-      if (filterRole) query = query.eq('role', filterRole);
-      if (filterModulo) query = query.eq('modulo', filterModulo);
-      if (filterAcao) query = query.eq('acao', filterAcao);
-      if (filterStatus) query = query.eq('status', filterStatus);
-      if (filterUnidade) query = query.eq('unidade_id', filterUnidade);
-      if (search) {
-        const term = search.trim();
-        const digits = term.replace(/\D/g, '');
-        // Look up patient IDs matching the search term (name, cpf or cns)
-        // so we can also match logs where only paciente_id / entidade_id / agendamento_id are stored.
-        let pacienteIds: string[] = [];
-        try {
-          let pq = supabase.from('pacientes').select('id').match(unitFilter).limit(50);
-          if (digits.length >= 3) {
-            pq = pq.or(`nome.ilike.%${term}%,cpf.ilike.%${digits}%,cns.ilike.%${digits}%,telefone.ilike.%${digits}%`);
-          } else {
-            pq = pq.ilike('nome', `%${term}%`);
-          }
-          const { data: pac } = await pq;
-          pacienteIds = (pac || []).map((p: any) => p.id).filter(Boolean);
-        } catch (e) {
-          console.warn('paciente lookup failed', e);
+    const valid=()=>active.current&&!controller.signal.aborted&&seq===requestId.current;
+    const timer=setTimeout(async()=>{
+      if(!valid())return;
+      const warnings:string[]=[];
+      try {
+        const term=auditSearchTerm(search);
+        const cpfVariants=auditCpfVariants(filterCpf.trim());
+        if(filterCpf.trim()&&!cpfVariants.length) throw Error('Informe o CPF completo do funcionário (11 dígitos).');
+        if(search.trim()&&!term) throw Error('Informe um termo de pesquisa válido.');
+        if(filterDateFrom&&filterDateTo&&filterDateFrom>filterDateTo) throw Error('A data inicial deve ser anterior ou igual à final.');
+        let q=supabase.from('action_logs').select(AUDIT_LIST_FIELDS,{count:'exact'}).order('created_at',{ascending:false}).order('id',{ascending:false});
+        if(filterDateFrom) q=q.gte('created_at',filterDateFrom+'T00:00:00');
+        if(filterDateTo) q=q.lte('created_at',filterDateTo+'T23:59:59');
+        const actorTerm=auditSearchTerm(filterUser);
+        if(filterUser.trim()&&!actorTerm)throw Error('Informe um nome de usuário válido.');
+        if(actorTerm)q=q.ilike('user_nome',auditLike(actorTerm));
+        if(filterRole)q=q.eq('role',filterRole);
+        if(filterModulo)q=q.eq('modulo',filterModulo);
+        if(filterAcao)q=q.eq('acao',filterAcao);
+        if(filterStatus)q=q.eq('status',filterStatus);
+        if(filterUnidade)q=q.eq('unidade_id',filterUnidade);
+        if(unitId)q=q.eq('unidade_id',unitId);
+        if(filterEventoGrupo&&filterEventoGrupo!=='todos'){
+          const group=eventoGrupos[filterEventoGrupo];if(group?.acoes.length)q=q.in('acao',group.acoes);
         }
-
-        const orParts = [
-          `user_nome.ilike.%${term}%`,
-          `acao.ilike.%${term}%`,
-          `entidade.ilike.%${term}%`,
-          `entidade_id.ilike.%${term}%`,
-          `paciente_nome.ilike.%${term}%`,
-          `profissional_nome.ilike.%${term}%`,
-          `acao_legivel.ilike.%${term}%`,
-        ];
-        if (pacienteIds.length > 0) {
-          // Also collect agendamento/prontuario/documento IDs vinculated to these patients,
-          // so logs that only reference those child entities are included.
-          let agIds: string[] = [];
-          let prIds: string[] = [];
-          let docIds: string[] = [];
-          try {
-            const [{ data: ags }, { data: prs }, { data: docs }] = await Promise.all([
-              supabase.from('agendamentos').select('id').match(unitFilter).in('paciente_id', pacienteIds).limit(2000),
-              supabase.from('prontuarios').select('id').match(unitFilter).in('paciente_id', pacienteIds).limit(2000),
-              supabase.from('documentos_gerados').select('id').match(unitFilter).in('paciente_id', pacienteIds).limit(2000),
-            ]);
-            agIds = (ags || []).map((r: any) => r.id).filter(Boolean);
-            prIds = (prs || []).map((r: any) => r.id).filter(Boolean);
-            docIds = (docs || []).map((r: any) => r.id).filter(Boolean);
-          } catch (e) {
-            console.warn('related lookup failed', e);
-          }
-
-          const pacList = `(${pacienteIds.join(',')})`;
-          orParts.push(`paciente_id.in.${pacList}`);
-          orParts.push(`entidade_id.in.${pacList}`);
-          if (agIds.length > 0) {
-            const l = `(${agIds.join(',')})`;
-            orParts.push(`agendamento_id.in.${l}`);
-            orParts.push(`entidade_id.in.${l}`);
-          }
-          if (prIds.length > 0) {
-            const l = `(${prIds.join(',')})`;
-            orParts.push(`prontuario_id.in.${l}`);
-            orParts.push(`entidade_id.in.${l}`);
-          }
-          if (docIds.length > 0) {
-            const l = `(${docIds.join(',')})`;
-            orParts.push(`documento_id.in.${l}`);
-            orParts.push(`entidade_id.in.${l}`);
-          }
+        if(cpfVariants.length){
+          let ids:string[]=[];
+          try{
+            const {data,error,count}=await supabase.from('funcionarios').select('id',{count:'exact'}).match(unitFilter).in('cpf',cpfVariants).order('id').limit(AUDIT_LOOKUP_LIMIT).abortSignal(controller.signal);
+            if(!valid())return;
+            if(error||!data)throw Error('lookup');
+            ids=data.map(x=>x.id).filter(id=>typeof id==='string'&&id.length<=120);
+            if(count===null||count>ids.length)warnings.push('Vínculos por CPF limitados.');
+          }catch{if(!valid())return;warnings.push('Cadastro de funcionários não confirmado; pesquisa pelo CPF histórico disponível.');}
+          q=q.or(auditActorCpfSearch(cpfVariants,ids));
         }
-        query = query.or(orParts.join(','));
+        if(term){
+          const digits=term.replace(/\D/g,'');
+          const groups:{ids:string[];field:string;entity:string}[]=[];
+          try{
+            let pq=supabase.from('pacientes').select('id',{count:'exact'}).match(unitFilter).order('id').limit(AUDIT_LOOKUP_LIMIT);
+            const parts=['nome.ilike.'+auditQuote(auditLike(term))];
+            if(digits.length>=3&&/^[\d.\-\s()+]+$/.test(term)){
+              for(const field of ['cpf','cns','telefone']) {
+                parts.push(field+'.ilike.'+auditQuote(auditLike(digits)));
+                if(term!==digits)parts.push(field+'.ilike.'+auditQuote(auditLike(term)));
+              }
+            }
+            const {data,error,count}=await pq.or(parts.join(',')).abortSignal(controller.signal);
+            if(!valid())return;
+            if(error||!data)throw Error('lookup');
+            const ids=data.map(x=>x.id).filter(id=>typeof id==='string'&&id.length<=120);
+            if(count===null||count>ids.length)warnings.push('Busca por pacientes limitada; refine o nome ou CPF.');
+            if(ids.length){
+              groups.push({ids,field:'paciente_id',entity:'paciente'});
+              const related=[['agendamentos','agendamento_id','agendamento'],['prontuarios','prontuario_id','prontuario'],['documentos_gerados','documento_id','documento']] as const;
+              const found=await Promise.all(related.map(async([table,field,entity])=>{
+                try{
+                  const {data,error,count}=await supabase.from(table).select('id',{count:'exact'}).match(unitFilter).in('paciente_id',ids).order('id').limit(AUDIT_RELATED_LIMIT).abortSignal(controller.signal);
+                  if(error||!data)return {group:null,limited:true};
+                  return {group:{ids:data.map(x=>x.id),field,entity},limited:count===null||count>data.length};
+                }catch{return {group:null,limited:true};}
+              }));
+              if(!valid())return;
+              for(const item of found){if(item.group)groups.push(item.group);if(item.limited)warnings.push('Vínculos históricos parcialmente consultados.');}
+            }
+          }catch{if(!valid())return;warnings.push('Vínculos de pacientes não confirmados; pesquisa textual disponível.');}
+          const expression=auditRelatedSearch(auditTextSearch(term),groups);
+          if(expression.limited)warnings.push('Limite seguro da pesquisa por vínculos atingido.');
+          q=q.or(expression.expression);
+        }
+        const range=auditPageRange(page);
+        const {data,count,error}=await q.range(range.from,range.to).abortSignal(controller.signal);
+        if(!valid())return;
+        if(count!==null&&page>auditLastPage(count)){setPage(auditLastPage(count));return;}
+        if(error||!data||count===null)throw Error('Não foi possível confirmar a consulta de auditoria.');
+        const rows=data.map(l=>redactAuditData(l) as EnrichedLog);
+        const result=await enrichPage(rows,controller.signal);
+        if(!valid())return;
+        if(result.unavailable)warnings.push('Alguns dados atuais das entidades não puderam ser consultados; os eventos permanecem disponíveis.');
+        setDirectory({key:queryKey,rows:result.rows,count,warning:[...new Set(warnings)].join(' '),error:''});
+      }catch(e){
+        if(valid())setDirectory({key:queryKey,rows:[],count:0,warning:'',error:e instanceof Error?e.message:'Não foi possível consultar a auditoria.'});
       }
+    },300);
+    return()=>{clearTimeout(timer);controller.abort();};
+  },[queryKey,page,filterDateFrom,filterDateTo,filterUser,filterRole,filterModulo,filterAcao,filterStatus,filterUnidade,filterCpf,filterEventoGrupo,search,unitId,unitFilter,enrichPage]);
 
-
-      // Filter by evento grupo
-      if (filterEventoGrupo && filterEventoGrupo !== 'todos') {
-        const grupo = eventoGrupos[filterEventoGrupo];
-        if (grupo && grupo.acoes.length > 0) {
-          query = query.in('acao', grupo.acoes);
-        }
-      }
-
-      // Universal unit isolation (admin.sms sees all)
-      if (unitId) query = query.eq('unidade_id', unitId);
-
-      const { data, count, error } = await query;
-      if (error) throw error;
-
-      if(!active.current || seq!==requestId.current) return;
-      const enrichedData = ((data as unknown as EnrichedLog[]) || []).map(l=>redactAuditData(l) as EnrichedLog);
-      const enriched = await Promise.all(enrichedData.map(l=>enrichLog(l)));
-      if(!active.current || seq!==requestId.current) return;
-      setLogs(enriched);
-      setTotalCount(filterCpf ? enrichedData.length : (count || 0));
-    } catch (err) {
-      if(active.current && seq===requestId.current) toast.error('Erro ao carregar logs.');
-    } finally {
-      if(active.current && seq===requestId.current) setLoading(false);
-    }
-
-  }, [page, filterDateFrom, filterDateTo, filterUser, filterRole, filterModulo, filterAcao, filterStatus, filterUnidade, filterCpf, filterEventoGrupo, search, unitId, unitFilter, enrichLog]);
-
-  useEffect(() => { loadLogs(); }, [loadLogs]);
-
-  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+  const totalPages=Math.ceil(totalCount/ITEMS_PER_PAGE);
 
   const clearFilters = () => {
     setFilterDateFrom(''); setFilterDateTo(''); setFilterUser(''); setFilterRole('');
@@ -764,7 +731,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
     await registrarExportacao('csv', motivo, hash, protocolo);
     const rodape = [
       ['PROTOCOLO',protocolo],['EMITIDO POR',user?.nome||''],['DATA/HORA',format(geradoEm,'dd/MM/yyyy HH:mm:ss')],
-      ['MOTIVO',auditSafeText(motivo)],['ABRANGÊNCIA','Página atual'],['SHA-256 (conteúdo acima do rodapé)',hash],
+      ['MOTIVO',auditSafeText(motivo)],['ABRANGÊNCIA','Página atual'],['AVISO DA CONSULTA',searchWarning],['SHA-256 (conteúdo acima do rodapé)',hash],
     ].map(r=>r.map(auditCsvCell).join(';')).join('\n');
     const csv = content + '\n' + rodape;
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -817,7 +784,8 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
         <div><strong>Emitido por:</strong> ${esc(user?.nome)} — CPF ${esc(maskCpf(user?.cpf || ''))} — perfil ${esc(user?.role)}</div>
         <div><strong>Data/hora da emissão:</strong> ${format(geradoEm, 'dd/MM/yyyy HH:mm:ss')}</div>
         <div><strong>Motivo:</strong> ${esc(auditSafeText(motivo))}</div>
-        <div><strong>Registros:</strong> ${logs.length} de ${totalCount} encontrados</div>
+        <div><strong>Registros:</strong> ${logs.length} de ${totalCount} no recorte consultado</div>
+        ${searchWarning ? '<div><strong>Aviso:</strong> '+esc(searchWarning)+'</div>' : ''}
       </div>
       ${tableHtml}
       <div style="font-size:10px;margin-top:12px;padding:8px;border-top:1px solid #999;word-break:break-all">
@@ -835,10 +803,10 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Logs & Auditoria</h1>
-          <p className="text-sm text-muted-foreground">{totalCount} registros encontrados</p>
+          <p className="text-sm text-muted-foreground">{loading?'Consultando registros…':queryError?'Total não confirmado':totalCount.toLocaleString('pt-BR')+' registros no recorte consultado'}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => { setPage(0); loadLogs(); }}>
+          <Button variant="outline" size="sm" disabled={exportBusy} onClick={() => { cacheRef.current.clear(); setPage(0); setRevision(n=>n+1); }}>
             <RefreshCw className="w-4 h-4 mr-1" /> Atualizar
           </Button>
           <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
@@ -926,7 +894,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">CPF do Funcionário</label>
-                <Input placeholder="Filtrar por CPF" value={filterCpf} onChange={(e) => { setFilterCpf(e.target.value); setPage(0); }} />
+                <Input placeholder="CPF completo do funcionário" value={filterCpf} onChange={(e) => { setFilterCpf(e.target.value); setPage(0); }} />
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Perfil</label>
@@ -989,10 +957,11 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
         </Card>
       )}
 
+      {searchWarning && <div role="status" className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">{searchWarning} A contagem corresponde somente ao recorte consultado.</div>}
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          {loading ? (
+          {queryError ? <div role="alert" className="py-12 px-4 text-center space-y-3"><p className="text-sm text-muted-foreground">{queryError}</p><Button size="sm" variant="outline" onClick={()=>setRevision(n=>n+1)}>Tentar novamente</Button></div> : loading ? (
             <div className="flex items-center justify-center py-16">
               <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
             </div>
@@ -1015,7 +984,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                 </TableHeader>
                 <TableBody>
                   {logs.map((log) => (
-                    <TableRow key={log.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setSelectedLog(log)}>
+                    <TableRow key={log.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => {setDetailState(null);setSelectedLog(log);}}>
                       <TableCell className="whitespace-nowrap text-[11px] font-mono">
                         {format(new Date(log.created_at), 'dd/MM/yy HH:mm:ss')}
                       </TableCell>
@@ -1083,13 +1052,13 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            Página {page + 1} de {totalPages}
+            Página {page + 1} de {totalPages} · {Math.min(page*ITEMS_PER_PAGE+1,totalCount)}–{Math.min((page+1)*ITEMS_PER_PAGE,totalCount)} de {totalCount.toLocaleString('pt-BR')}
           </p>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+            <Button variant="outline" size="sm" disabled={loading || page === 0 || exportBusy} onClick={() => setPage(p => p - 1)}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
+            <Button variant="outline" size="sm" disabled={loading || page >= totalPages - 1 || exportBusy} onClick={() => setPage(p => p + 1)}>
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
@@ -1097,7 +1066,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
       )}
 
       {/* Detail Side Panel */}
-      <Sheet open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
+      <Sheet open={!!selectedLog} onOpenChange={open=>{if(!open){setSelectedLog(null);setDetailState(null);}}}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader className="border-b pb-4">
             <div className="flex items-center gap-2">
@@ -1113,6 +1082,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
           
           {selectedLog && (
             <div className="space-y-6 mt-6 pb-20">
+              {detailState?.id!==selectedLog.id ? <p role="status" className="text-sm text-muted-foreground">Consultando detalhes completos…</p> : detailState.error ? <p role="status" className="text-sm text-muted-foreground">{detailState.error}</p> : null}
               {/* 1. RESUMO DO EVENTO */}
               <section className="space-y-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-primary">
@@ -1204,6 +1174,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
 
                     {selectedLog.entidade_resolvida?.detalhes && (
                       <div className="border-t border-primary/10 pt-2 grid grid-cols-2 gap-2">
+                        <p className="col-span-2 text-xs text-muted-foreground">Informações atuais do cadastro, não necessariamente iguais às da data do evento.</p>
                         {Object.entries(selectedLog.entidade_resolvida.detalhes).map(([k, v]) => {
                           if (['id', 'unidade_id', 'custom_data', 'created_at', 'updated_at'].includes(k)) return null;
                           if (!v) return null;
