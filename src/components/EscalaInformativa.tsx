@@ -4,6 +4,7 @@ import { eachDayOfInterval, endOfMonth, format, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarDays, ChevronDown, Clock3, MapPin, Plus, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,9 @@ export function CadastroEscala({ date, entries, onSavedDate }: {
   date: string; entries: RegistroEscala[]; onSavedDate: (date: string) => void;
 }) {
   const { user } = useAuth();
+  const { can, loading:permissionsLoading }=usePermissions();
+  const canCreate=!permissionsLoading&&can('disponibilidade','can_view')&&can('disponibilidade','can_create');
+  const canEdit=!permissionsLoading&&can('disponibilidade','can_view')&&can('disponibilidade','can_edit');
   const { isGlobalAdmin, userUnidadeId, profissionaisVisiveis, unidadesVisiveis } = useUnidadeFilter();
   const formId = useId();
   const staffId = useId();
@@ -71,9 +75,9 @@ export function CadastroEscala({ date, entries, onSavedDate }: {
   const selectionLabel = mode === 'semanal'
     ? weeklyDays + (weeklyDays === 1 ? ' dia por semana' : ' dias por semana')
     : dates.length + (dates.length === 1 ? ' data' : ' datas');
-  if (!user || !['master', 'gestao', 'coordenador'].includes(user.role) || (!isGlobalAdmin && !userUnidadeId)) return null;
+  if (!user || !['master', 'gestao', 'coordenador'].includes(user.role) || (!isGlobalAdmin && !userUnidadeId) || (!canCreate&&!canEdit)) return null;
 
-  const isDisabled = (d: Date) => mode === 'excecao' && (!chosenSource || dateKeyEscala(d) < chosenSource.data || d.getDay() !== weekdayEscala(chosenSource.data));
+  const isDisabled = (d: Date) => mode === 'excecao' && (!chosenSource || dateKeyEscala(d) < chosenSource.data || (!!chosenSource.fim_recorrencia&&dateKeyEscala(d)>chosenSource.fim_recorrencia) || d.getDay() !== weekdayEscala(chosenSource.data));
   const toggleDays = (weekdays: number[]) => {
     const matching = eachDayOfInterval({ start: startOfMonth(month), end: endOfMonth(month) })
       .filter(day => weekdays.includes(day.getDay()) && !isDisabled(day));
@@ -95,6 +99,8 @@ export function CadastroEscala({ date, entries, onSavedDate }: {
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving.current) return;
+    if(mode==='excecao'?!canEdit:!canCreate){setStatus({error:true,text:'Seu perfil não possui permissão para esta ação.'});return;}
+    if(mode==='excecao'&&dates.some(isDisabled)){setStatus({error:true,text:'Selecione apenas ocorrências dentro da série original.'});return;}
     if (!person || !placeName.trim() || !duration || !dates.length || (mode === 'excecao' && !chosenSource)) {
       setStatus({ error: true, text: 'Selecione um profissional da lista, informe local e horário e marque os dias no calendário.' });
       return;
@@ -135,6 +141,7 @@ export function CadastroEscala({ date, entries, onSavedDate }: {
       </div>
       <Button type="button" variant={open ? 'outline' : 'default'} aria-expanded={open} aria-controls={formId} onClick={() => {
         if (!open && dates.length === 0) setMonth(toDate(date));
+        if(!open&&!canCreate&&canEdit)setMode('excecao');
         setOpen(!open);
       }}>
         {open ? <ChevronDown className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -186,7 +193,7 @@ export function CadastroEscala({ date, entries, onSavedDate }: {
             <fieldset className="space-y-2"><legend className="text-sm font-medium">Como cadastrar</legend>
               <div className="flex flex-wrap gap-2">{([
                 ['avulsa', 'Datas avulsas'], ['semanal', 'Repetir toda semana'], ['excecao', 'Alterar ocorrências'],
-              ] as const).filter(([m]) => m !== 'excecao' || sources.length || mode === 'excecao').map(([m, label]) =>
+              ] as const).filter(([m]) => m === 'excecao' ? canEdit&&(sources.length||mode==='excecao') : canCreate).map(([m, label]) =>
                 <Button key={m} type="button" size="sm" variant={mode === m ? 'secondary' : 'outline'} aria-pressed={mode === m}
                   onClick={() => { setMode(m); if (m === 'excecao') setDates([]); }}>{label}</Button>)}</div>
               {mode === 'excecao' && <label className="block space-y-1 text-sm"><span>Horário semanal original</span>
@@ -250,7 +257,7 @@ export function CadastroEscala({ date, entries, onSavedDate }: {
                 ].filter(Boolean).join(' · ')}
               </p>
             </div>}
-            <Button type="submit" className="shrink-0 self-start sm:self-center" disabled={busy || !dates.length}>
+            <Button type="submit" className="shrink-0 self-start sm:self-center" disabled={busy || !dates.length || (mode==='excecao'?!canEdit:!canCreate)}>
               {busy ? 'Salvando…' : dates.length ? 'Salvar ' + selectionLabel : 'Salvar escala'}
             </Button>
           </div>
