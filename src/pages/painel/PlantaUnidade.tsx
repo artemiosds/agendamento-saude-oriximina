@@ -214,7 +214,7 @@ function RegisteredRoom({ room, x, y, w, onOpen, alert }: { room: MapRoom; x: nu
     </svg>
     <Plate x={x + 10} y={y + 53} state={room.state} label={status} />
     <RoomEquipment kind={kind} x={x} y={y} w={w}/>
-    {room.staff && <AvatarPersonagem papel={kind === 'nursing' ? 'enfermagem' : 'clinico'} x={x + 58} y={y + 65} variante={room.id} />}
+    {room.staff && <AvatarPersonagem papel="clinico" x={x + 58} y={y + 65} variante={room.id} />}
     {room.patients[0] && <AvatarPersonagem key={room.patients[0].id} papel="paciente" x={x + 84} y={y + 108} variante={room.patients[0].id} />}
     {room.patients.length > 1 && <text className="planta-mini" x={x + 110} y={y + 117}>+{room.patients.length - 1}</text>}
     {room.state === 'bottleneck' && <>
