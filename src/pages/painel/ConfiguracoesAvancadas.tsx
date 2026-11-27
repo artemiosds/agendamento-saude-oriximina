@@ -16,7 +16,10 @@ import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { normalizePhone, formatPhoneForDisplay, applyPhoneMask } from "@/lib/phoneUtils";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import { operationalAccess, operationalSection, type OperationalSection } from "@/lib/operationalNavigation";
+const MonitoramentoSistema = React.lazy(() => import("./MonitoramentoSistema"));
 import { RecoveryPackageBuilder } from "@/components/painel/RecoveryPackageBuilder";
 import { auditService } from "@/services/auditService";
 import { exportSafeText } from "@/lib/auditDocumentExport";
@@ -24,7 +27,7 @@ import { canExportGlobalData, confirmedCount, readDataExport, dataExportCsv, DAT
 import {
   Clock, ClipboardList, MessageSquare, Users, DoorOpen,
   CalendarOff, FileDown, Database, FlaskConical, ExternalLink,
-  Plus, Pencil, Trash2, Save, Send, Check, X, AlertTriangle, Info
+  Plus, Pencil, Trash2, Save, Send, Check, X, AlertTriangle, Info, Activity, ShieldCheck
 } from "lucide-react";
 
 const DIAS_SEMANA = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
@@ -190,7 +193,30 @@ const DadosSection: React.FC = () => {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const ConfiguracoesAvancadas: React.FC = () => {
   const {user,isGlobalAdmin}=useAuth();
-  return <div className="space-y-4"><DadosSection key={JSON.stringify([user?.id,user?.role,user?.unidadeId,user?.ativo,isGlobalAdmin])}/></div>;
+  const {can,loading}=usePermissions();
+  const [params,setParams]=useSearchParams();
+  const access=operationalAccess(user,!loading&&can('monitoramento_sistema','can_view'));
+  const section=operationalSection(params.get('aba'),access);
+  const scope=JSON.stringify([user?.id,user?.role,user?.unidadeId,user?.ativo,isGlobalAdmin]);
+  const select=(next:OperationalSection)=>{
+    if(!access[next]||loading)return;
+    setParams(current=>{const updated=new URLSearchParams(current);updated.set('aba',next);return updated;});
+  };
+  if(loading)return <p role="status" className="p-4 text-sm text-muted-foreground">Conferindo permissões…</p>;
+  if(!access.monitoramento&&!access.dados)return <p role="alert" className="p-4 text-sm">Acesso não autorizado.</p>;
+  return <div className="space-y-4 min-w-0">
+    <header className="rounded-xl border bg-card p-4 sm:p-5">
+      <h1 className="flex items-center gap-2 text-xl font-bold font-display"><Database className="h-5 w-5 text-primary" aria-hidden="true"/>Gestão Operacional e Dados</h1>
+      <p className="mt-1 text-sm text-muted-foreground">Central de monitoramento, infraestrutura e recuperação de dados.</p>
+    </header>
+    <nav aria-label="Seções da gestão operacional" className="flex flex-wrap gap-2 rounded-lg border bg-card p-2">
+      {access.monitoramento&&<Button type="button" variant={section==='monitoramento'?'default':'outline'} aria-pressed={section==='monitoramento'} onClick={()=>select('monitoramento')}><Activity className="mr-2 h-4 w-4" aria-hidden="true"/>Monitoramento do Sistema</Button>}
+      {access.dados&&<Button type="button" variant={section==='dados'?'default':'outline'} aria-pressed={section==='dados'} onClick={()=>select('dados')}><ShieldCheck className="mr-2 h-4 w-4" aria-hidden="true"/>Backup e Recuperação</Button>}
+    </nav>
+    {section===null?<Card><CardContent className="py-8 text-sm text-muted-foreground" role="alert">Você não tem autorização para a seção solicitada. Selecione uma seção disponível.</CardContent></Card>:
+      section==='monitoramento'&&access.monitoramento?<React.Suspense fallback={<p role="status" className="p-4 text-sm text-muted-foreground">Carregando monitoramento…</p>}><MonitoramentoSistema key={scope} embedded /></React.Suspense>:
+      section==='dados'&&access.dados?<DadosSection key={scope}/>:null}
+  </div>;
 };
 
 export default ConfiguracoesAvancadas;

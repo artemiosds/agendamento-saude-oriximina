@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Calendar, Users, ClipboardList, FileText,
   Settings, Building2, UserCog, ListOrdered, LogOut, Menu,
   Activity, CalendarClock, Stethoscope, ShieldCheck, HeartPulse,
-  ClipboardList as ClipboardListIcon, BookOpen, Lock, History, Send, ChevronDown, MonitorDot, Search, Star, X
+  ClipboardList as ClipboardListIcon, BookOpen, Lock, History, Send, ChevronDown, Database, Search, Star, X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -17,6 +17,7 @@ import logoSms from '@/assets/logo-sms-transparente.png';
 import { useBrand } from '@/hooks/useBrand';
 import { useLicense } from '@/hooks/useLicense';
 import { isPathLicensed } from '@/lib/licenseModules';
+import { operationalAccess, OPERATIONAL_DATA_PATH, LEGACY_MONITORING_PATH } from '@/lib/operationalNavigation';
 import QuickSearch from '@/components/QuickSearch';
 import WhatsappPausedBanner from '@/components/WhatsappPausedBanner';
 
@@ -101,10 +102,9 @@ const menuGroups: MenuGroup[] = [
       { to: '/painel/cockpit-ao-vivo', label: 'Cockpit ao Vivo', icon: Activity, modulo: 'cockpit_unidade' },
       { to: '/painel/portal-acessos', label: 'Acessos ao Portal', icon: UserCog, modulo: 'usuarios' },
       { to: '/painel/auditoria', label: 'Auditoria', icon: ShieldCheck, modulo: 'logs_auditoria' },
-      { to: '/painel/monitoramento', label: 'Monitoramento', icon: MonitorDot, modulo: 'monitoramento_sistema' },
       { to: '/painel/configuracoes', label: 'Configurações', icon: Settings, modulo: null, roles_master_only: true },
       { to: '/painel/permissoes', label: 'Permissões', icon: Lock, modulo: null, roles_master_only: true },
-      { to: '/painel/configuracoes-avancadas', label: 'Gestão Operacional e Dados', icon: Settings, modulo: null, roles_master_only: true },
+      { to: OPERATIONAL_DATA_PATH, label: 'Gestão Operacional e Dados', icon: Database, modulo: 'monitoramento_sistema', alternateTo: [LEGACY_MONITORING_PATH] },
     ],
   },
 ];
@@ -192,6 +192,10 @@ const PainelLayout: React.FC = () => {
 
   const isItemVisible = (item: MenuItem): boolean => {
     if (licenseLoading || !isPathLicensed(item.to, license)) return false;
+    if (item.to === OPERATIONAL_DATA_PATH) {
+      const access=operationalAccess(user,!permLoading&&can("monitoramento_sistema","can_view"));
+      return access.monitoramento||access.dados;
+    }
     if (item.owner_only) return isGlobalAdmin;
     // roles_master_only: accessible by any master (global or unit)
     if (item.roles_master_only) return isMaster;
@@ -210,7 +214,7 @@ const PainelLayout: React.FC = () => {
         })
         .filter(g => g.items.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isMaster, isGlobalAdmin, can, permLoading, license, licenseLoading]
+    [isMaster, isGlobalAdmin, can, permLoading, license, licenseLoading, user?.id, user?.ativo, user?.role]
   );
 
   const searchPaths = new Set(filteredGroups.flatMap(group => group.items.flatMap(item => [item.to, ...(item.alternateTo || [])])));
@@ -259,6 +263,7 @@ const PainelLayout: React.FC = () => {
         items: group.items.filter(item =>
           normalizeModuleSearch(item.label).includes(searchTerm) ||
           (item.to === '/painel/disponibilidade' && normalizeModuleSearch('Escala dos Profissionais Grade de atendimento').includes(searchTerm)) ||
+          (item.to === OPERATIONAL_DATA_PATH && normalizeModuleSearch('Monitoramento do Sistema Banco de Dados Storage Desempenho').includes(searchTerm)) ||
           normalizeModuleSearch(group.title || '').includes(searchTerm)),
       })).filter(group => group.items.length > 0)
     : filteredGroups;

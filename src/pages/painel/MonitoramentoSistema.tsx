@@ -87,7 +87,7 @@ interface StorageStats {
   unknownSizeCount: number;
 }
 
-const MonitoramentoSistema: React.FC = () => {
+const MonitoramentoSistema: React.FC<{embedded?:boolean}> = ({embedded=false}) => {
   const { user, isGlobalAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -241,10 +241,8 @@ const MonitoramentoSistema: React.FC = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold font-display text-foreground flex items-center gap-2">
-            <Activity className="w-6 h-6 text-primary" />
-            Monitoramento do Sistema
-          </h1>
+          {embedded?<h2 className="text-xl font-bold font-display text-foreground flex items-center gap-2"><Activity className="w-5 h-5 text-primary" aria-hidden="true"/>Monitoramento do Sistema</h2>:
+          <h1 className="text-2xl font-bold font-display text-foreground flex items-center gap-2"><Activity className="w-6 h-6 text-primary" aria-hidden="true"/>Monitoramento do Sistema</h1>}
           <p className="text-muted-foreground text-sm">
             Acompanhe o uso do banco de dados, armazenamento, arquivos e saúde geral da aplicação.
           </p>

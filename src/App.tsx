@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { DomainProviders } from "@/contexts/DomainProviders";
 import { PermissionsProvider, usePermissions, ModuleName } from "@/contexts/PermissionsContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { operationalAccess, MONITORING_DESTINATION } from "@/lib/operationalNavigation";
 import React, { Suspense } from "react";
 
 // Helper: retry dynamic import with exponential backoff, then force full reload to bust stale chunks
@@ -87,7 +88,6 @@ const HistoricoTriagem            = lazyRetry(() => import("./pages/painel/Histo
 const RelatorioAlta               = lazyRetry(() => import("./pages/painel/RelatorioAlta"));
 const Encaminhamentos             = lazyRetry(() => import("./pages/painel/Encaminhamentos"));
 const ConfiguracoesAvancadas      = lazyRetry(() => import("./pages/painel/ConfiguracoesAvancadas"));
-const MonitoramentoSistema        = lazyRetry(() => import("./pages/painel/MonitoramentoSistema"));
 const MeuProntuario               = lazyRetry(() => import("./pages/painel/MeuProntuario"));
 
 const AtualizacaoCadastral         = lazyRetry(() => import("./pages/painel/AtualizacaoCadastral"));
@@ -225,6 +225,16 @@ const ModuleRoute: React.FC<{
   return <>{children}</>;
 };
 
+// Independent authorization for the unified administrative entry point.
+const OperationalDataRoute: React.FC = () => {
+  const {user}=useAuth();
+  const {can,loading}=usePermissions();
+  const access=operationalAccess(user,can('monitoramento_sistema','can_view'));
+  if(loading)return <PageLoader />;
+  if(!access.monitoramento&&!access.dados)return <AccessDenied />;
+  return <ConfiguracoesAvancadas />;
+};
+
 // ─── APP ──────────────────────────────────────────────────────────────────────
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -284,8 +294,8 @@ const App = () => (
                     <Route path="multiprofissional" element={<ModuleRoute modulo="avaliacao_multi"><AvaliacaoMultiprofissional /></ModuleRoute>} />
                     <Route path="configuracoes" element={<ModuleRoute modulo="usuarios" masterOnly><Configuracoes /></ModuleRoute>} />
                     <Route path="permissoes" element={<ModuleRoute modulo="usuarios" masterOnly><Permissoes /></ModuleRoute>} />
-                    <Route path="configuracoes-avancadas" element={<ModuleRoute modulo="usuarios" masterOnly><ConfiguracoesAvancadas /></ModuleRoute>} />
-                    <Route path="monitoramento" element={<ModuleRoute modulo="monitoramento_sistema"><MonitoramentoSistema /></ModuleRoute>} />
+                    <Route path="configuracoes-avancadas" element={<OperationalDataRoute />} />
+                    <Route path="monitoramento" element={<Navigate to={MONITORING_DESTINATION} replace />} />
                     <Route path="alta" element={<ModuleRoute modulo="relatorio_alta"><RelatorioAlta /></ModuleRoute>} />
                     <Route path="encaminhamentos" element={<ModuleRoute modulo="encaminhamento"><Encaminhamentos /></ModuleRoute>} />
                     <Route path="meu-prontuario" element={<ModuleRoute modulo="prontuario"><MeuProntuario /></ModuleRoute>} />
