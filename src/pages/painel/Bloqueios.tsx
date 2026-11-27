@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { usePermissions } from '@/contexts/PermissionsContext';
+import { supabase } from '@/integrations/supabase/client';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -56,8 +58,16 @@ const ROLES_PROFISSIONAL = [
 ];
 
 const Bloqueios: React.FC = () => {
-  const { bloqueios, addBloqueio, deleteBloqueio, unidades, funcionarios, logAction } = useOperacional();
-  const { user } = useAuth();
+  const { bloqueios, addBloqueio, deleteBloqueio, unidades, funcionarios, logAction, refreshBloqueios } = useOperacional();
+  const { user, isGlobalAdmin } = useAuth();
+  const {can,loading:permissionsLoading}=usePermissions();
+  const scopeKey=JSON.stringify([user?.id,user?.role,user?.unidadeId,isGlobalAdmin]);
+  const scopeRef=useRef(scopeKey);scopeRef.current=scopeKey;
+  const writeInFlight=useRef(false);
+  const [saving,setSaving]=useState(false);
+  const [removing,setRemoving]=useState(false);
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santarem',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const todayStr=['year','month','day'].map(t=>today.find(p=>p.type===t)?.value||'').join('-');
 
   const [dialogOpen, setDialogOpen]     = useState(false);
   const [importing, setImporting]       = useState(false);
@@ -71,31 +81,32 @@ const Bloqueios: React.FC = () => {
     diaInteiro:    true,
     horaInicio:    '',
     horaFim:       '',
-    scope:         'global' as 'global' | 'unidade' | 'profissional',
+    scope:         (isGlobalAdmin?'global':'unidade') as 'global' | 'unidade' | 'profissional',
     unidadeId:     '',
     profissionalId:'',
   });
 
   const isMaster      = user?.role?.toLowerCase().trim() === 'master';
-  const isCoordenador = ['coordenador', 'gestor'].includes(user?.role?.toLowerCase().trim() || '');
-  const canCreate     = isMaster || isCoordenador;
+  const isCoordenador = ['coordenador','gestor','gestao','gestão','coordenacao'].includes(user?.role?.toLowerCase().trim() || '');
+  const mayManage=!permissionsLoading&&!!user?.id&&(isMaster||isCoordenador)&&(isGlobalAdmin||!!user?.unidadeId)&&can('feriados_bloqueios','can_view');
+  const canCreate=mayManage&&can('feriados_bloqueios','can_create');
+  const allowedUnit=(id:string)=>!!id&&(isGlobalAdmin||id===user?.unidadeId)&&unidades.some(u=>u.id===id&&u.ativo);
+  const busy=saving||importing||removing;
+  const errorMessage=(err:unknown)=>{const e=err as {code?:string;message?:string};return e?.code==='23505'?'Já existe um bloqueio idêntico. Atualize a lista.':e?.message||'Não foi possível confirmar a operação.';};
 
   // ── Lista de profissionais com filtro robusto ───────────────────────────────
   const todosProfissionais = useMemo(() =>
     funcionarios.filter(f =>
       f.ativo &&
       // Aceita qualquer role que não seja master/recepcao/coordenador
-      !['master', 'recepcao', 'coordenador', 'gestor'].includes(f.role?.toLowerCase().trim() || '')
+      !['master','recepcao','recepção','coordenador','gestor','gestao','gestão','coordenacao'].includes(f.role?.toLowerCase().trim() || '')
     ),
     [funcionarios]
   );
 
   // Filtro de busca por nome
   const profissionaisFiltrados = useMemo(() => {
-    const isAdminGlobal = user?.usuario === 'admin.sms';
-    const base = (!isAdminGlobal && (isCoordenador || (isMaster && user?.unidadeId)))
-      ? todosProfissionais.filter(p => p.unidadeId === user?.unidadeId)
-      : todosProfissionais;
+    const base=isGlobalAdmin?todosProfissionais:todosProfissionais.filter(p=>!!user?.unidadeId&&p.unidadeId===user.unidadeId);
 
     if (!buscaProfissional.trim()) return base;
     const termo = buscaProfissional.toLowerCase();
@@ -104,16 +115,15 @@ const Bloqueios: React.FC = () => {
       p.cargo?.toLowerCase().includes(termo) ||
       p.profissao?.toLowerCase().includes(termo)
     );
-  }, [todosProfissionais, buscaProfissional, isCoordenador, user?.unidadeId]);
+  }, [todosProfissionais, buscaProfissional, isGlobalAdmin, user?.unidadeId]);
 
   const visibleBloqueios = useMemo(() => {
-    if (user?.usuario === 'admin.sms') return bloqueios; // Global admin sees all
-    if (isMaster && !user?.unidadeId) return bloqueios;
+    if (isGlobalAdmin) return bloqueios;
     if (user?.unidadeId) {
       return bloqueios.filter(b => !b.unidadeId || b.unidadeId === user.unidadeId);
     }
-    return bloqueios;
-  }, [bloqueios, user, isMaster]);
+    return [];
+  }, [bloqueios, user, isGlobalAdmin]);
 
   const getScopeLabel = (b: typeof bloqueios[0]) => {
     if (b.profissionalId) {
@@ -137,12 +147,15 @@ const Bloqueios: React.FC = () => {
     setForm({
       titulo: '', tipo: 'feriado', dataInicio: '', dataFim: '',
       diaInteiro: true, horaInicio: '', horaFim: '',
-      scope: 'global', unidadeId: '', profissionalId: '',
+      scope: isGlobalAdmin?'global':'unidade', unidadeId: isGlobalAdmin?'':user?.unidadeId||'', profissionalId: '',
     });
     setBuscaProfissional('');
   };
 
+  useEffect(()=>{setDialogOpen(false);resetForm();},[scopeKey]);
+
   const handleSave = async () => {
+    if(writeInFlight.current||!canCreate)return;
     if (!form.titulo.trim()) {
       toast.error('Informe o motivo do bloqueio.');
       return;
@@ -155,8 +168,8 @@ const Bloqueios: React.FC = () => {
       toast.error('Data final deve ser igual ou posterior à data inicial.');
       return;
     }
-    if (!form.diaInteiro && (!form.horaInicio || !form.horaFim)) {
-      toast.error('Informe o horário de início e fim.');
+    if (!form.diaInteiro && (!/^([01]\d|2[0-3]):[0-5]\d$/.test(form.horaInicio)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(form.horaFim)||form.horaFim<=form.horaInicio)) {
+      toast.error('Informe horários válidos, com término posterior ao início.');
       return;
     }
     if (form.scope === 'unidade' && !form.unidadeId) {
@@ -167,14 +180,16 @@ const Bloqueios: React.FC = () => {
       toast.error('Selecione o profissional.');
       return;
     }
-    if (isCoordenador && form.scope === 'global') {
-      toast.error('Apenas Master pode criar bloqueios globais.');
+    if (!isGlobalAdmin && form.scope === 'global') {
+      toast.error('Apenas o Master geral pode criar bloqueios globais.');
       return;
     }
 
     // Buscar unidadeId do profissional selecionado para referência
-    const profSelecionado = funcionarios.find(f => f.id === form.profissionalId);
-
+    const profSelecionado = todosProfissionais.find(f => f.id === form.profissionalId);
+    if(form.scope==='unidade'&&!allowedUnit(form.unidadeId)){toast.error('Selecione uma unidade ativa autorizada.');return;}
+    if(form.scope==='profissional'&&(!profSelecionado||(!isGlobalAdmin&&!allowedUnit(profSelecionado.unidadeId))||(!!profSelecionado.unidadeId&&!allowedUnit(profSelecionado.unidadeId)))){toast.error('Profissional ou unidade não confirmados.');return;}
+    const scope=scopeKey;writeInFlight.current=true;setSaving(true);
     try {
       await addBloqueio({
         titulo:         form.titulo.trim(),
@@ -193,6 +208,7 @@ const Bloqueios: React.FC = () => {
         criadoPor:      user?.id || '',
       });
 
+      if(scopeRef.current!==scope)return;
       toast.success(
         form.scope === 'profissional'
           ? `Bloqueio cadastrado para ${profSelecionado?.nome || 'profissional'}!`
@@ -203,61 +219,51 @@ const Bloqueios: React.FC = () => {
       resetForm();
     } catch (err) {
       console.error('Erro ao salvar bloqueio:', err);
-      toast.error('Erro ao salvar bloqueio. Tente novamente.');
-    }
+      if(scopeRef.current===scope)toast.error(errorMessage(err));
+    }finally{writeInFlight.current=false;setSaving(false);}
   };
 
   const handleImportHolidays = async () => {
-    setImporting(true);
+    if(writeInFlight.current||!canCreate||!isGlobalAdmin)return;
+    if(!window.confirm('Importar as datas faltantes da lista de 2026? Cada data importada bloqueará novos agendamentos em todas as unidades. Os registros existentes serão preservados.'))return;
+    const scope=scopeKey;writeInFlight.current=true;setImporting(true);
     try {
-      const existingDates = new Set(
-        bloqueios
-          .filter(b => b.tipo === 'feriado' && !b.unidadeId && !b.profissionalId)
-          .map(b => b.dataInicio)
-      );
-      const toImport = feriadosNacionais2026.filter(f => !existingDates.has(f.date));
-
-      if (toImport.length === 0) {
-        toast.info('Todos os feriados nacionais de 2026 já estão cadastrados.');
-        return;
-      }
-
-      for (const f of toImport) {
-        await addBloqueio({
-          titulo: f.reason, tipo: 'feriado',
-          dataInicio: f.date, dataFim: f.date,
-          diaInteiro: true, horaInicio: '', horaFim: '',
-          unidadeId: '', profissionalId: '', criadoPor: user?.id || '',
-        });
-      }
-
-      await logAction({
-        acao: 'importar_feriados', entidade: 'bloqueio',
-        detalhes: { total: toImport.length, ano: 2026 }, user,
-      });
-
-      toast.success(`${toImport.length} feriados nacionais de 2026 importados!`);
-    } catch (err) {
-      console.error('Error importing holidays:', err);
-      toast.error('Erro ao importar feriados.');
-    } finally {
-      setImporting(false);
-    }
+      // Query the current server snapshot; do not trust the potentially stale directory cache.
+      const {data,error,count}=await supabase.from('bloqueios').select('data_inicio,data_fim',{count:'exact'}).eq('tipo','feriado').or('unidade_id.is.null,unidade_id.eq.').or('profissional_id.is.null,profissional_id.eq.').lte('data_inicio','2026-12-31').gte('data_fim','2026-01-01').limit(1000);
+      if(error||!data||count!==data.length)throw error||new Error('Lista de feriados não confirmada.');
+      if(scopeRef.current!==scope)return;
+      const missing=feriadosNacionais2026.filter(f=>!data.some(b=>b.data_inicio<=f.date&&b.data_fim>=f.date));
+      const toImport=missing.filter(f=>!f.reason.includes('meio dia'));
+      const skipped=missing.length-toImport.length;
+      if(!toImport.length){toast.info(skipped?'Quarta-feira de Cinzas exige conferência manual do horário parcial.':'Todas as datas da lista já estão cadastradas.');return;}
+      const {data:inserted,error:insertError}=await supabase.from('bloqueios').insert(toImport.map(f=>({titulo:f.reason,tipo:'feriado',data_inicio:f.date,data_fim:f.date,dia_inteiro:true,hora_inicio:'',hora_fim:'',unidade_id:'',profissional_id:'',criado_por:user?.id||''}))).select('id');
+      if(insertError||inserted?.length!==toImport.length)throw insertError||new Error('Importação não confirmada.');
+      if(scopeRef.current!==scope)return;
+      await logAction({acao:'importar_feriados',entidade:'bloqueio',detalhes:{total:inserted.length,ano:2026},user});
+      toast.success(`${inserted.length} datas de 2026 importadas!`);
+      if(skipped)toast.warning('Quarta-feira de Cinzas não importada: confirme o horário parcial manualmente.');
+      await refreshBloqueios().catch(()=>toast.warning('Importação confirmada. Atualize a lista para conferir.'));
+    }catch(err){if(scopeRef.current===scope)toast.error(errorMessage(err));}
+    finally{writeInFlight.current=false;setImporting(false);}
   };
 
-  const handleDelete = async (id: string) => {
-    try {
+  const canDelete=(b:typeof bloqueios[0])=>{
+    if(!mayManage||!can('feriados_bloqueios','can_delete')||b.dataFim<todayStr)return false;
+    if(isGlobalAdmin)return true;
+    if(!user?.unidadeId||b.unidadeId!==user.unidadeId)return false;
+    if(b.profissionalId&&!funcionarios.some(f=>f.id===b.profissionalId&&f.unidadeId===user.unidadeId))return false;
+    return isMaster||b.criadoPor===user?.id;
+  };
+
+  const handleDelete=async(id:string)=>{
+    const block=visibleBloqueios.find(b=>b.id===id);
+    if(writeInFlight.current||!block||!canDelete(block))return;
+    const scope=scopeKey;writeInFlight.current=true;setRemoving(true);
+    try{
       await deleteBloqueio(id);
-      toast.success('Bloqueio removido.');
-    } catch {
-      toast.error('Erro ao remover bloqueio.');
-    }
-  };
-
-  const canDelete = (b: typeof bloqueios[0]) => {
-    if (isMaster) return true;
-    if (isCoordenador) return b.criadoPor === user?.id;
-    return false;
+      if(scopeRef.current===scope)toast.success('Bloqueio removido.');
+    }catch(err){if(scopeRef.current===scope)toast.error(errorMessage(err));}
+    finally{writeInFlight.current=false;setRemoving(false);}
   };
 
   const formatDate = (d: string) => {
@@ -281,16 +287,16 @@ const Bloqueios: React.FC = () => {
           <p className="text-muted-foreground text-sm">Gerenciar datas bloqueadas para agendamento</p>
         </div>
         <div className="flex gap-2">
-          {isMaster && (
-            <Button variant="outline" onClick={handleImportHolidays} disabled={importing}>
+          {isGlobalAdmin&&canCreate && (
+            <Button variant="outline" onClick={handleImportHolidays} disabled={busy}>
               <Download className="w-4 h-4 mr-2" />
               {importing ? 'Importando...' : 'Importar Feriados 2026'}
             </Button>
           )}
           {canCreate && (
-            <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+            <Dialog open={dialogOpen} onOpenChange={(open) => { if(writeInFlight.current)return; if(open&&!canCreate)return;setDialogOpen(open); if (!open) resetForm(); }}>
               <DialogTrigger asChild>
-                <Button className="gradient-primary text-primary-foreground">
+                <Button disabled={busy} className="gradient-primary text-primary-foreground">
                   <Plus className="w-4 h-4 mr-2" /> Novo Bloqueio
                 </Button>
               </DialogTrigger>
@@ -388,7 +394,7 @@ const Bloqueios: React.FC = () => {
                     >
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {isMaster && (
+                        {isGlobalAdmin && (
                           <SelectItem value="global">🌐 Todo o sistema (todas as unidades)</SelectItem>
                         )}
                         <SelectItem value="unidade">🏥 Unidade específica</SelectItem>
@@ -404,10 +410,7 @@ const Bloqueios: React.FC = () => {
                       <Select value={form.unidadeId} onValueChange={v => setForm(p => ({ ...p, unidadeId: v }))}>
                         <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
                         <SelectContent>
-                          {(isCoordenador
-                            ? unidades.filter(u => u.id === user?.unidadeId)
-                            : unidades.filter(u => u.ativo)
-                          ).map(u => (
+                          {unidades.filter(u=>allowedUnit(u.id)).map(u => (
                             <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
                           ))}
                         </SelectContent>
@@ -480,8 +483,8 @@ const Bloqueios: React.FC = () => {
                     </div>
                   )}
 
-                  <Button onClick={handleSave} className="w-full gradient-primary text-primary-foreground">
-                    Confirmar Bloqueio
+                  <Button onClick={handleSave} disabled={busy||!canCreate} className="w-full gradient-primary text-primary-foreground">
+                    {saving?'Salvando…':'Confirmar Bloqueio'}
                   </Button>
                 </div>
               </DialogContent>
@@ -496,7 +499,7 @@ const Bloqueios: React.FC = () => {
           <CalendarOff className="w-5 h-5 text-info shrink-0 mt-0.5" />
           <div className="text-sm text-muted-foreground">
             <p>Datas bloqueadas são automaticamente removidas dos calendários de agendamento.</p>
-            <p className="mt-1">Bloqueios <strong>não afetam</strong> agendamentos já existentes — apenas impedem novos.</p>
+            <p className="mt-1">Bloqueios <strong>não cancelam nem remarcam</strong> agendamentos existentes. A abrangência profissional acompanha seus locais de atendimento.</p>
           </div>
         </CardContent>
       </Card>
@@ -514,7 +517,7 @@ const Bloqueios: React.FC = () => {
             const tipo       = tipoInfo(b.tipo);
             const ScopeIcon  = getScopeIcon(b);
             const criadoPorUser = funcionarios.find(f => f.id === b.criadoPor);
-            const isPast     = new Date(b.dataFim + 'T23:59:59') < new Date();
+            const isPast=b.dataFim<todayStr;
 
             return (
               <Card key={b.id} className={cn('shadow-card border-0', isPast && 'opacity-50')}>
@@ -558,7 +561,7 @@ const Bloqueios: React.FC = () => {
                   {canDelete(b) && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="h-8 px-2 text-destructive shrink-0">
+                        <Button size="sm" variant="ghost" disabled={busy} aria-label="Remover bloqueio" className="h-8 px-2 text-destructive shrink-0">
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </AlertDialogTrigger>
@@ -567,13 +570,13 @@ const Bloqueios: React.FC = () => {
                           <AlertDialogTitle>Remover bloqueio?</AlertDialogTitle>
                           <AlertDialogDescription>
                             Tem certeza que deseja remover "{b.titulo}" ({formatDateRange(b.dataInicio, b.dataFim)})?
-                            As datas voltarão a ficar disponíveis para agendamento.
+                            A retirada remove somente este bloqueio. A disponibilidade continua sujeita à grade e aos demais bloqueios.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancelar</AlertDialogCancel>
                           <AlertDialogAction
-                            onClick={() => handleDelete(b.id)}
+                            disabled={busy||!canDelete(b)} onClick={() => handleDelete(b.id)}
                             className="bg-destructive text-destructive-foreground"
                           >
                             Remover
