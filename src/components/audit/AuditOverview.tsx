@@ -5,7 +5,7 @@ import {supabase} from '@/integrations/supabase/client';
 import {AUDIT_PERIODS,AUDIT_INDICATORS,AUDIT_FAILURE_STATUSES,AUDIT_CLASSIFIED_STATUSES,auditDateBounds,auditPeriodRange,type AuditPeriod,type AuditIndicator} from '@/lib/auditOverview';
 type Counts=Record<AuditIndicator,number|null>;
 const icons={all:Activity,success:CheckCircle2,failure:AlertTriangle,other:Clock};
-const colors={all:'text-primary',success:'text-emerald-700 dark:text-emerald-400',failure:'text-red-700 dark:text-red-400',other:'text-amber-700 dark:text-amber-400'};
+const colors={all:'clinical-tone-blue',success:'clinical-tone-teal',failure:'bg-destructive text-destructive-foreground',other:'clinical-tone-violet'};
 const periodLabels={1:'Hoje',7:'7 dias',30:'30 dias'};
 const number=new Intl.NumberFormat('pt-BR');
 interface Props {unitId:string|null;revision:number;disabled:boolean;onApply:(range:{from:string;to:string},status:string)=>void;activeRange:{from:string;to:string;status:string;hasOtherFilters:boolean}}
@@ -38,19 +38,19 @@ export default function AuditOverview({unitId,revision,disabled,onApply,activeRa
   },[key,unitId,range.from,range.to]);
   const incomplete=!!confirmed&&Object.values(confirmed.counts).some(v=>v===null);
   const inconsistent=!!confirmed&&!incomplete&&confirmed.counts.all!==((confirmed.counts.success??0)+(confirmed.counts.failure??0)+(confirmed.counts.other??0));
-  return <section className="rounded-xl border border-border bg-card p-3 sm:p-4 space-y-3" aria-label="Indicadores de auditoria">
+  return <section className="clinical-premium p-3 space-y-3 min-w-0" aria-label="Indicadores de auditoria">
     <div className="flex flex-wrap items-start justify-between gap-2">
-      <div><h2 className="flex items-center gap-2 font-semibold"><Activity className="h-4 w-4 text-primary"/>Visão geral da auditoria</h2><p className="text-xs text-muted-foreground">Contagens do período e da abrangência autorizada, independentes dos demais filtros da listagem.</p></div>
+      <div><h2 className="flex items-center gap-2 font-semibold font-display"><Activity className="h-4 w-4 text-primary"/>Visão geral da auditoria</h2><p className="text-xs text-muted-foreground">Contagens do período e da abrangência autorizada, independentes dos demais filtros da listagem.</p></div>
       <div className="flex flex-wrap gap-1" aria-label="Período dos indicadores">{AUDIT_PERIODS.map(days=><Button type="button" key={days} variant={period===days?'default':'outline'} size="sm" aria-pressed={period===days} disabled={disabled} onClick={()=>{setPeriod(days);setRange(auditPeriodRange(days,new Date()));}}>{periodLabels[days]}</Button>)}</div>
     </div>
-    <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
+    <div className="grid grid-cols-1 min-[360px]:grid-cols-2 xl:grid-cols-4 gap-2">
       {AUDIT_INDICATORS.map(metric=>{
         const Icon=icons[metric.key];const value=confirmed?.counts[metric.key];
         const selected=activeRange.from===range.from&&activeRange.to===range.to&&activeRange.status===metric.filter&&!activeRange.hasOtherFilters;
         return <button key={metric.key} type="button" aria-pressed={selected} disabled={disabled||value==null} onClick={()=>onApply(range,metric.filter)}
-          className={'rounded-xl border p-3 text-left min-w-0 transition-colors hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 '+(selected?'border-primary bg-primary/5':'border-border bg-background')}>
-          <div className="flex items-center justify-between gap-2"><Icon className={'h-5 w-5 '+colors[metric.key]} aria-hidden="true"/><ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true"/></div>
-          <p className="mt-2 text-xl sm:text-2xl font-bold tabular-nums">{value==null?'—':number.format(value)}</p><p className="text-xs text-muted-foreground">{metric.label}</p>
+          className={'clinical-premium p-2.5 sm:p-3 flex items-center gap-2 text-left min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 '+(selected?'ring-1 ring-primary':'')}>
+          <span className={'clinical-dock-icon '+colors[metric.key]}><Icon className="h-4 w-4" aria-hidden="true"/></span>
+          <div className="flex-1 min-w-0"><p className="text-xl sm:text-2xl font-bold tabular-nums break-words">{value==null?'—':number.format(value)}</p><p className="text-xs font-medium leading-snug break-words">{metric.label}</p></div><ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true"/>
         </button>;
       })}
     </div>

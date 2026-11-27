@@ -840,34 +840,34 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
   };
 
   return (
-    <div className="space-y-4">
+    <div className="clinical-hub space-y-3 min-w-0">
       {/* Header */}
-      <header className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-4">
+      <header className="clinical-hub-hero space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
-            <div className="rounded-xl bg-primary/10 text-primary p-2.5 shrink-0"><Shield className="h-6 w-6" aria-hidden="true"/></div>
+            <div className="clinical-patient-avatar flex items-center justify-center shrink-0"><Shield className="h-6 w-6" aria-hidden="true"/></div>
             <div className="min-w-0">
-              <p className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Secretaria Municipal de Saúde · Rastreabilidade</p>
-              <h1 className="text-xl sm:text-2xl font-bold text-foreground">Logs & Auditoria</h1>
-              <p className="text-sm text-muted-foreground">Central de acompanhamento e investigação administrativa</p>
+              <p className="clinical-hub-eyebrow">Secretaria Municipal de Saúde · Rastreabilidade</p>
+              <h1 className="clinical-hub-name text-xl sm:text-2xl font-bold font-display">Logs & Auditoria</h1>
+              <p className="clinical-patient-sub text-xs mt-1">Central de acompanhamento e investigação administrativa</p>
             </div>
           </div>
-          <Badge variant="outline">{unitId?'Minha unidade':'Rede municipal'}</Badge>
+          <Badge variant="outline" className="border-white/30 bg-white/10 text-white">{unitId?'Minha unidade':'Rede municipal'}</Badge>
         </div>
-        <div className="flex gap-2 flex-wrap border-t border-border pt-3">
-          <Button variant="outline" size="sm" disabled={exportBusy} onClick={() => { cacheRef.current.clear(); unitCache.current.clear(); setPage(0); setRevision(n=>n+1); }}>
+        <div className="flex gap-2 flex-wrap border-t border-white/20 pt-3">
+          <Button variant="outline" size="sm" className="clinical-hub-new" disabled={exportBusy} onClick={() => { cacheRef.current.clear(); unitCache.current.clear(); setPage(0); setRevision(n=>n+1); }}>
             <RefreshCw className="w-4 h-4 mr-1" /> Atualizar
           </Button>
-          <Button variant="outline" size="sm" aria-expanded={showFilters} onClick={() => setShowFilters(!showFilters)}>
+          <Button variant="outline" size="sm" className="clinical-hub-new" aria-expanded={showFilters} onClick={() => setShowFilters(!showFilters)}>
             <Filter className="w-4 h-4 mr-1" /> Filtros {activeFilters.length>0?"("+activeFilters.length+")":""}
           </Button>
-          <Button variant="outline" size="sm" onClick={openReport} disabled={reportLoading || !canExport || exportBusy}>
+          <Button variant="outline" size="sm" className="clinical-hub-new" onClick={openReport} disabled={reportLoading || !canExport || exportBusy}>
             <BarChart3 className="w-4 h-4 mr-1" /> {reportLoading ? 'Gerando...' : 'Relatório por Profissional'}
           </Button>
-          <Button variant="outline" size="sm" disabled={!canExport || loading || !logs.length || exportBusy} onClick={()=>startListExport('csv')}>
+          <Button variant="outline" size="sm" className="clinical-hub-new" disabled={!canExport || loading || !logs.length || exportBusy} onClick={()=>startListExport('csv')}>
             <Download className="w-4 h-4 mr-1" /> CSV
           </Button>
-          <Button variant="outline" size="sm" disabled={!canExport || loading || !logs.length || exportBusy} onClick={()=>startListExport('pdf')}>
+          <Button variant="outline" size="sm" className="clinical-hub-new" disabled={!canExport || loading || !logs.length || exportBusy} onClick={()=>startListExport('pdf')}>
             <FileText className="w-4 h-4 mr-1" /> PDF
           </Button>
         </div>
@@ -877,9 +877,9 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
         onApply={(range,status)=>{clearFilters();setFilterDateFrom(range.from);setFilterDateTo(range.to);setFilterStatus(status);}}/>
 
       <Dialog open={!!exportRequest} onOpenChange={(o) => { if (!o && !exportLock.current) { setExportRequest(null); setExportMotivo(''); setExportError(''); } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Exportação com registro ({exportRequest?.endsWith('csv') ? 'CSV' : 'PDF'})</DialogTitle>
+        <DialogContent className="clinical-hub w-[calc(100vw-1rem)] max-w-lg max-h-[90dvh] overflow-y-auto">
+          <DialogHeader className="clinical-hub-hero text-left pr-9">
+            <DialogTitle className="clinical-hub-name font-display">Exportação com registro ({exportRequest?.endsWith('csv') ? 'CSV' : 'PDF'})</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
@@ -926,7 +926,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
       </Dialog>
 
       {/* Search */}
-      <section className="rounded-xl border border-border bg-card p-3 space-y-3" aria-label="Busca e filtros">
+      <section className="clinical-premium p-3 space-y-3 min-w-0" aria-label="Busca e filtros">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true"/>
           <Input aria-label="Pesquisar eventos de auditoria" placeholder="Pesquisar usuário, paciente, CPF, ação ou registro..." maxLength={100} value={search}
@@ -945,7 +945,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
 
       {/* Filters */}
       {showFilters && (
-        <Card>
+        <Card className="clinical-premium min-w-0">
           <CardContent className="pt-4 pb-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
@@ -1033,7 +1033,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
       )}
 
       {searchWarning && <div role="status" className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">{searchWarning} A contagem corresponde somente ao recorte consultado.</div>}
-      {!loading&&!queryError&&modules.length>0&&<details className="rounded-xl border border-border bg-card p-3">
+      {!loading&&!queryError&&modules.length>0&&<details className="clinical-premium p-3">
         <summary className="cursor-pointer text-sm font-medium">Distribuição por módulo · {logs.length} eventos desta página</summary>
         <div className="mt-3 space-y-2"><p className="text-xs text-muted-foreground">Apenas a página exibida, não o total histórico. Clique em um módulo para filtrar a lista.</p>
           {modules.map(m=><button type="button" key={m.key||'_missing'} disabled={!m.key} onClick={()=>{setFilterModulo(m.key);setPage(0);}} className="w-full grid grid-cols-[minmax(0,130px)_1fr_44px] gap-2 items-center text-left text-xs rounded-md p-1 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring">
@@ -1042,14 +1042,14 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
         </div>
       </details>}
       {/* Table */}
-      <Card className="overflow-hidden rounded-xl border-border">
-        <div className="border-b border-border bg-card p-3 sm:p-4 space-y-3">
+      <Card className="clinical-premium overflow-hidden min-w-0">
+        <div className="clinical-inset border-b p-3 sm:p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="rounded-xl bg-primary/10 p-2.5 text-primary"><History className="h-5 w-5" aria-hidden="true"/></div>
-              <div className="min-w-0"><h2 className="text-base sm:text-lg font-bold tracking-tight">Registros de auditoria</h2><p role="status" className="text-xs text-muted-foreground">{loading?'Consultando registros…':queryError?'Total não confirmado':totalCount.toLocaleString('pt-BR')+' registros no recorte consultado · '+logs.length+' nesta página'}</p></div>
+              <div className="clinical-dock-icon clinical-tone-blue"><History className="h-5 w-5" aria-hidden="true"/></div>
+              <div className="min-w-0"><h2 className="text-base sm:text-lg font-bold font-display tracking-tight">Registros de auditoria</h2><p role="status" className="text-xs text-muted-foreground">{loading?'Consultando registros…':queryError?'Total não confirmado':totalCount.toLocaleString('pt-BR')+' registros no recorte consultado · '+logs.length+' nesta página'}</p></div>
             </div>
-            <div className="inline-flex rounded-lg border border-border bg-muted/40 p-1 gap-1" aria-label="Visualização dos registros">
+            <div className="clinical-dock inline-flex gap-1 flex-wrap" aria-label="Visualização dos registros">
               <Button type="button" size="sm" variant={recordsView==='feed'?'default':'ghost'} aria-pressed={recordsView==='feed'} className="h-8 gap-1.5" onClick={()=>setRecordsView('feed')}><List className="h-4 w-4" aria-hidden="true"/>Linha do tempo</Button>
               <Button type="button" size="sm" variant={recordsView==='table'?'default':'ghost'} aria-pressed={recordsView==='table'} className="h-8 gap-1.5" onClick={()=>setRecordsView('table')}><Table2 className="h-4 w-4" aria-hidden="true"/>Tabela</Button>
             </div>
@@ -1081,7 +1081,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
               </div>
               <div className="hidden md:block overflow-x-auto">
               <Table>
-                <TableHeader className="bg-muted/40">
+                <TableHeader className="clinical-inset">
                   <TableRow>
                     <TableHead className="whitespace-nowrap">Data/Hora</TableHead>
                     <TableHead>Usuário</TableHead>
@@ -1162,7 +1162,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <nav aria-label="Paginação da auditoria" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card p-3">
+        <nav aria-label="Paginação da auditoria" className="clinical-premium flex flex-wrap items-center justify-between gap-2 p-3">
           <p className="text-sm text-muted-foreground">
             Página {page + 1} de {totalPages} · {Math.min(page*ITEMS_PER_PAGE+1,totalCount)}–{Math.min((page+1)*ITEMS_PER_PAGE,totalCount)} de {totalCount.toLocaleString('pt-BR')}
           </p>
@@ -1179,29 +1179,29 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
 
       {/* Detail Side Panel */}
       <Sheet open={!!selectedLog} onOpenChange={open=>{if(!open){setSelectedLog(null);setDetailState(null);}}}>
-        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-4 sm:p-6">
-          <SheetHeader className="border-b pb-4">
+        <SheetContent className="clinical-hub w-full sm:max-w-2xl overflow-y-auto p-3 sm:p-4">
+          <SheetHeader className="clinical-hub-hero text-left pr-9">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-primary/10 rounded-lg text-primary">
+              <div className="clinical-patient-avatar flex items-center justify-center shrink-0">
                 <Shield className="w-5 h-5" />
               </div>
               <div>
-                <SheetTitle className="text-xl">Detalhes da Auditoria</SheetTitle>
-                <p className="text-xs text-muted-foreground font-mono break-all">{selectedLog?.id}</p>
+                <SheetTitle className="clinical-hub-name font-display text-xl">Detalhes da Auditoria</SheetTitle>
+                <p className="clinical-patient-sub text-xs font-mono break-all">{selectedLog?.id}</p>
               </div>
             </div>
           </SheetHeader>
           
           {selectedLog && (
-            <div className="space-y-6 mt-6 pb-20">
+            <div className="space-y-3 mt-3 pb-12 min-w-0">
               {detailState?.id!==selectedLog.id ? <p role="status" className="text-sm text-muted-foreground">Consultando detalhes completos…</p> : detailState.error ? <p role="status" className="text-sm text-muted-foreground">{detailState.error}</p> : null}
               {/* 1. RESUMO DO EVENTO */}
-              <section className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+              <section className="clinical-premium p-3 space-y-3 min-w-0">
+                <div className="triage-section-title">
                   <Info className="w-4 h-4" />
                   RESUMO DO EVENTO
                 </div>
-                <div className="grid grid-cols-1 gap-4 bg-muted/30 p-4 rounded-xl border">
+                <div className="grid grid-cols-1 gap-3 clinical-inset p-3 rounded-lg border">
                   <div>
                     <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Ação Realizada</p>
                     <p className="text-base font-semibold leading-tight text-foreground break-words">{selectedLog.acao_legivel || formatAuditAction(selectedLog.acao)}</p>
@@ -1234,12 +1234,12 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
 
 
               {/* 2. RESPONSÁVEL */}
-              <section className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+              <section className="clinical-premium p-3 space-y-3 min-w-0">
+                <div className="triage-section-title">
                   <UserCheck className="w-4 h-4" />
                   RESPONSÁVEL
                 </div>
-                <div className="grid grid-cols-1 gap-3 bg-muted/30 p-4 rounded-xl border">
+                <div className="grid grid-cols-1 gap-3 clinical-inset p-3 rounded-lg border">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
                       {getAuditActorLabel(selectedLog).charAt(0)}
@@ -1264,12 +1264,12 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
 
               {/* 3. REGISTRO AFETADO */}
               {(selectedLog.entidade_id || selectedLog.nome_entidade || selectedLog.entidade_resolvida) && (
-                <section className="space-y-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                <section className="clinical-premium p-3 space-y-3 min-w-0">
+                  <div className="triage-section-title">
                     <Database className="w-4 h-4" />
                     REGISTRO AFETADO
                   </div>
-                  <div className="grid grid-cols-1 gap-3 bg-primary/5 p-4 rounded-xl border border-primary/10">
+                  <div className="grid grid-cols-1 gap-3 clinical-inset p-3 rounded-lg border">
                     <div>
                       <p className="text-[10px] uppercase font-bold text-primary tracking-wider mb-1">
                         {selectedLog.entidade_resolvida?.tipo ? selectedLog.entidade_resolvida.tipo.charAt(0).toUpperCase() + selectedLog.entidade_resolvida.tipo.slice(1) : 'Identificação do Registro'}
@@ -1305,9 +1305,9 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
 
 
               {/* 4. ALTERAÇÕES REALIZADAS */}
-              <section className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-primary"><History className="w-4 h-4"/>ALTERAÇÕES REGISTRADAS</h3>
+              <section className="clinical-premium p-3 space-y-3 min-w-0">
+                <div className="triage-section-title flex-wrap justify-between">
+                  <h3 className="triage-section-title"><History className="w-4 h-4"/>ALTERAÇÕES REGISTRADAS</h3>
                   {detailConfirmed&&<Badge variant="outline">{comparisons.length} campos</Badge>}
                 </div>
                 {!detailConfirmed?<p className="text-xs text-muted-foreground">A comparação depende da confirmação do evento completo.</p>:comparisons.length===0?
@@ -1317,7 +1317,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
                     {(showAllChanges?comparisons:comparisons.slice(0,20)).map(row=><div key={row.field} className="rounded-xl border border-border p-3 space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-1"><p className="text-sm font-semibold break-all">{formatAuditFieldLabel(row.field)}</p><Badge variant="outline" className="text-[10px]">{row.protected?'Protegido':row.source==='explicit'?'Alteração registrada':row.source==='snapshot'?'Snapshot':'Campo informado'}</Badge></div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div className="min-w-0 rounded-lg border border-border bg-muted/40 p-2.5"><p className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">Antes</p><p className="text-xs break-all whitespace-pre-wrap">{comparisonValue(row.field,row.before)}</p></div>
+                        <div className="min-w-0 rounded-lg border clinical-inset p-2.5"><p className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">Antes</p><p className="text-xs break-all whitespace-pre-wrap">{comparisonValue(row.field,row.before)}</p></div>
                         <div className="min-w-0 rounded-lg border border-border bg-primary/5 p-2.5"><p className="text-[10px] uppercase font-semibold text-primary mb-1">Depois</p><p className="text-xs break-all whitespace-pre-wrap">{comparisonValue(row.field,row.after)}</p></div>
                       </div>
                     </div>)}
@@ -1330,7 +1330,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
               <AuditOriginPanel event={selectedLog} device={formatDispositivo(selectedLog)} confirmed={detailConfirmed}/>
 
               {/* 6. DADOS TÉCNICOS COMPLETOS */}
-              {detailConfirmed&&<Accordion type="single" collapsible className="w-full">
+              {detailConfirmed&&<Accordion type="single" collapsible className="clinical-premium w-full p-2">
                 <AccordionItem value="json-data" className="border-none">
                   <AccordionTrigger className="hover:no-underline bg-muted/50 rounded-xl px-4 py-3 text-xs font-bold text-muted-foreground">
                     VER DADOS TÉCNICOS PROTEGIDOS (JSON)
@@ -1362,10 +1362,10 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
 
       {/* Professional Activity Report Dialog */}
       <Dialog open={showReport && !exportRequest} onOpenChange={closeReport}>
-        <DialogContent className="max-w-6xl max-h-[90dvh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><BarChart3 className="w-5 h-5"/>Relatório de Atividade por Profissional e Unidade</DialogTitle></DialogHeader>
+        <DialogContent className="clinical-hub w-[calc(100vw-1rem)] max-w-6xl max-h-[90dvh] overflow-y-auto">
+          <DialogHeader className="clinical-hub-hero text-left pr-9"><DialogTitle className="clinical-hub-name font-display flex items-center gap-2"><BarChart3 className="w-5 h-5"/>Relatório de Atividade por Profissional e Unidade</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div className="rounded-xl border border-border p-3 space-y-3">
+            <div className="clinical-premium p-3 space-y-3">
               <p className="text-xs text-muted-foreground">Consulta independente da listagem: apenas período e unidade. Limite de {REPORT_MAX_DAYS} dias e {REPORT_LIMIT.toLocaleString('pt-BR')} eventos. Não há consultas automáticas.</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div><label htmlFor="report-from" className="text-xs font-medium">Data inicial</label><Input id="report-from" type="date" value={reportDraft.de} disabled={reportLoading||exportBusy} onChange={e=>resetReport({...reportDraft,de:e.target.value})}/></div>
@@ -1388,7 +1388,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
               <p className="text-xs text-muted-foreground">CSV e PDF abrangem os dois agrupamentos, independentemente da página exibida.</p>
               {!reportPdfAllowed&&reportExportable&&<p className="text-xs text-muted-foreground">Para mais de 500 grupos, utilize CSV para evitar travar a impressão. O CSV abrange os dois agrupamentos.</p>}
               {reportRows.length===0?<p className="text-center text-muted-foreground py-8">Nenhum registro neste agrupamento.</p>:<>
-                <div className="overflow-x-auto rounded-lg border"><Table><TableHeader className="bg-muted/40"><TableRow>
+                <div className="overflow-x-auto rounded-lg border"><Table><TableHeader className="clinical-inset"><TableRow>
                   <TableHead>{reportTab==='actors'?'Nome / ID':'Unidade / ID'}</TableHead>
                   {reportTab==='actors'?<><TableHead>CPF</TableHead><TableHead>Perfil</TableHead></>:<><TableHead>Responsáveis</TableHead><TableHead>Sem responsável individual</TableHead></>}
                   {REPORT_METRICS.map(([label])=><TableHead key={label} className="text-center whitespace-nowrap">{label}</TableHead>)}

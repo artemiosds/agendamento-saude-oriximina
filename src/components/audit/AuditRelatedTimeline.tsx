@@ -37,9 +37,9 @@ export default function AuditRelatedTimeline({event,unitId,onOpen,actionLabel}:P
     return()=>controller.abort();
   },[key,revision,expression,from,to,event.id,unitId]);
   const dateFormat=useMemo(()=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Santarem',dateStyle:'short',timeStyle:'medium'}),[]);
-  return <section className="space-y-3 rounded-xl border border-border p-3 sm:p-4">
+  return <section className="clinical-premium space-y-3 p-3 min-w-0">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <h3 className="flex items-center gap-2 font-semibold text-sm"><History className="w-4 h-4 text-primary"/>Eventos relacionados</h3>
+      <h3 className="flex items-center gap-2 font-display font-semibold text-sm"><History className="w-4 h-4 text-primary"/>Eventos relacionados</h3>
       {query&&<Button size="sm" variant="outline" disabled={loading} onClick={()=>setRevision(n=>n+1)}><RefreshCw className="h-4 w-4 mr-1"/>{loading?'Consultando…':revision?'Atualizar':'Consultar histórico'}</Button>}
     </div>
     {!query?<p className="text-xs text-muted-foreground">Não há identificador de entidade compatível e confirmado no evento. Não são feitas associações por nome ou proximidade de horário.</p>:<>
@@ -48,7 +48,7 @@ export default function AuditRelatedTimeline({event,unitId,onOpen,actionLabel}:P
       {current?.failed&&<p role="alert" className="text-sm text-muted-foreground">Não foi possível confirmar o histórico. Tente novamente.</p>}
       {current&&!current.failed&&!current.rows.length&&<p className="text-sm text-muted-foreground">Nenhum outro evento encontrado nesse recorte.</p>}
       {!!current?.rows.length&&<ol className="divide-y divide-border">{current.rows.map(row=><li key={row.id}>
-        <button type="button" onClick={()=>onOpen(row)} className="w-full text-left flex items-start gap-2 py-3 px-1 rounded-md hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring">
+        <button type="button" onClick={()=>onOpen(row)} className="w-full text-left flex items-start gap-2 py-2.5 px-2 rounded-md hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring">
           <div className="flex-1 min-w-0 space-y-1"><div className="flex flex-wrap items-center gap-2"><span className="text-xs text-muted-foreground tabular-nums">{Number.isFinite(Date.parse(row.created_at))?dateFormat.format(new Date(row.created_at)):'Horário não confirmado'}</span><Badge variant="outline" className="text-[10px]">{row.status||'Não informado'}</Badge></div>
             <p className="text-sm font-medium break-words">{row.acao_legivel||actionLabel(row.acao)}</p><p className="text-xs text-muted-foreground break-words">{getAuditActorLabel(row)} · {row.modulo}</p></div><ChevronRight className="h-4 w-4 mt-1 shrink-0 text-muted-foreground"/>
         </button></li>)}</ol>}
