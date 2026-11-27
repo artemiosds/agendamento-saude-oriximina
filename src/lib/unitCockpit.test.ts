@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { careStage, elapsedMinutes, linkedRoomWaits, isBottleneck } from './unitCockpit';
+import { careStage, elapsedMinutes, linkedRoomWaits, isBottleneck, roomIllustration } from './unitCockpit';
 
 describe('monitor da unidade', () => {
   it('distingue reserva, chegada, chamada, consulta e saída', () => {
@@ -65,5 +65,29 @@ describe('demanda vinculada às salas da Planta Viva', () => {
     ], activeRooms, now);
     expect([...waits.get('sala-1')?.keys() ?? []]).toEqual(['f']);
     expect(isBottleneck(3)).toBe(false);
+  });
+});
+
+describe('ilustração dos ambientes da Planta Viva', () => {
+  it('reconhece os ambientes cadastrados sem depender de acentos ou caixa', () => {
+    expect(['GINÁSIO DE FISIOTERAPIA', 'FONOAUDIOLOGIA 2', 'Odontologia', 'Sala de Enfermagem', 'Psicologia', 'Nutrição', 'Terapia Ocupacional', 'Recepção', 'Sala de Medicação'].map(name => roomIllustration(name)))
+      .toEqual(['physio', 'speech', 'dental', 'nursing', 'psychology', 'nutrition', 'occupational', 'reception', 'procedure']);
+  });
+  it('preserva o nome explícito da sala antes da especialidade da equipe', () => {
+    expect(roomIllustration('Fonoaudiologia 2', 'Nutrição')).toBe('speech');
+    expect(roomIllustration('Triagem', 'Médico')).toBe('nursing');
+  });
+  it('usa especialidade única apenas como referência visual, com fallback neutro', () => {
+    expect(roomIllustration('Consultório 1', 'Fonoaudióloga')).toBe('speech');
+    expect(roomIllustration('Consultório 3', 'Psicóloga · Médico')).toBe('consultation');
+    expect(roomIllustration('Sala 7', '')).toBe('consultation');
+    expect(roomIllustration('Sala 7', 'Especialidade não reconhecida')).toBe('consultation');
+    expect(roomIllustration('Consultório 4', 'Fonoaudióloga · Fonoaudiólogo')).toBe('speech');
+  });
+  it('não altera as regras operacionais de classificação de setor', async () => {
+    const { roomSector } = await import('./unitCockpit');
+    expect(roomSector('Fonoaudiologia 2')).toBe('consultation');
+    expect(roomSector('Ginásio de Fisioterapia')).toBe('procedure');
+    expect(roomSector('Triagem')).toBe('triage');
   });
 });
