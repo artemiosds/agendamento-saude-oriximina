@@ -3,6 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/hooks/queries/queryKeys';
 import { buildBlockDirectory, blockSummary, filterBlockDirectory, emptyBlockFilter, validBlockDate, normalizeBlock, type BlockFilter, type BlockStatus } from '@/lib/blockDirectory';
 import BlockCalendar from '@/components/BlockCalendar';
+import BlockPrint from '@/components/BlockPrint';
+import BlockOperationalReview from '@/components/BlockOperationalReview';
 import HolidayImportDialog,{fetchHolidayBlocks} from '@/components/HolidayImportDialog';
 import {holidayCatalog,holidayEligibility,holidayPayload} from '@/lib/holidayCatalog';
 import BlockAppointmentReview from '@/components/BlockAppointmentReview';
@@ -131,11 +133,16 @@ const Bloqueios: React.FC = () => {
   const mayBeLimited=bloqueios.length>=1000||funcionarios.length>=1000||unidades.length>=1000;
   const [filter,setFilter]=useState<BlockFilter>(emptyBlockFilter);
   const [view,setView]=useState<'lista'|'calendario'>('lista');
+  const [impactId,setImpactId]=useState<string|null>(null);
   const [refreshing,setRefreshing]=useState(false);
-  useEffect(()=>{setFilter(emptyBlockFilter);setView('lista');},[scopeKey]);
+  useEffect(()=>{setFilter(emptyBlockFilter);setView('lista');setImpactId(null);},[scopeKey]);
   const entries=useMemo(()=>buildBlockDirectory(visibleBloqueios,funcionarios,unidades,todayStr,directoryReady&&funcionarios.length<1000,directoryReady&&isGlobalAdmin&&unidades.length<1000),[visibleBloqueios,funcionarios,unidades,todayStr,directoryReady,isGlobalAdmin]);
   const summary=useMemo(()=>blockSummary(entries),[entries]);
   const filtered=useMemo(()=>filterBlockDirectory(entries,filter),[entries,filter]);
+  const impact=filtered.find(e=>e.block.id===impactId);
+  const impactDraft=impact?{dataInicio:impact.block.dataInicio,dataFim:impact.block.dataFim,diaInteiro:impact.block.diaInteiro,horaInicio:impact.block.horaInicio.slice(0,5),horaFim:impact.block.horaFim.slice(0,5),scope:impact.scope,unidadeId:impact.block.unidadeId,profissionalId:impact.block.profissionalId}:null;
+  const printScope=isGlobalAdmin?'Rede municipal':unidades.find(u=>u.id===user?.unidadeId)?.nome||'Unidade autorizada';
+  const canPrint=directoryReady&&can('feriados_bloqueios','can_execute');
   const refreshDirectory=async()=>{
     if(refreshing||busy)return;
     setRefreshing(true);
@@ -585,7 +592,9 @@ const Bloqueios: React.FC = () => {
           <div className="flex flex-wrap justify-between items-center gap-2 border-t pt-2"><p role="status" className="text-xs text-muted-foreground flex-1 min-w-[10rem]">{filtered.length} de {entries.length} registros · filtros por interseção de período</p><Button type="button" size="sm" variant="outline" onClick={()=>setFilter(emptyBlockFilter)}>Limpar filtros</Button><div className="flex gap-1 border rounded-md p-0.5" role="group" aria-label="Visualização dos bloqueios"><Button type="button" size="sm" variant={view==='lista'?'default':'ghost'} aria-pressed={view==='lista'} onClick={()=>setView('lista')} className="h-7 px-2 gap-1.5"><List className="w-3.5 h-3.5"/>Lista</Button><Button type="button" size="sm" variant={view==='calendario'?'default':'ghost'} aria-pressed={view==='calendario'} onClick={()=>setView('calendario')} className="h-7 px-2 gap-1.5"><CalendarDays className="w-3.5 h-3.5"/>Calendário</Button></div></div>
         </section>
       </>}
-      {directoryReady&&view==='calendario'&&<BlockCalendar key={JSON.stringify([scopeKey,filter.year,filter.month])} entries={filtered} today={todayStr} filter={filter} limited={mayBeLimited} onList={()=>setView('lista')}/>}
+      {directoryReady&&view==='calendario'&&<BlockCalendar key={JSON.stringify([scopeKey,filter.year,filter.month])} entries={filtered} today={todayStr} filter={filter} limited={mayBeLimited} onList={()=>setView('lista')} canPrint={canPrint} printScope={printScope}/>}
+      {directoryReady&&canPrint&&<div className="flex justify-end"><BlockPrint entries={filtered} filter={filter} today={todayStr} limited={mayBeLimited} scopeLabel={printScope}/></div>}
+      {directoryReady&&impact&&impactDraft&&<Dialog open onOpenChange={open=>{if(!open)setImpactId(null);}}><DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto"><DialogHeader><DialogTitle>Impacto operacional — {impact.block.titulo}</DialogTitle></DialogHeader><BlockOperationalReview key={JSON.stringify([scopeKey,impactId,impactDraft])} draft={impactDraft} scope={scopeKey} localUnit={isGlobalAdmin?null:user?.unidadeId||''} canAgenda={can('agenda','can_view')} canTreatment={can('tratamento','can_view')} canAvailability={can('disponibilidade','can_view')}/></DialogContent></Dialog>}
       {/* Lista de bloqueios */}
       {directoryReady&&view==='lista'&&(filtered.length === 0 ? (
         <Card className="clinical-premium">
@@ -640,6 +649,7 @@ const Bloqueios: React.FC = () => {
                     <Badge variant="outline" className={cn('text-xs',status==='vigente'&&'text-emerald-700 dark:text-emerald-300',status==='invalido'&&'text-destructive')}>{statusLabels[status]}</Badge>
                   </div>
 
+                  {(can('agenda','can_view')||can('tratamento','can_view')||can('disponibilidade','can_view'))&&<Button type="button" size="sm" variant="outline" onClick={()=>setImpactId(b.id)}><ClipboardList className="w-4 h-4 mr-1"/>Impacto</Button>}
                   {canDelete(b) && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
