@@ -93,11 +93,12 @@ serve(async (req) => {
       }
 
       // Check if email already exists in funcionarios table
-      const { data: existingFunc } = await supabaseAdmin
+      const { data: existingFunc, error: existingFuncError } = await supabaseAdmin
         .from("funcionarios")
         .select("id")
         .eq("email", email.trim().toLowerCase());
 
+      if(existingFuncError)return fail("Não foi possível conferir o e-mail. Nenhum acesso foi criado.");
       if (existingFunc && existingFunc.length > 0) {
         return new Response(
           JSON.stringify({ error: "Este e-mail já está registrado no sistema." }),
@@ -106,11 +107,12 @@ serve(async (req) => {
       }
 
       // Check if usuario already exists
-      const { data: existingUser } = await supabaseAdmin
+      const { data: existingUser, error: existingUserError } = await supabaseAdmin
         .from("funcionarios")
         .select("id")
         .eq("usuario", usuario.trim());
 
+      if(existingUserError)return fail("Não foi possível conferir o usuário. Nenhum acesso foi criado.");
       if (existingUser && existingUser.length > 0) {
         return new Response(
           JSON.stringify({ error: "Este nome de usuário já está em uso." }),
@@ -173,8 +175,11 @@ serve(async (req) => {
         .single();
 
       if (dbErr) {
-        // Rollback auth user
-        await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
+        // Confirm that the insert did not commit before removing only the newly created auth account.
+        const {data:linked,error:verifyError}=await supabaseAdmin.from("funcionarios").select("id").eq("auth_user_id",authUser.user.id).maybeSingle();
+        if(verifyError||linked)return fail("Resultado do cadastro incerto. Atualize a lista antes de tentar novamente; o acesso foi preservado.");
+        const {error:rollbackError}=await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
+        if(rollbackError)return fail("Cadastro não concluído e acesso temporário não removido. Contate o administrador antes de repetir.");
         return new Response(
           JSON.stringify({ error: "Erro ao salvar funcionário: " + dbErr.message }),
           { status: 200, headers: corsHeaders }
@@ -253,12 +258,13 @@ serve(async (req) => {
       // Check for email uniqueness if email is changing
       const newEmail = dbFields.email;
       if (newEmail && newEmail !== current.email?.trim().toLowerCase()) {
-        const { data: emailCheck } = await supabaseAdmin
+        const { data: emailCheck, error: emailCheckError } = await supabaseAdmin
           .from("funcionarios")
           .select("id")
           .eq("email", newEmail)
           .neq("id", id);
 
+        if(emailCheckError)return fail("Não foi possível conferir o e-mail.");
         if (emailCheck && emailCheck.length > 0) {
           return new Response(
             JSON.stringify({ error: "Este e-mail já está em uso por outro funcionário." }),
@@ -270,12 +276,13 @@ serve(async (req) => {
       // Check for usuario uniqueness if usuario is changing
       const newUsuario = dbFields.usuario;
       if (newUsuario && newUsuario !== current.usuario) {
-        const { data: userCheck } = await supabaseAdmin
+        const { data: userCheck, error: userCheckError } = await supabaseAdmin
           .from("funcionarios")
           .select("id")
           .eq("usuario", newUsuario)
           .neq("id", id);
 
+        if(userCheckError)return fail("Não foi possível conferir o usuário.");
         if (userCheck && userCheck.length > 0) {
           return new Response(
             JSON.stringify({ error: "Este nome de usuário já está em uso." }),
@@ -284,7 +291,8 @@ serve(async (req) => {
         }
       }
 
-      // FIRST: Update auth user (source of truth) BEFORE updating DB
+      let changedAuthEmail=false,changedAuthPassword=false,createdAuthId:string|undefined;
+      // Keep the existing credential flow; handle partial failures explicitly.
       if (current.auth_user_id) {
         const authUpdate: Record<string, any> = {};
         
@@ -327,6 +335,8 @@ serve(async (req) => {
               { status: 200, headers: corsHeaders }
             );
           }
+          changedAuthEmail=!!authUpdate.email;
+          changedAuthPassword=!!authUpdate.password;
         }
       } else {
         // Funcionario has no auth link - create one if password is provided
@@ -345,7 +355,8 @@ serve(async (req) => {
             );
           }
 
-          dbFields.auth_user_id = newAuth.user.id;
+          createdAuthId=newAuth.user.id;
+          dbFields.auth_user_id = createdAuthId;
         }
       }
 
@@ -359,10 +370,20 @@ serve(async (req) => {
 
       if (dbErr) {
         console.error("DB update error:", dbErr);
-        return new Response(
-          JSON.stringify({ error: "Erro ao atualizar: " + dbErr.message }),
-          { status: 200, headers: corsHeaders }
-        );
+        if(changedAuthEmail||changedAuthPassword||createdAuthId){
+          // Do not delete or revert a linked account on an ambiguous network result.
+          const {data:latest,error:verifyError}=await supabaseAdmin.from("funcionarios").select("auth_user_id,email").eq("id",id).maybeSingle();
+          if(verifyError||!latest)return fail("Resultado da alteração incerto. Confira cadastro e credenciais antes de repetir.");
+          if(createdAuthId&&latest.auth_user_id!==createdAuthId){
+            const {data:linked,error:linkError}=await supabaseAdmin.from("funcionarios").select("id").eq("auth_user_id",createdAuthId).maybeSingle();
+            if(linkError||linked)return fail("Cadastro não confirmado. Acesso preservado para conferência administrativa.");
+            const {error:cleanupError}=await supabaseAdmin.auth.admin.deleteUser(createdAuthId);
+            if(cleanupError)return fail("Cadastro não concluído. Acesso temporário requer conferência administrativa.");
+          }
+          // An existing password cannot safely be reconstructed or rolled back.
+          if(changedAuthEmail||changedAuthPassword)return fail("Cadastro não confirmado. Credenciais podem ter sido alteradas; confira e-mail e acesso antes de tentar novamente.");
+        }
+        return fail("Erro ao atualizar: " + dbErr.message);
       }
 
       return new Response(JSON.stringify({ success: true, funcionario: func }), {
