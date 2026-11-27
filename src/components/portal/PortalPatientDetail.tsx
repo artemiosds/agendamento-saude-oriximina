@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Ban, KeyRound, UserPlus, Unlock, ShieldCheck, RefreshCw, History, Loader2 } from 'lucide-react';
 import { maskPortalCpf, maskPortalEmail } from '@/lib/portalAccessDirectory';
+import { portalAssistanceRoute } from '@/lib/portalAssistance';
+import PortalAssistedAccess from './PortalAssistedAccess';
 
 export interface PortalPatientRow { id: string; nome: string; cpf: string | null; email: string | null; auth_user_id: string | null; unidade_id: string | null }
 type Diagnosis = { state: 'unlinked' | 'verified' | 'divergent' | 'unknown'; emailValid: boolean; emailConfirmed: boolean | null; lastSignIn: string | null };
@@ -54,6 +56,7 @@ export default function PortalPatientDetail({ patient, unitId, blockedIds, setti
   const p = detail?.patient ?? patient;
   const d = detail?.diagnosis;
   const blocked = settingsReady && blockedIds.includes(p.id);
+  const assistanceRoute = portalAssistanceRoute({settingsReady,enabled,blocked,diagnosis:d,cpf:p.cpf});
   const badge = !p.auth_user_id ? 'Sem acesso' : !settingsReady ? 'Bloqueio não confirmado' : blocked ? 'Bloqueado' : enabled === false ? 'Portal desativado' : 'Vínculo não bloqueado';
   return <Sheet open onOpenChange={open=>{if(!open)onClose();}}>
     <SheetContent className="w-full sm:max-w-lg overflow-y-auto p-4 sm:p-6">
@@ -80,6 +83,8 @@ export default function PortalPatientDetail({ patient, unitId, blockedIds, setti
               <div><dt className="text-xs text-muted-foreground">Última autenticação registrada</dt><dd>{timeLabel(d.lastSignIn)}</dd><p className="text-xs text-muted-foreground">Não comprova utilização do portal ou sessão ativa.</p></div>
             </dl>}
         </section>
+        <PortalAssistedAccess key={p.id+':'+assistanceRoute+':'+refresh} route={assistanceRoute} busy={busy}
+          onCreate={()=>{if(detail && !p.auth_user_id && (assistanceRoute==='first'||assistanceRoute==='legacy')) onCredential(p,'create_access');}}/>
         <section className="rounded-xl border p-4 space-y-2">
           <h3 className="font-semibold">Gerenciamento</h3>
           <p className="text-xs text-muted-foreground">As ações reutilizam a confirmação, o motivo e a autorização já existentes.</p>

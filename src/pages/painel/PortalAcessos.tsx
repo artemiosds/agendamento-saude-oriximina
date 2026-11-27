@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import PortalPatientDetail from '@/components/portal/PortalPatientDetail';
+import PortalPublicGuide from '@/components/portal/PortalPublicGuide';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -69,6 +70,7 @@ const PortalAcessos: React.FC = () => {
   const operation = useRef(false);
 
   const [selectedPatient, setSelectedPatient] = useState<{ scope: string; patient: Pac } | null>(null);
+  const [guideOpen,setGuideOpen] = useState(false);
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<PortalFilter>('todos');
   const [page, setPage] = useState(1);
@@ -189,7 +191,7 @@ const PortalAcessos: React.FC = () => {
   useEffect(() => {
     setDlg(null); setSenha(''); setMotivo(''); setVerSenha(false);
     setConfigDlg(null); setConfigMotivo(''); setPage(1); setBusca(''); setFiltro('todos');
-    setDirectory(null); setSummary(null); setDirectoryError(null); setSelectedPatient(null);
+    setDirectory(null); setSummary(null); setDirectoryError(null); setSelectedPatient(null); setGuideOpen(false);
   }, [scope]);
 
   const closeConfig = () => { if (!operation.current) { setConfigDlg(null); setConfigMotivo(''); } };
@@ -280,6 +282,7 @@ const PortalAcessos: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">{restrito ? 'Minha unidade' : 'Rede municipal'}</Badge>
           <Badge variant="outline" className={settingsReady && confirmed?.enabled ? 'text-success' : 'text-muted-foreground'}>{!settingsReady ? 'Portal não confirmado' : confirmed?.enabled ? 'Portal habilitado' : 'Portal desativado'}</Badge>
+          <Button size="sm" variant="outline" disabled={!authorized || salvando} onClick={()=>setGuideOpen(true)}>Guia do portal</Button>
           <Button size="sm" variant="outline" disabled={!authorized || salvando || settingsLoading} onClick={() => { setRevision(n => n + 1); void readSettings(); }}><RefreshCw className="h-4 w-4 mr-1" />Atualizar</Button>
         </div>
       </header>
@@ -407,6 +410,12 @@ const PortalAcessos: React.FC = () => {
         </TabsContent>
       </Tabs>
 
+      <Dialog open={guideOpen && authorized} onOpenChange={setGuideOpen}>
+        <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Guia de acesso ao Portal do Paciente</DialogTitle><DialogDescription>Material de orientação para atendimento assistido. Não contém informações de pacientes.</DialogDescription></DialogHeader>
+          {guideOpen && authorized && <PortalPublicGuide/>}
+        </DialogContent>
+      </Dialog>
       {authorized && selectedPatient?.scope===scope && <PortalPatientDetail key={scope+':'+selectedPatient.patient.id} patient={selectedPatient.patient}
         unitId={unitId} blockedIds={bloqueados} settingsReady={settingsReady && !settingsLoading} enabled={confirmed?.enabled} busy={salvando}
         onClose={()=>setSelectedPatient(null)}

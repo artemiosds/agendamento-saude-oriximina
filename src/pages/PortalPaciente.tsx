@@ -1,4 +1,5 @@
 import { patientCpfError } from '@/lib/patientCpf';
+import { PORTAL_GUIDE_SECURITY } from '@/lib/portalAssistance';
 import { isDiagnosticAppointment, getEffectiveDiagnosticStatus, getDiagnosticStatusLabel } from '@/lib/diagnosticExams';
 import React, { useState, useEffect, useRef } from 'react';
 import { parsePortalAccess, mergePortalQueue, type PortalQueueEntry } from '@/lib/portalPatientSecurity';
@@ -537,7 +538,7 @@ const PortalPaciente: React.FC = () => {
                     <User className="w-7 h-7 text-primary-foreground" />
                   </div>
                   <h2 className="text-lg font-bold font-display text-foreground">Entrar no Portal</h2>
-                  <p className="text-sm text-muted-foreground">Use o e-mail e senha criados no agendamento</p>
+                  <p className="text-sm text-muted-foreground">Use seu e-mail cadastrado e sua senha</p>
                 </div>
                 <div><Label>E-mail</Label><Input type="email" value={loginForm.email} onChange={e => setLoginForm(p => ({ ...p, email: e.target.value }))} placeholder="seu@email.com" /></div>
                 <div>
@@ -560,6 +561,15 @@ const PortalPaciente: React.FC = () => {
                 <Button type="button" variant="outline" className="w-full" onClick={() => { setFaStep('id'); setFaErro(''); }}>
                   Primeiro acesso? Ative sua conta
                 </Button>
+                <details className="rounded-lg border border-border p-3 text-sm">
+                  <summary className="cursor-pointer font-semibold text-foreground">Precisa de ajuda para acessar?</summary>
+                  <div className="mt-3 space-y-3 leading-relaxed">
+                    <p><strong>Primeiro acesso:</strong> use CPF e data de nascimento e confira o link recebido no e-mail cadastrado, inclusive a caixa de spam.</p>
+                    <p><strong>Esqueceu a senha?</strong> solicite um link pelo botão Esqueci minha senha.</p>
+                    <p><strong>Sem CPF, e-mail acessível ou internet?</strong> procure sua unidade de saúde com um documento de identificação. A equipe poderá orientar a atualização da ficha existente. O atendimento presencial continua disponível.</p>
+                    <p className="text-muted-foreground">{PORTAL_GUIDE_SECURITY}</p>
+                  </div>
+                </details>
                 <p className="text-xs text-center text-muted-foreground">
                   Ainda não tem cadastro? <Link to="/agendar" className="text-primary underline">Agende uma consulta</Link> para criar seu acesso.
                 </p>
