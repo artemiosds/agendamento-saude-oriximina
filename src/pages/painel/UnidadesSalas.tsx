@@ -1,15 +1,18 @@
 import { avisarVideoAtualizado } from '@/lib/painelChamadas';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/hooks/queries/queryKeys';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Building2, DoorOpen, Pencil, Trash2, Tv, Copy, Video, X, Upload, Loader2 } from 'lucide-react';
-import { linkPainelTV } from '@/lib/painelVideo';
+import { Plus, Building2, DoorOpen, Pencil, Tv, Copy, Video, X, Upload, Loader2 } from 'lucide-react';
+import { linkPainelTV, videoSeguro } from '@/lib/painelVideo';
 import { toast } from 'sonner';
 import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
 import { useCustomFields } from '@/hooks/useCustomFields';
@@ -25,8 +28,32 @@ import { useOperationalUnitScope } from '@/hooks/useOperationalUnitScope';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 
 const UnidadesSalas: React.FC = () => {
-  const { unidades, salas, addUnidade, updateUnidade, deleteUnidade, addSala, updateSala, deleteSala } = useOperacional();
-  const { isGlobalAdmin } = useUnidadeFilter();
+  const { unidades, salas } = useOperacional();
+  const { isGlobalAdmin, userUnidadeId } = useUnidadeFilter();
+  const {user}=useAuth();
+  const {can,loading:permissionsLoading}=usePermissions();
+  const queryClient=useQueryClient();
+  const scopeKey=JSON.stringify([user?.id,userUnidadeId,isGlobalAdmin]);
+  const scopeRef=useRef(scopeKey);scopeRef.current=scopeKey;
+  const authorizedUnit=(id:string)=>isGlobalAdmin||!!userUnidadeId&&id===userUnidadeId;
+  const canWrite=(action:'can_create'|'can_edit',id:string)=>!permissionsLoading&&!!user?.id&&can('unidades_salas','can_view')&&can('unidades_salas',action)&&authorizedUnit(id);
+  const [saving,setSaving]=useState(false);
+  const [formLoading,setFormLoading]=useState(false);
+  const [formError,setFormError]=useState('');
+  const [configState,setConfigState]=useState<'loading'|'ready'|'error'>('loading');
+  const [configReload,setConfigReload]=useState(0);
+  const busy=useRef(false);
+  const formSequence=useRef(0);
+  const original=useRef<Record<string,any>>({});
+  const readError=(e:unknown)=>typeof e==='object'&&e!==null&&'message' in e?String(e.message):'Falha ao confirmar a operação.';
+  const allowedUnits=unidades.filter(u=>authorizedUnit(u.id));
+  const unitScopeKey=allowedUnits.map(u=>u.id).sort().join('|');
+  const saveStructure=async(action:string,id:string,unit:string,data:Record<string,unknown>,expected:Record<string,unknown>)=>{
+    const result=await supabase.rpc('salvar_estrutura_unidade' as any,{p_action:action,p_id:id,p_unit:unit,p_data:data,p_expected:expected} as any);
+    if(result.error)throw result.error;
+    if(result.data!==id)throw new Error('O servidor não confirmou a gravação. Atualize a página antes de repetir.');
+  };
+  const refreshStructure=async()=>{setConfigReload(v=>v+1);await Promise.allSettled([queryClient.invalidateQueries({queryKey:queryKeys.unidades.all}),queryClient.invalidateQueries({queryKey:queryKeys.salas.all})]);};
   const { unitId, setUnitId } = useOperationalUnitScope(unidades, isGlobalAdmin);
   const { resolved: customConfig } = useCustomFields('unidade');
   const [customData, setCustomData] = useState<Record<string, any>>({});
@@ -38,17 +65,19 @@ const UnidadesSalas: React.FC = () => {
   const [roomForm, setRoomForm] = useState({ nome: '', unidadeId: '', config: { ...DEFAULT_DIAGNOSTIC_ROOM_CONFIG } as DiagnosticRoomConfig });
   const [roomConfigs, setRoomConfigs] = useState<Record<string, DiagnosticRoomConfig>>({});
   const [roomFilter, setRoomFilter] = useState<'todas' | 'consultorios' | 'aparelhos'>('todas');
-  const visibleUnits = isGlobalAdmin && unitId !== 'all' ? unidades.filter(unit => unit.id === unitId) : unidades;
-  const visibleRooms = isGlobalAdmin && unitId !== 'all' ? salas.filter(room => room.unidadeId === unitId) : salas;
-  const filteredRooms = visibleRooms.filter(room => roomFilter === 'todas' || (roomFilter === 'aparelhos' ? !!roomConfigs[room.id] : !roomConfigs[room.id]));
+  const visibleUnits = allowedUnits.filter(unit => unitId === 'all' || unit.id === unitId);
+  const visibleRooms = salas.filter(room=>authorizedUnit(room.unidadeId)&&(unitId==='all'||room.unidadeId===unitId));
+  const filteredRooms = visibleRooms.filter(room => roomFilter === 'todas' || (configState==='ready'&&(roomFilter === 'aparelhos' ? !!roomConfigs[room.id] : !roomConfigs[room.id])));
 
   // Carrega as configurações persistidas por unidade para identificar os aparelhos nos cartões.
   useEffect(() => {
     let cancelled = false;
     const loadRoomConfigs = async () => {
-      if (unidades.length === 0) { setRoomConfigs({}); return; }
-      const { data, error } = await supabase.from('unidades' as any).select('id,custom_data');
-      if (error || cancelled) return;
+      setConfigState('loading');
+      if (allowedUnits.length === 0) { setRoomConfigs({});setConfigState('ready'); return; }
+      const { data, error } = await supabase.from('unidades' as any).select('id,custom_data').in('id',allowedUnits.map(u=>u.id));
+      if(cancelled)return;
+      if(error||!Array.isArray(data)||data.length!==allowedUnits.length){setRoomConfigs({});setConfigState('error');return;}
       const next: Record<string, DiagnosticRoomConfig> = {};
       (data || []).forEach((unit: any) => {
         const configuredRooms = unit.custom_data?.salas_exames;
@@ -59,14 +88,16 @@ const UnidadesSalas: React.FC = () => {
           }
         });
       });
-      if (!cancelled) setRoomConfigs(next);
+      if (!cancelled) {setRoomConfigs(next);setConfigState('ready');}
     };
     void loadRoomConfigs();
     return () => { cancelled = true; };
-  }, [unidades]);
+  }, [unitScopeKey,scopeKey,configReload]);
 
   const [enviandoLogo, setEnviandoLogo] = useState(false);
   const enviarLogo = async (file: File) => {
+    if(busy.current||formLoading||formError||!canWrite(editUnitId?'can_edit':'can_create',editUnitId||''))return;
+    const seq=formSequence.current,scope=scopeKey;
     if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { toast.error('Use PNG, JPG ou WEBP.'); return; }
     if (file.size > 3 * 1024 * 1024) { toast.error('A imagem deve ter até 3 MB.'); return; }
     setEnviandoLogo(true);
@@ -76,6 +107,7 @@ const UnidadesSalas: React.FC = () => {
       const { error } = await supabase.storage.from('document-logos').upload(path, file, { upsert: true, contentType: file.type });
       if (error) throw error;
       const { data } = supabase.storage.from('document-logos').getPublicUrl(path);
+      if(seq!==formSequence.current||scopeRef.current!==scope)return;
       setCustomData(p => ({ ...p, logo_url: data.publicUrl }));
       toast.success('Logo carregada. Clique em Salvar para gravar.');
     } catch (e: any) {
@@ -85,102 +117,75 @@ const UnidadesSalas: React.FC = () => {
 
   const onlyDigits = (v: string) => (v || '').replace(/\D/g, '').slice(0, 7);
 
-  const openNewUnit = () => { setEditUnitId(null); setUnitForm({ nome: '', nomeExibicao: '', endereco: '', telefone: '', whatsapp: '', cnes: '' }); setCustomData({}); setUnitDialog(true); };
-  const openEditUnit = async (u: typeof unidades[0]) => {
-    setEditUnitId(u.id);
-    setUnitForm({ nome: u.nome, nomeExibicao: u.nomeExibicao || '', endereco: u.endereco, telefone: u.telefone, whatsapp: u.whatsapp, cnes: '' });
-    setCustomData({});
-    setUnitDialog(true);
-    // Load existing custom_data.cnes from DB
-    try {
-      const { data } = await supabase.from('unidades' as any).select('custom_data').eq('id', u.id).maybeSingle();
-      const cd = ((data as any)?.custom_data as any) || {};
-      if (cd.cnes) setUnitForm(p => ({ ...p, cnes: onlyDigits(String(cd.cnes)) }));
-      setCustomData(cd);
-    } catch (e) { /* ignore */ }
+  const startForm=()=>{if(busy.current||enviandoLogo||enviando)return false;formSequence.current++;original.current={};setFormError('');setFormLoading(false);return true;};
+  const openNewUnit=()=>{if(!isGlobalAdmin||!canWrite('can_create','')||!startForm())return;setEditUnitId(null);setUnitForm({nome:'',nomeExibicao:'',endereco:'',telefone:'',whatsapp:'',cnes:''});setCustomData({});setUnitDialog(true);};
+  const openEditUnit=async(u:typeof unidades[0])=>{
+    if(!canWrite('can_edit',u.id)||!startForm())return;
+    const seq=formSequence.current,scope=scopeKey;
+    setEditUnitId(u.id);setUnitDialog(true);setFormLoading(true);setCustomData({});
+    setUnitForm({nome:u.nome,nomeExibicao:u.nomeExibicao||'',endereco:u.endereco,telefone:u.telefone,whatsapp:u.whatsapp,cnes:''});
+    try{
+      const {data,error}=await supabase.from('unidades').select('id,nome,nome_exibicao,endereco,telefone,whatsapp,custom_data').eq('id',u.id).single();
+      if(seq!==formSequence.current||scopeRef.current!==scope)return;
+      if(error||!data)throw error||new Error('Unidade não encontrada.');
+      const cd=(data.custom_data||{}) as Record<string,any>;
+      original.current={...data,custom_data:cd};
+      setUnitForm({nome:data.nome,nomeExibicao:data.nome_exibicao||'',endereco:data.endereco,telefone:data.telefone,whatsapp:data.whatsapp,cnes:onlyDigits(String(cd.cnes||''))});
+      setCustomData({...cd});
+    }catch(e){if(seq===formSequence.current&&scopeRef.current===scope)setFormError(readError(e));}
+    finally{if(seq===formSequence.current&&scopeRef.current===scope)setFormLoading(false);}
   };
-  const openNewRoom = (finalidade: DiagnosticRoomConfig['finalidade'] = 'consultorio_clinico') => {
-    setEditRoomId(null);
-    setRoomForm({
-      nome: '',
-      unidadeId: isGlobalAdmin && unitId !== 'all' ? unitId : '',
-      config: { ...DEFAULT_DIAGNOSTIC_ROOM_CONFIG, finalidade },
-    });
-    setRoomDialog(true);
+  const openNewRoom=(finalidade:DiagnosticRoomConfig['finalidade']='consultorio_clinico')=>{
+    const selected=unitId!=='all'?unitId:allowedUnits.length===1?allowedUnits[0].id:'';
+    if(!allowedUnits.some(u=>u.ativo&&canWrite('can_create',u.id))||!startForm())return;
+    setEditRoomId(null);setRoomForm({nome:'',unidadeId:selected,config:{...DEFAULT_DIAGNOSTIC_ROOM_CONFIG,finalidade}});setRoomDialog(true);
   };
-  const openEditRoom = async (s: typeof salas[0]) => {
-    setEditRoomId(s.id);
-    setRoomForm({ nome: s.nome, unidadeId: s.unidadeId, config: { ...DEFAULT_DIAGNOSTIC_ROOM_CONFIG } });
-    setRoomDialog(true);
-    const { data } = await supabase.from('unidades' as any).select('custom_data').eq('id', s.unidadeId).maybeSingle();
-    const custom = ((data as any)?.custom_data || {}) as Record<string, any>;
-    setRoomForm(p => ({ ...p, config: normalizeDiagnosticRoomConfig(custom.salas_exames?.[s.id]) }));
+  const openEditRoom=async(s:typeof salas[0])=>{
+    if(!canWrite('can_edit',s.unidadeId)||!startForm())return;
+    const seq=formSequence.current,scope=scopeKey;
+    setEditRoomId(s.id);setRoomForm({nome:s.nome,unidadeId:s.unidadeId,config:{...DEFAULT_DIAGNOSTIC_ROOM_CONFIG}});setRoomDialog(true);setFormLoading(true);
+    try{
+      const [unit,room]=await Promise.all([supabase.from('unidades').select('custom_data').eq('id',s.unidadeId).single(),supabase.from('salas').select('nome,unidade_id').eq('id',s.id).single()]);
+      if(seq!==formSequence.current||scopeRef.current!==scope)return;
+      if(unit.error||room.error||!unit.data||!room.data||room.data.unidade_id!==s.unidadeId)throw new Error('Não foi possível confirmar os dados da sala.');
+      const cd=(unit.data.custom_data||{}) as Record<string,any>;
+      original.current={nome:room.data.nome,...(cd.salas_exames?.[s.id]!==undefined?{config:cd.salas_exames[s.id]}:{})};
+      setRoomForm({nome:room.data.nome,unidadeId:s.unidadeId,config:normalizeDiagnosticRoomConfig(cd.salas_exames?.[s.id])});
+    }catch(e){if(seq===formSequence.current&&scopeRef.current===scope)setFormError(readError(e));}
+    finally{if(seq===formSequence.current&&scopeRef.current===scope)setFormLoading(false);}
   };
-
-  const handleSaveUnit = async () => {
-    if (!unitForm.nome) return;
-    const { cnes, ...baseForm } = unitForm;
-    const cnesClean = onlyDigits(cnes);
-    if (cnesClean && cnesClean.length !== 7) {
-      toast.error('CNES deve conter 7 dígitos.');
-      return;
-    }
-    let unitId = editUnitId;
-    if (editUnitId) {
-      updateUnidade(editUnitId, baseForm);
-    } else {
-      unitId = `un${Date.now()}`;
-      addUnidade({ id: unitId, ...baseForm, ativo: true });
-    }
-    // Persist CNES into custom_data (used by BPA-I generator)
-    try {
-      const existing = { ...(customData || {}) };
-      if (cnesClean) existing.cnes = cnesClean;
-      else delete existing.cnes;
-      await supabase.from('unidades' as any).update({ custom_data: existing }).eq('id', unitId as string);
-    } catch (e) {
-      console.error('Erro ao salvar CNES:', e);
-    }
-    toast.success(editUnitId ? 'Unidade atualizada!' : 'Unidade criada!');
-    setUnitDialog(false);
+  const handleSaveUnit=async()=>{
+    if(busy.current||formLoading||formError||enviandoLogo||!unitForm.nome.trim()||!canWrite(editUnitId?'can_edit':'can_create',editUnitId||'')||(!editUnitId&&!isGlobalAdmin))return;
+    const cnes=onlyDigits(unitForm.cnes);
+    if(cnes&&cnes.length!==7){toast.error('CNES deve conter 7 dígitos.');return;}
+    const initial=original.current.custom_data||{};
+    const reserved=new Set(['salas_exames','video_urls','video_url','cnes','logo_url','__proto__','constructor','prototype']);
+    const keys=[...new Set(['logo_url',...customConfig.fields.filter(f=>f.ativo&&!reserved.has(f.nome)).map(f=>f.nome)])];
+    const patch:Record<string,unknown>={};
+    for(const key of keys)if(JSON.stringify(customData[key])!==JSON.stringify(initial[key]))patch[key]=customData[key]??null;
+    if(cnes!==String(initial.cnes||''))patch.cnes=cnes||null;
+    const data={nome:unitForm.nome.trim(),nome_exibicao:unitForm.nomeExibicao,endereco:unitForm.endereco,telefone:unitForm.telefone,whatsapp:unitForm.whatsapp};
+    const id=editUnitId||'un'+crypto.randomUUID(),scope=scopeKey;
+    busy.current=true;setSaving(true);
+    try{
+      await saveStructure(editUnitId?'unit_edit':'unit_create',id,'',{...data,...(editUnitId?{custom_patch:patch}:{custom_data:Object.fromEntries(Object.entries(patch).filter(([,v])=>v!==null))})},original.current);
+      await refreshStructure();
+      if(scopeRef.current===scope){toast.success(editUnitId?'Unidade atualizada!':'Unidade criada!');setUnitDialog(false);}
+    }catch(e){if(scopeRef.current===scope)toast.error(readError(e));}
+    finally{busy.current=false;setSaving(false);}
   };
-
-  const handleSaveRoom = async () => {
-    if (!roomForm.nome.trim() || !roomForm.unidadeId) return;
-    if (roomForm.config.finalidade === 'aparelho_diagnostico' && (!roomForm.config.exames.length || roomForm.config.exames.some(exam => !exam.tipoExame.trim()))) {
-      toast.error('Selecione pelo menos um exame e informe o nome dos exames personalizados.');
-      return;
-    }
-    const roomId = editRoomId || `s${Date.now()}`;
-    const { data: unitRow, error: readError } = await supabase.from('unidades' as any).select('custom_data').eq('id', roomForm.unidadeId).maybeSingle();
-    if (readError || !unitRow) { toast.error('Não foi possível carregar a configuração da unidade.'); return; }
-    const custom = { ...(((unitRow as any).custom_data || {}) as Record<string, any>) };
-    const roomConfigs = { ...(custom.salas_exames || {}) };
-    if (roomForm.config.finalidade === 'aparelho_diagnostico') {
-      roomConfigs[roomId] = normalizeDiagnosticRoomConfig(roomForm.config);
-    } else {
-      delete roomConfigs[roomId];
-    }
-    custom.salas_exames = roomConfigs;
-    const { error: saveConfigError } = await supabase.from('unidades' as any).update({ custom_data: custom }).eq('id', roomForm.unidadeId);
-    if (saveConfigError) { toast.error('Não foi possível salvar a configuração da sala.'); return; }
-    if (editRoomId) {
-      await updateSala(editRoomId, { nome: roomForm.nome.trim(), unidadeId: roomForm.unidadeId });
-      toast.success('Sala atualizada!');
-    } else {
-      await addSala({ id: roomId, nome: roomForm.nome.trim(), unidadeId: roomForm.unidadeId, ativo: true });
-      toast.success('Sala criada!');
-    }
-    setRoomConfigs(prev => {
-      const next = { ...prev };
-      if (roomForm.config.finalidade === 'aparelho_diagnostico') {
-        next[roomId] = normalizeDiagnosticRoomConfig(roomForm.config);
-      } else {
-        delete next[roomId];
-      }
-      return next;
-    });
-    setRoomDialog(false);
+  const handleSaveRoom=async()=>{
+    if(busy.current||formLoading||formError||!roomForm.nome.trim()||!roomForm.unidadeId||!canWrite(editRoomId?'can_edit':'can_create',roomForm.unidadeId)||!allowedUnits.some(u=>u.id===roomForm.unidadeId&&u.ativo))return;
+    if(editRoomId&&salas.find(s=>s.id===editRoomId)?.unidadeId!==roomForm.unidadeId){toast.error('A transferência de sala exige revisão dos vínculos.');return;}
+    if(roomForm.config.finalidade==='aparelho_diagnostico'&&(!roomForm.config.exames.length||roomForm.config.exames.some(exam=>!exam.tipoExame.trim()))){toast.error('Selecione pelo menos um exame e informe o nome dos exames personalizados.');return;}
+    const id=editRoomId||'s'+crypto.randomUUID(),scope=scopeKey;
+    busy.current=true;setSaving(true);
+    try{
+      await saveStructure(editRoomId?'room_edit':'room_create',id,roomForm.unidadeId,{nome:roomForm.nome.trim(),finalidade:roomForm.config.finalidade,config:normalizeDiagnosticRoomConfig(roomForm.config)},original.current);
+      await refreshStructure();
+      if(scopeRef.current===scope){toast.success(editRoomId?'Sala atualizada!':'Sala criada!');setRoomDialog(false);}
+    }catch(e){if(scopeRef.current===scope)toast.error(readError(e));}
+    finally{busy.current=false;setSaving(false);}
   };
 
   const [videoUnit, setVideoUnit] = useState<{ id: string; nome: string } | null>(null);
@@ -189,7 +194,7 @@ const UnidadesSalas: React.FC = () => {
   const addUrl = () => {
     const v = videoUrl.trim();
     if (!v) return;
-    if (!/^https:\/\//i.test(v)) { toast.error('Informe um endereço https://'); return; }
+    if (!videoSeguro(v)) { toast.error('Informe um endereço https://'); return; }
     setVideoList(l => [...l, v]); setVideoUrl('');
   };
   const moverVideo = (i: number, d: number) => setVideoList(l => {
@@ -205,15 +210,24 @@ const UnidadesSalas: React.FC = () => {
     try { await navigator.clipboard.writeText(linkTV(id)); toast.success('Link da TV copiado!'); }
     catch { toast.error('Copie manualmente: ' + linkTV(id)); }
   };
-  const abrirVideo = async (id: string, nome: string) => {
-    setVideoUnit({ id, nome }); setVideoUrl(''); setVideoList([]);
-    const { data } = await supabase.from('unidades' as any).select('custom_data').eq('id', id).maybeSingle();
-    const cd = ((data as any)?.custom_data || {});
-    const lista: string[] = Array.isArray(cd.video_urls) ? cd.video_urls.filter((x: any) => typeof x === 'string' && x) : (cd.video_url ? [String(cd.video_url)] : []);
-    setVideoList(lista);
+  const abrirVideo=async(id:string,nome:string)=>{
+    if(!canWrite('can_edit',id)||!startForm())return;
+    const seq=formSequence.current,scope=scopeKey;
+    setVideoUnit({id,nome});setVideoUrl('');setVideoList([]);setFormLoading(true);
+    try{
+      const {data,error}=await supabase.from('unidades').select('custom_data').eq('id',id).single();
+      if(seq!==formSequence.current||scopeRef.current!==scope)return;
+      if(error||!data)throw error||new Error('Configuração não encontrada.');
+      const cd=(data.custom_data||{}) as Record<string,any>;
+      original.current=cd;
+      const list=Array.isArray(cd.video_urls)?cd.video_urls.filter((x:unknown)=>typeof x==='string'&&x):cd.video_url?[String(cd.video_url)]:[];
+      setVideoList(list);
+    }catch(e){if(seq===formSequence.current&&scopeRef.current===scope)setFormError(readError(e));}
+    finally{if(seq===formSequence.current&&scopeRef.current===scope)setFormLoading(false);}
   };
   const enviarVideo = async (file: File) => {
-    if (!videoUnit) return;
+    if (!videoUnit||busy.current||formLoading||formError||!canWrite('can_edit',videoUnit.id)) return;
+    const seq=formSequence.current,scope=scopeKey;
     if (file.type !== 'video/mp4') { toast.error('Selecione um arquivo MP4.'); return; }
     if (file.size > 100 * 1024 * 1024) { toast.error('O vídeo deve ter até 100 MB.'); return; }
     setEnviando(true);
@@ -223,26 +237,29 @@ const UnidadesSalas: React.FC = () => {
       if (error) throw error;
       const { data, error: e2 } = await supabase.storage.from('painel-videos').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
       if (e2 || !data) throw e2;
+      if(seq!==formSequence.current||scopeRef.current!==scope)return;
       setVideoList(l => [...l, data.signedUrl]);
       toast.success('Vídeo adicionado à lista. Clique em Salvar Configuração.');
     } catch (e: any) {
       toast.error('Falha no envio: ' + (e?.message || 'erro'));
     } finally { setEnviando(false); }
   };
-  const salvarVideo = async () => {
-    if (!videoUnit) return;
-    const pend = videoUrl.trim();
-    if (pend && !/^https:\/\//i.test(pend)) { toast.error('Informe um endereço https://'); return; }
-    const lista = pend ? [...videoList, pend] : videoList;
-    const { data } = await supabase.from('unidades' as any).select('custom_data').eq('id', videoUnit.id).maybeSingle();
-    const cd = { ...(((data as any)?.custom_data) || {}) };
-    cd.video_urls = lista;
-    if (lista.length) cd.video_url = lista[0]; else delete cd.video_url;
-    const { error } = await supabase.from('unidades' as any).update({ custom_data: cd }).eq('id', videoUnit.id);
-    if (error) { toast.error('Não foi possível salvar.'); return; }
-    toast.success('Vídeo salvo! A TV atualiza sozinha.'); void avisarVideoAtualizado(videoUnit.id);
-    setVideoUnit(null);
+  const salvarVideo=async()=>{
+    if(!videoUnit||busy.current||formLoading||formError||enviando||!canWrite('can_edit',videoUnit.id))return;
+    const pend=videoUrl.trim(),lista=pend?[...videoList,pend]:videoList;
+    if(lista.some(v=>!videoSeguro(v))){toast.error('Revise os endereços HTTPS dos vídeos.');return;}
+    const id=videoUnit.id,scope=scopeKey;
+    busy.current=true;setSaving(true);
+    try{
+      await saveStructure('video',id,'',{video_urls:lista},original.current);
+      await refreshStructure();
+      void avisarVideoAtualizado(id);
+      if(scopeRef.current===scope){toast.success('Vídeo salvo! A TV atualiza sozinha.');setVideoUnit(null);}
+    }catch(e){if(scopeRef.current===scope)toast.error(readError(e));}
+    finally{busy.current=false;setSaving(false);}
   };
+  const closeForm=(close:()=>void)=>{if(busy.current||enviando||enviandoLogo)return;formSequence.current++;setFormLoading(false);setFormError('');close();};
+  useEffect(()=>{formSequence.current++;setUnitDialog(false);setRoomDialog(false);setVideoUnit(null);setFormError('');setFormLoading(false);},[scopeKey]);
 
   const renderRoomCard = (room: typeof salas[number], showUnitName = true) => {
     const unit = unidades.find(item => item.id === room.unidadeId);
@@ -260,18 +277,12 @@ const UnidadesSalas: React.FC = () => {
                     <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-800">Aparelho / Exames: {diagnosticConfig.exames.length}</span>
                     <span className="text-xs text-muted-foreground">{diagnosticConfig.exames.map(exam => exam.tipoExame).join(', ')}</span>
                   </>
-                ) : <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">Consultório</span>}
+                ) : <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">{configState==='ready'?'Consultório':'Finalidade não confirmada'}</span>}
               </div>
             </div>
             <div className="flex shrink-0 gap-1">
-              <Button size="icon" variant="ghost" aria-label={`Editar sala ${room.nome}`} onClick={() => openEditRoom(room)}><Pencil className="w-4 h-4" /></Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild><Button size="icon" variant="ghost" aria-label={`Excluir sala ${room.nome}`} className="text-destructive"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader><AlertDialogTitle>Excluir sala?</AlertDialogTitle><AlertDialogDescription>Tem certeza?</AlertDialogDescription></AlertDialogHeader>
-                  <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { deleteSala(room.id); toast.success('Sala excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              {canWrite('can_edit',room.unidadeId)&&<Button size="icon" variant="ghost" disabled={saving} aria-label={`Editar sala ${room.nome}`} onClick={() => openEditRoom(room)}><Pencil className="w-4 h-4" /></Button>}
+
             </div>
           </div>
         </CardContent>
@@ -284,36 +295,40 @@ const UnidadesSalas: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold font-display text-foreground flex items-center gap-2"><DoorOpen className="w-5 h-5" />Salas / Consultórios</h2>
-          <p className="text-xs text-muted-foreground mt-1">{visibleRooms.length} sala(s) cadastrada(s) • {visibleRooms.filter(room => !!roomConfigs[room.id]).length} aparelho(s) diagnóstico(s)</p>
+          <p className="text-xs text-muted-foreground mt-1">{visibleRooms.length} sala(s) cadastrada(s) • {configState==='ready'?visibleRooms.filter(room => !!roomConfigs[room.id]).length:'—'} aparelho(s) diagnóstico(s)</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={() => openNewRoom('aparelho_diagnostico')} className="border-violet-300 text-violet-700 hover:bg-violet-50"><Plus className="w-4 h-4 mr-1" />Novo Aparelho</Button>
-          <Button size="sm" onClick={() => openNewRoom('consultorio_clinico')} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nova Sala</Button>
-        </div>
+        {allowedUnits.some(u=>u.ativo&&canWrite('can_create',u.id))&&<div className="flex flex-wrap gap-2">
+          <Button size="sm" disabled={saving} variant="outline" onClick={() => openNewRoom('aparelho_diagnostico')} className="border-violet-300 text-violet-700 hover:bg-violet-50"><Plus className="w-4 h-4 mr-1" />Novo Aparelho</Button>
+          <Button size="sm" disabled={saving} onClick={() => openNewRoom('consultorio_clinico')} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nova Sala</Button>
+        </div>}
       </div>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar salas por finalidade">
         <Button size="sm" variant={roomFilter === 'todas' ? 'default' : 'outline'} aria-pressed={roomFilter === 'todas'} onClick={() => setRoomFilter('todas')}>Todas ({visibleRooms.length})</Button>
-        <Button size="sm" variant={roomFilter === 'consultorios' ? 'default' : 'outline'} aria-pressed={roomFilter === 'consultorios'} onClick={() => setRoomFilter('consultorios')}>Consultórios ({visibleRooms.filter(room => !roomConfigs[room.id]).length})</Button>
-        <Button size="sm" variant={roomFilter === 'aparelhos' ? 'default' : 'outline'} aria-pressed={roomFilter === 'aparelhos'} onClick={() => setRoomFilter('aparelhos')}>Aparelhos / Exames ({visibleRooms.filter(room => !!roomConfigs[room.id]).length})</Button>
+        <Button size="sm" variant={roomFilter === 'consultorios' ? 'default' : 'outline'} aria-pressed={roomFilter === 'consultorios'} disabled={configState!=='ready'} onClick={() => setRoomFilter('consultorios')}>Consultórios ({configState==='ready'?visibleRooms.filter(room => !roomConfigs[room.id]).length:'—'})</Button>
+        <Button size="sm" variant={roomFilter === 'aparelhos' ? 'default' : 'outline'} aria-pressed={roomFilter === 'aparelhos'} disabled={configState!=='ready'} onClick={() => setRoomFilter('aparelhos')}>Aparelhos / Exames ({configState==='ready'?visibleRooms.filter(room => !!roomConfigs[room.id]).length:'—'})</Button>
       </div>
     </div>
   );
 
+  const blocked=saving||formLoading||!!formError;
+  const formStatus=formLoading?<p role="status" className="text-sm text-muted-foreground">Carregando configuração existente...</p>:formError?<p role="alert" className="text-sm text-destructive">{formError} Feche e reabra o formulário antes de salvar.</p>:null;
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold font-display text-foreground">Unidades e Salas</h1>
         <p className="text-muted-foreground text-sm">Gerenciar estrutura física</p>
+        <p className="text-xs text-muted-foreground mt-1">Exclusões definitivas e transferências de salas estão protegidas para preservar os vínculos históricos.</p>
       </div>
 
-      {isGlobalAdmin && <UnitScopeNavigator units={unidades} value={unitId} onChange={setUnitId} />}
+      {configState==='error'&&<div role="alert" className="flex items-center gap-2 text-sm text-destructive">Não foi possível confirmar as configurações de exames.<Button size="sm" variant="outline" onClick={()=>setConfigReload(v=>v+1)}>Tentar novamente</Button></div>}
+      {isGlobalAdmin && <UnitScopeNavigator units={allowedUnits} value={unitId} onChange={setUnitId} />}
       {isGlobalAdmin && roomControls}
 
       {/* Unidades */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold font-display text-foreground flex items-center gap-2"><Building2 className="w-5 h-5" />Unidades</h2>
-          <Button size="sm" onClick={openNewUnit} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nova Unidade</Button>
+          {isGlobalAdmin&&canWrite('can_create','')&&<Button size="sm" disabled={saving} onClick={openNewUnit} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nova Unidade</Button>}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {visibleUnits.map(u => (
@@ -329,7 +344,7 @@ const UnidadesSalas: React.FC = () => {
                     <div className="flex flex-wrap gap-2 mt-3">
                       <Button size="sm" variant="outline" onClick={() => window.open(linkTV(u.id), '_blank')}><Tv className="w-4 h-4 mr-1" />Painel</Button>
                       <Button size="sm" variant="outline" onClick={() => copiarLink(u.id)}><Copy className="w-4 h-4 mr-1" />Link TV</Button>
-                      <Button size="sm" variant="outline" onClick={() => abrirVideo(u.id, u.nome)}><Video className="w-4 h-4 mr-1" />Vídeo</Button>
+                      {canWrite('can_edit',u.id)&&<Button size="sm" variant="outline" disabled={saving} onClick={() => abrirVideo(u.id, u.nome)}><Video className="w-4 h-4 mr-1" />Vídeo</Button>}
                       {isGlobalAdmin && (
                         <>
                           <Button size="sm" variant="outline" asChild><Link to={`/painel/funcionarios?unidade=${encodeURIComponent(u.id)}`}>Ver equipe</Link></Button>
@@ -339,14 +354,8 @@ const UnidadesSalas: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" onClick={() => openEditUnit(u)}><Pencil className="w-4 h-4" /></Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader><AlertDialogTitle>Excluir unidade?</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja excluir {u.nome}?</AlertDialogDescription></AlertDialogHeader>
-                        <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { deleteUnidade(u.id); toast.success('Unidade excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    {canWrite('can_edit',u.id)&&<Button size="icon" variant="ghost" disabled={saving} aria-label={`Editar unidade ${u.nome}`} onClick={() => openEditUnit(u)}><Pencil className="w-4 h-4" /></Button>}
+
                   </div>
                 </div>
                 {isGlobalAdmin && (
@@ -390,10 +399,10 @@ const UnidadesSalas: React.FC = () => {
       )}
 
       {/* Dialogs */}
-      <Dialog open={unitDialog} onOpenChange={setUnitDialog}>
+      <Dialog open={unitDialog} onOpenChange={o=>{if(!o)closeForm(()=>setUnitDialog(false));}}>
         <DialogContent>
           <DialogHeader><DialogTitle className="font-display">{editUnitId ? 'Editar' : 'Nova'} Unidade</DialogTitle></DialogHeader>
-          <div className="space-y-3">
+          {formStatus}<fieldset disabled={blocked||enviandoLogo} className="space-y-3">
             <div><Label>Nome *</Label><Input value={unitForm.nome} onChange={e => setUnitForm(p => ({ ...p, nome: e.target.value }))} /></div>
             <div><Label>Nome exibido no sistema</Label><Input value={unitForm.nomeExibicao} onChange={e => setUnitForm(p => ({ ...p, nomeExibicao: e.target.value }))} placeholder="Ex: CER II (aparece no menu lateral)" /></div>
             <div><Label>Endereço</Label><Input value={unitForm.endereco} onChange={e => setUnitForm(p => ({ ...p, endereco: e.target.value }))} /></div>
@@ -444,20 +453,20 @@ const UnidadesSalas: React.FC = () => {
                 onChange={(field, value) => setCustomData(prev => ({ ...prev, [field]: value }))}
               />
             )}
-            <Button onClick={handleSaveUnit} className="w-full gradient-primary text-primary-foreground">{editUnitId ? 'Salvar' : 'Criar'}</Button>
-          </div>
+            <Button onClick={handleSaveUnit} disabled={blocked||enviandoLogo} className="w-full gradient-primary text-primary-foreground">{saving?'Salvando...':editUnitId ? 'Salvar' : 'Criar'}</Button>
+          </fieldset>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={roomDialog} onOpenChange={setRoomDialog}>
+      <Dialog open={roomDialog} onOpenChange={o=>{if(!o)closeForm(()=>setRoomDialog(false));}}>
         <DialogContent>
           <DialogHeader><DialogTitle className="font-display">{editRoomId ? 'Editar' : 'Nova'} Sala</DialogTitle></DialogHeader>
-          <div className="space-y-3">
+          {formStatus}<fieldset disabled={blocked} className="space-y-3">
             <div><Label>Nome *</Label><Input value={roomForm.nome} onChange={e => setRoomForm(p => ({ ...p, nome: e.target.value }))} /></div>
             <div><Label>Unidade *</Label>
-              <Select value={roomForm.unidadeId} onValueChange={v => setRoomForm(p => ({ ...p, unidadeId: v }))}>
+              <Select disabled={!!editRoomId||blocked} value={roomForm.unidadeId} onValueChange={v => setRoomForm(p => ({ ...p, unidadeId: v }))}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                <SelectContent>{allowedUnits.filter(u=>u.ativo&&canWrite(editRoomId?'can_edit':'can_create',u.id)).map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>
@@ -520,15 +529,15 @@ const UnidadesSalas: React.FC = () => {
                 <p className="text-xs text-muted-foreground">Os horários de funcionamento são compartilhados pela sala; cada exame selecionado mantém duração, preparo, contraste e prazo independentes. Consultórios comuns permanecem inalterados.</p>
               </div>
             )}
-            <Button onClick={handleSaveRoom} className="w-full gradient-primary text-primary-foreground">{editRoomId ? 'Salvar' : 'Criar'}</Button>
-          </div>
+            <Button onClick={handleSaveRoom} disabled={blocked} className="w-full gradient-primary text-primary-foreground">{saving?'Salvando...':editRoomId ? 'Salvar' : 'Criar'}</Button>
+          </fieldset>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!videoUnit} onOpenChange={(o) => !o && setVideoUnit(null)}>
+      <Dialog open={!!videoUnit} onOpenChange={o=>{if(!o)closeForm(()=>setVideoUnit(null));}}>
         <DialogContent>
           <DialogHeader><DialogTitle className="font-display">Vídeo do Painel — {videoUnit?.nome}</DialogTitle></DialogHeader>
-          <div className="space-y-4">
+          {formStatus}<fieldset disabled={blocked||enviando} className="space-y-4">
             <div>
               <Label>Lista de vídeos ({videoList.length})</Label>
               <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
@@ -536,7 +545,7 @@ const UnidadesSalas: React.FC = () => {
                 {videoList.map((u, i) => (
                   <div key={i + u} className="flex items-center gap-1 border rounded px-2 py-1 text-xs">
                     <span className="font-semibold w-5">{i + 1}.</span>
-                    <span className="flex-1 truncate" title={u}>{decodeURIComponent(u.split('?')[0].split('/').pop() || u)}</span>
+                    <span className="flex-1 truncate" title={u}>{u.split('?')[0].split('/').pop() || 'Vídeo'}</span>
                     <Button size="icon" variant="ghost" className="h-6 w-6" disabled={i === 0} onClick={() => moverVideo(i, -1)}>↑</Button>
                     <Button size="icon" variant="ghost" className="h-6 w-6" disabled={i === videoList.length - 1} onClick={() => moverVideo(i, 1)}>↓</Button>
                     <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => setVideoList(l => l.filter((_, k) => k !== i))}><X className="w-3 h-3" /></Button>
@@ -558,8 +567,8 @@ const UnidadesSalas: React.FC = () => {
               {enviando ? 'Enviando vídeo...' : 'Clique para selecionar MP4'}
               <input type="file" accept="video/mp4" className="hidden" disabled={enviando} onChange={e => { const f = e.target.files?.[0]; if (f) enviarVideo(f); e.target.value = ''; }} />
             </label>
-            <Button onClick={salvarVideo} disabled={enviando} className="w-full gradient-primary text-primary-foreground">Salvar Configuração</Button>
-          </div>
+            <Button onClick={salvarVideo} disabled={blocked||enviando} className="w-full gradient-primary text-primary-foreground">{saving?'Salvando...':'Salvar Configuração'}</Button>
+          </fieldset>
         </DialogContent>
       </Dialog>
     </div>
