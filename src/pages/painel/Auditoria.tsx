@@ -712,7 +712,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
         return count;
       };
       const read=async(from:number,to:number)=>{
-        const {data,error}=await scopeQuery(supabase.from('action_logs').select('id,created_at,user_id,user_nome,role,unidade_id,unidade_nome,acao,status,usuario_cpf:detalhes->>usuario_cpf'))
+        const {data,error}=await scopeQuery(supabase.from('action_logs').select<string, Record<string, unknown>>('id,created_at,user_id,user_nome,role,unidade_id,unidade_nome,acao,status,usuario_cpf:detalhes->>usuario_cpf'))
           .order('created_at',{ascending:false}).order('id',{ascending:false}).range(from,to).abortSignal(controller.signal);
         if(error||!data)throw Error('Não foi possível consultar uma página do relatório.');
         return data as ReportEvent[];
@@ -798,7 +798,7 @@ const AuditoriaContent: React.FC<{unitId:string|null;canExport:boolean}> = ({uni
         return count;
       };
       const read=async(from:number,to:number)=>{
-        const {data,error}=await apply(supabase.from('action_logs').select('id,created_at,user_id,user_nome,role,acao,acao_legivel,tipo_evento,modulo,entidade,entidade_id,paciente_nome,profissional_nome,unidade_id,unidade_nome,status,ip,navegador,dispositivo,sistema_operacional,error_message,campos_alterados,usuario_cpf:detalhes->>usuario_cpf,entidade_registrada:detalhes->>entidade_nome'))
+        const {data,error}=await apply(supabase.from('action_logs').select<string, Record<string, unknown>>('id,created_at,user_id,user_nome,role,acao,acao_legivel,tipo_evento,modulo,entidade,entidade_id,paciente_nome,profissional_nome,unidade_id,unidade_nome,status,ip,navegador,dispositivo,sistema_operacional,error_message,campos_alterados,usuario_cpf:detalhes->>usuario_cpf,entidade_registrada:detalhes->>entidade_nome'))
           .order('created_at',{ascending:false}).order('id',{ascending:false}).range(from,to).abortSignal(controller.signal);
         if(error||!data)throw Error('Não foi possível consultar um lote.');
         return (data as any[]).map(row=>{

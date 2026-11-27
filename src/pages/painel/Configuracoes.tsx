@@ -1,5 +1,7 @@
 import PortalQrCodeCard from '@/components/PortalQrCodeCard';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { lazy, Suspense, useEffect, useState, useCallback } from 'react';
+import ConfigNavigation from '@/components/config/ConfigNavigation';
+import { CONFIG_SECTIONS, CONFIG_GROUPS, resolveConfigTab, type ConfigTabId } from '@/lib/configNavigation';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import GerenciarProcedimentos from '@/components/GerenciarProcedimentos';
 import VincularSigtapProcedimentos from '@/components/VincularSigtapProcedimentos';
@@ -33,36 +35,29 @@ import { toast } from 'sonner';
 import { useSearchParams, Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useWebhookNotify } from '@/hooks/useWebhookNotify';
-import ConfigProntuario from '@/components/config/ConfigProntuario';
-import ConfigMedicamentosExames from '@/components/config/ConfigMedicamentosExames';
-import ConfigImpressaoDocumentos from '@/components/config/ConfigImpressaoDocumentos';
-import ConfigEspecialidades from '@/components/config/ConfigEspecialidades';
-import ConfigFluxoAtendimento from '@/components/config/ConfigFluxoAtendimento';
-import ConfigSistema from '@/components/config/ConfigSistema';
-import ConfigPersonalizarCampos from '@/components/config/ConfigPersonalizarCampos';
-import ConfigWhatsApp from '@/components/config/ConfigWhatsApp';
-import ConfigSistemasIntegrados from '@/components/config/ConfigSistemasIntegrados';
-import ConfigRegrasCarencia from '@/components/config/ConfigRegrasCarencia';
+
+
+
+
+
+
+
+
+
+
 import { cn } from '@/lib/utils';
 import { whatsappService } from '@/services/whatsappService';
 
-const TABS = [
-  { id: 'prontuario', label: 'Prontuário', icon: FileText, globalOnly: false },
-  { id: 'medicamentos', label: 'Medicamentos e Exames', icon: Stethoscope, globalOnly: false },
-  { id: 'impressao', label: 'Impressão e Documentos', icon: Stamp, globalOnly: false },
-  { id: 'especialidades', label: 'Especialidades', icon: ClipboardList, globalOnly: false },
-  { id: 'fluxo', label: 'Fluxo de Atendimento', icon: Activity, globalOnly: false },
-  { id: 'carencia', label: 'Carência Pós‑Alta', icon: ShieldAlert, globalOnly: false },
-  { id: 'campos', label: 'Personalizar Campos', icon: SettingsIcon, globalOnly: false },
-  { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare, globalOnly: false },
-  { id: 'usuarios', label: 'Usuários e Permissões', icon: Users, globalOnly: false },
-  { id: 'unidades', label: 'Unidades e Setores', icon: Building2, globalOnly: true },
-  
-  { id: 'integracoes', label: 'Sistemas Integrados', icon: Network, globalOnly: false },
-  { id: 'sistema', label: 'Sistema', icon: Monitor, globalOnly: true },
-] as const;
-
-type TabId = typeof TABS[number]['id'];
+const ConfigProntuario = lazy(() => import('@/components/config/ConfigProntuario'));
+const ConfigMedicamentosExames = lazy(() => import('@/components/config/ConfigMedicamentosExames'));
+const ConfigImpressaoDocumentos = lazy(() => import('@/components/config/ConfigImpressaoDocumentos'));
+const ConfigEspecialidades = lazy(() => import('@/components/config/ConfigEspecialidades'));
+const ConfigFluxoAtendimento = lazy(() => import('@/components/config/ConfigFluxoAtendimento'));
+const ConfigSistema = lazy(() => import('@/components/config/ConfigSistema'));
+const ConfigPersonalizarCampos = lazy(() => import('@/components/config/ConfigPersonalizarCampos'));
+const ConfigWhatsApp = lazy(() => import('@/components/config/ConfigWhatsApp'));
+const ConfigSistemasIntegrados = lazy(() => import('@/components/config/ConfigSistemasIntegrados'));
+const ConfigRegrasCarencia = lazy(() => import('@/components/config/ConfigRegrasCarencia'));
 
 const Configuracoes: React.FC = () => {
   const { configuracoes, updateConfiguracoes, unidades, funcionarios } = useOperacional();
@@ -81,7 +76,7 @@ const Configuracoes: React.FC = () => {
   const [triageLoading, setTriageLoading] = useState(true);
   const [triageSettingId, setTriageSettingId] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<TabId>('prontuario');
+  const [requestedTab, setActiveTab] = useState<ConfigTabId>('prontuario');
 
   const [reativarProfId, setReativarProfId] = useState('');
   const [reativarAgendamentos, setReativarAgendamentos] = useState<any[]>([]);
@@ -140,6 +135,9 @@ const Configuracoes: React.FC = () => {
 
   const isMaster = user?.role === 'master';
   const _isGlobalMaster = user?.usuario === 'admin.sms';
+  const activeTab = resolveConfigTab(requestedTab, _isGlobalMaster);
+  const activeSection = CONFIG_SECTIONS.find(section => section.id === activeTab)!;
+  const activeGroup = CONFIG_GROUPS.find(group => group.id === activeSection.group)!;
   const _isUnitMaster = isMaster && !!user?.unidadeId && !_isGlobalMaster;
   const profissionaisAtivos = [...funcionarios].sort((a, b) =>
     a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' })
@@ -1106,42 +1104,36 @@ const Configuracoes: React.FC = () => {
   };
 
   return (
-    <div className="animate-fade-in">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold font-display text-foreground flex items-center gap-2">
-          <SettingsIcon className="w-6 h-6" /> Configurações do Sistema — Perfil Master
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">Todas as mudanças têm efeito imediato em todo o sistema.</p>
-      </div>
-
-      <div className="flex flex-col lg:flex-row gap-6 min-h-[70vh]">
-        <nav className="lg:w-64 shrink-0">
-          <div className="lg:sticky lg:top-4 space-y-1 bg-card rounded-xl border p-2">
-            {TABS.filter(t => !t.globalOnly || _isGlobalMaster).map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left",
-                    isActive
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span className="truncate">{tab.label}</span>
-                </button>
-              );
-            })}
+    <div className="animate-fade-in space-y-4">
+      <header className="rounded-2xl border bg-card p-4 sm:p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"><SettingsIcon className="w-5 h-5" aria-hidden="true" /></span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Administração do sistema</p>
+              <h1 className="text-xl sm:text-2xl font-bold font-display text-foreground">Configurações do Sistema</h1>
+            </div>
           </div>
-        </nav>
+          <Badge variant="outline" className="gap-1.5"><Shield className="w-3.5 h-3.5" aria-hidden="true" />{_isGlobalMaster ? 'Master global' : 'Perfil Master'}</Badge>
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">Gerencie as configurações e regras existentes. As alterações seguem o mecanismo de salvamento de cada seção.</p>
+      </header>
 
-        <main className="flex-1 min-w-0">
+      <div className="flex flex-col lg:flex-row gap-4 items-start min-h-[70vh]">
+        <div className="w-full lg:w-auto lg:shrink-0 lg:self-stretch">
+          <ConfigNavigation activeTab={activeTab} onSelect={setActiveTab} isGlobalMaster={_isGlobalMaster} />
+        </div>
+
+        <main className="w-full flex-1 min-w-0 space-y-4" aria-labelledby="config-active-title">
+          <div className="rounded-xl border bg-card px-4 py-3 sm:px-5 shadow-sm">
+            <p className="text-xs text-muted-foreground">{activeGroup.label}</p>
+            <h2 id="config-active-title" className="text-lg font-semibold font-display text-foreground">{activeSection.label}</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">{activeSection.description}</p>
+          </div>
           <ScrollArea className="h-full">
-            {renderTabContent()}
+            <Suspense fallback={<div role="status" className="flex items-center justify-center gap-2 rounded-xl border bg-card py-12 text-sm text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Carregando seção...</div>}>
+              {renderTabContent()}
+            </Suspense>
           </ScrollArea>
         </main>
       </div>
