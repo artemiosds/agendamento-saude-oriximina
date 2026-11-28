@@ -1,6 +1,6 @@
 // Painel de Fila do WhatsApp — Fase 3 hardening
 // Mostra mensagens pendentes/erro/enviadas com filtros e ações Master.
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { RefreshCw, RotateCcw, XCircle, Play, Pause, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {confirmedProcessing} from '@/lib/adminWhatsApp';
+import {useAuth} from '@/contexts/AuthContext';
+import {filterLoadedQueue} from '@/lib/adminQueueSearch';
 
 interface QueueRow {
   id: string;
@@ -41,7 +43,10 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 export const QueueTable: React.FC = () => {
+  const {user}=useAuth();
   const [rows, setRows] = useState<QueueRow[]>([]);
+  const requestRef=useRef(0);
+  const confirmSession=useCallback(async()=>{const {data,error}=await supabase.auth.getSession();if(error||!user?.authUserId||user.role!=='master'||user.ativo!==true||data.session?.user.id!==user.authUserId)throw Error('Sessão administrativa não confirmada.');},[user?.authUserId,user?.role,user?.ativo]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('all');
   const [provider, setProvider] = useState('all');
@@ -52,8 +57,10 @@ export const QueueTable: React.FC = () => {
   const [failed,setFailed]=useState(false);
 
   const load = useCallback(async () => {
+    const request=++requestRef.current;
     setLoading(true);setFailed(false);
     try {
+      await confirmSession();
       let q = supabase.from('whatsapp_queue')
         .select('id,paciente_nome,telefone,evento,status,provider,tentativas,priority,agendado_para,processado_em,motivo_erro,error_code,next_retry_at')
         .order('criado_em', { ascending: false })
@@ -62,12 +69,8 @@ export const QueueTable: React.FC = () => {
       if (provider !== 'all') q = q.eq('provider', provider);
       const { data, error } = await q;
       if (error) throw error;
-      let list = (data || []) as QueueRow[];
-      if (search.trim()) {
-        const s = search.toLowerCase();
-        list = list.filter(r => (r.paciente_nome || '').toLowerCase().includes(s) || (r.telefone || '').includes(s));
-      }
-      setRows(list);
+      if(request!==requestRef.current)return;
+      const list=(data||[]) as QueueRow[];
 
       // Estado de pausa do provider
       const { data: conn,error:connError } = await supabase
@@ -77,23 +80,26 @@ export const QueueTable: React.FC = () => {
         .limit(1)
         .maybeSingle();
       if(connError)throw connError;
+      if(request!==requestRef.current)return;
+      setRows(list);
       if (conn?.fila_pausada_ate && new Date(conn.fila_pausada_ate).getTime() > Date.now()) {
         setPaused({ ate: conn.fila_pausada_ate, motivo: conn.fila_pausada_motivo });
       } else {
         setPaused(null);
       }
     } catch (e: any) {
-      setFailed(true);toast.error('Consulta da fila não confirmada.');
+      if(request===requestRef.current){setFailed(true);toast.error('Consulta da fila não confirmada.');}
     } finally {
-      setLoading(false);
+      if(request===requestRef.current)setLoading(false);
     }
-  }, [status, provider, search]);
+  }, [status, provider,confirmSession]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load();return()=>{requestRef.current++;}; }, [load]);
+  const visibleRows=useMemo(()=>filterLoadedQueue(rows,search),[rows,search]);
 
   const run=async(work:()=>Promise<void>)=>{
     if(lock.current||failed||loading)return;lock.current=true;setProcessing(true);
-    try{await work();}catch{setFailed(true);toast.error('Operação não confirmada. Atualize a fila antes de repetir.');}
+    try{await confirmSession();await work();}catch{setFailed(true);toast.error('Operação não confirmada. Atualize a fila antes de repetir.');}
     finally{lock.current=false;setProcessing(false);}
   };
   const reprocess=(id:string)=>run(async()=>{
@@ -124,7 +130,7 @@ export const QueueTable: React.FC = () => {
       <CardContent className="p-5 space-y-4">
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={status} onValueChange={setStatus}>
+            <Select value={status} onValueChange={setStatus} disabled={processing}>
               <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos status</SelectItem>
@@ -137,7 +143,7 @@ export const QueueTable: React.FC = () => {
                 <SelectItem value="bloqueado">Bloqueadas</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={provider} onValueChange={setProvider}>
+            <Select value={provider} onValueChange={setProvider} disabled={processing}>
               <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos providers</SelectItem>
@@ -145,10 +151,10 @@ export const QueueTable: React.FC = () => {
                 <SelectItem value="uazapigo">UazapiGO</SelectItem>
               </SelectContent>
             </Select>
-            <Input placeholder="Buscar paciente/telefone" value={search} onChange={(e) => setSearch(e.target.value)} className="w-[220px]" />
+            <Input placeholder="Buscar nos registros carregados" value={search} onChange={(e) => setSearch(e.target.value)} className="w-[220px]" />
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={load} disabled={loading}>
+            <Button size="sm" variant="outline" onClick={load} disabled={loading||processing}>
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Atualizar
             </Button>
             <Button size="sm" variant="outline" onClick={runProcessor} disabled={processing||failed||loading}>
@@ -161,6 +167,7 @@ export const QueueTable: React.FC = () => {
           </div>
         </div>
 
+        <p className="text-xs text-muted-foreground">Busca nos até 200 registros carregados. Atualize para consultar novamente.</p>
         {failed&&<p role="alert" className="text-sm text-destructive">Fila não confirmada. Atualize antes de realizar ações.</p>}
         {paused && (
           <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -184,10 +191,10 @@ export const QueueTable: React.FC = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.length === 0 && (
+              {visibleRows.length === 0 && (
                 <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">Sem mensagens nessa fila.</TableCell></TableRow>
               )}
-              {rows.map((r) => (
+              {visibleRows.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-medium">{r.paciente_nome || '—'}</TableCell>
                   <TableCell className="font-mono text-xs">{r.telefone}</TableCell>

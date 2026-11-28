@@ -86,7 +86,6 @@ const ConfigWhatsApp: React.FC = () => {
   const { unidades, configuracoes, updateConfiguracoes } = useOperacional();
   const { whatsapp } = configuracoes;
 
-  const isGlobalAdmin = user?.usuario === 'admin.sms';
   const userUnitId = user?.unidadeId || '';
   const [connectionFailed,setConnectionFailed]=useState(false);
   const [connectionBusy,setConnectionBusy]=useState(false);
@@ -98,6 +97,7 @@ const ConfigWhatsApp: React.FC = () => {
   const reminderLock=useRef(false);
   const [templatesFailed,setTemplatesFailed]=useState(false);
   const templateLock=useRef(false);
+  const templateRequest=useRef(0),templateScope=useRef(''),logRequest=useRef(0);
   const [statsReady,setStatsReady]=useState(false);
   const [logsFailed,setLogsFailed]=useState(false);
   const actionLock=useRef(false);
@@ -263,24 +263,28 @@ const ConfigWhatsApp: React.FC = () => {
 
   // Load templates
   const loadTemplates = useCallback(async () => {
-    setTemplatesLoading(true);setTemplatesFailed(false);
+    if(templateLock.current)return;
+    const request=++templateRequest.current;
+    templateScope.current='';setTemplatesLoading(true);setTemplatesFailed(false);
     try {
-      let query = supabase.from('whatsapp_templates').select('*');
-      if (!isGlobalAdmin) query = query.eq('unidade_id', userUnitId);
-      const { data,error } = await query.order('tipo');
-      if(error||!data)throw Error('Consulta não confirmada.');setTemplates(data);
-    } catch {setTemplatesFailed(true);}
-    setTemplatesLoading(false);
-  }, [isGlobalAdmin, userUnitId]);
-
-  useEffect(() => { loadTemplates(); }, [loadTemplates]);
+      await confirmSession();
+      if(!userUnitId)throw Error('Unidade não confirmada.');
+      const {data,error}=await supabase.from('whatsapp_templates').select('id,unidade_id,tipo,mensagem,ativo').eq('unidade_id',userUnitId).order('tipo');
+      if(error||!data)throw Error('Consulta não confirmada.');
+      if(request!==templateRequest.current)return;
+      setTemplates(data);templateScope.current=JSON.stringify([user?.authUserId,userUnitId]);
+    }catch{if(request===templateRequest.current)setTemplatesFailed(true);}
+    finally{if(request===templateRequest.current)setTemplatesLoading(false);}
+  },[confirmSession,user?.authUserId,userUnitId]);
+  useEffect(()=>{if((activeSubTab==='mensagens'||activeSubTab==='eventos')&&templateScope.current!==JSON.stringify([user?.authUserId,userUnitId]))void loadTemplates();},[activeSubTab,user?.authUserId,userUnitId,loadTemplates]);
+  useEffect(()=>()=>{templateRequest.current++;logRequest.current++;},[user?.authUserId,userUnitId]);
 
   const currentTemplate=templates.find(t=>t.tipo===selectedTemplate&&t.unidade_id===userUnitId);
   const confirmedMessage=currentTemplate?.mensagem??DEFAULT_TEMPLATES[selectedTemplate]??'';
   useEffect(()=>{setEditingMessage(confirmedMessage);},[confirmedMessage,selectedTemplate,userUnitId]);
   const isTemplateActive=()=>currentTemplate?.ativo??true;
   const writeTemplate=async(tipo:string,patch:{mensagem?:string;ativo?:boolean})=>{
-    if(templateLock.current||templatesLoading||templatesFailed||!userUnitId)return;
+    if(templateLock.current||templatesLoading||templatesFailed||!userUnitId||templateScope.current!==JSON.stringify([user?.authUserId,userUnitId]))return;
     templateLock.current=true;setTemplateSaving(true);
     try{
       await confirmSession();
@@ -458,20 +462,22 @@ const ConfigWhatsApp: React.FC = () => {
 
   // Load logs
   const loadLogs = useCallback(async () => {
+    const request=++logRequest.current;
     setLogsLoading(true);setLogsFailed(false);
     try {
+      await confirmSession();
       let query = supabase.from('notification_logs').select('*')
         .in('canal', ['whatsapp_evolution', 'whatsapp_uazapigo'])
         .order('criado_em', { ascending: false })
         .limit(100);
       if (logsFilter !== 'todos') query = query.eq('status', logsFilter);
       const { data,error } = await query;
-      if(error||!data)throw Error('Consulta não confirmada.');setLogs(data as NotifLog[]);
-    } catch {setLogsFailed(true);}
-    setLogsLoading(false);
-  }, [logsFilter]);
+      if(error||!data)throw Error('Consulta não confirmada.');if(request===logRequest.current)setLogs(data as NotifLog[]);
+    } catch {if(request===logRequest.current)setLogsFailed(true);}
+    finally{if(request===logRequest.current)setLogsLoading(false);}
+  }, [logsFilter,confirmSession]);
 
-  useEffect(() => { if (activeSubTab === 'logs') loadLogs(); }, [activeSubTab, loadLogs]);
+  useEffect(() => { if (activeSubTab === 'logs') void loadLogs(); return()=>{logRequest.current++;}; }, [activeSubTab, loadLogs]);
 
   const resendMessage = async (log: NotifLog) => {
     if (!log.agendamento_id) { toast.error('Sem agendamento vinculado.'); return; }

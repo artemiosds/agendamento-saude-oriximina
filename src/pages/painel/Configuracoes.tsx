@@ -82,6 +82,7 @@ const Configuracoes: React.FC = () => {
   const [integrationReady,setIntegrationReady]=useState(false);
   const [integrationBusy,setIntegrationBusy]=useState(false);
   const integrationLock=useRef(false);
+  const integrationTestLock=useRef(false),integrationRead=useRef(0),adminRead=useRef(0),portalRead=useRef(0);
   const integrationBaseline=useRef<Record<string,unknown>>({});
   const [gmailDraft,setGmailDraft]=useState({ativo:false,email:'',senhaApp:'',smtpHost:'smtp.gmail.com',smtpPort:587});
   const [templateDraft,setTemplateDraft]=useState(templates);
@@ -235,13 +236,14 @@ const Configuracoes: React.FC = () => {
     const request=++triageRequest.current;
     setTriageLoading(true);setTriageFailed(false);
     try{
+      await confirmAdmin();
       const data=await readUnitTriage();
       if(request!==triageRequest.current)return;
       setTriageEnabled(data?.enabled??false);setTriageSettingId(data?.id??null);setTriageScope(data?.unidade_id??null);triageRaw.current=data?.enabled??null;
     }catch{if(request===triageRequest.current)setTriageFailed(true);}
     finally{if(request===triageRequest.current)setTriageLoading(false);}
-  },[readUnitTriage]);
-  useEffect(()=>{void loadUnitTriage();return()=>{triageRequest.current++;};},[loadUnitTriage]);
+  },[readUnitTriage,confirmAdmin]);
+  useEffect(()=>{if(activeTab==='fluxo'&&isMaster)void loadUnitTriage();return()=>{triageRequest.current++;};},[activeTab,isMaster,loadUnitTriage]);
   const saveUnitTriage=async(v:boolean)=>{
     if(triageLock.current||triageLoading||triageFailed||!window.confirm(triageSettingId&&!triageScope?'A unidade utiliza a regra global. Alterar essa regra global?':'Alterar a regra de triagem da unidade?'))return;
     triageLock.current=true;setTriageLoading(true);
@@ -277,11 +279,14 @@ const Configuracoes: React.FC = () => {
 
   const loadAdmin=useCallback(async()=>{
     if(!isMaster)return;
+    if(adminLock.current)return;
+    const request=++adminRead.current;
     setAgOnlineLoading(true);setCancelLoading(true);setAdminFailed(false);rowsBaseline.current={};
     try{
       await confirmAdmin();
       const {data,error}=await supabase.from('system_config').select('id,configuracoes,updated_at').in('id',['config_agendamento_online','config_cancelamentos']);
       if(error||!data)throw Error('Consulta não confirmada.');
+      if(request!==adminRead.current)return;
       for(const id of ['config_agendamento_online','config_cancelamentos']){
         const row=data.find(r=>r.id===id);rowsBaseline.current[id]={raw:row?.configuracoes,version:row?.updated_at??null};
         if(row&&!Number.isFinite(Date.parse(row.updated_at)))throw Error('Versão inválida.');
@@ -290,15 +295,17 @@ const Configuracoes: React.FC = () => {
       const o={...ONLINE_DEFAULT,...(online===undefined?{}:configObject(online))},c={...CANCEL_DEFAULT,...(cancel===undefined?{}:configObject(cancel))};
       if(!Array.isArray(o.profissionais_bloqueados)||!Array.isArray(c.motivos))throw Error('Configuração inválida.');
       setAgOnline(o);setCancelConfig(c);
-    }catch{setAdminFailed(true);}
-    finally{setAgOnlineLoading(false);setCancelLoading(false);}
+    }catch{if(request===adminRead.current)setAdminFailed(true);}
+    finally{if(request===adminRead.current){setAgOnlineLoading(false);setCancelLoading(false);}}
   },[isMaster,confirmAdmin]);
   const loadPortal=useCallback(async()=>{
+    if(portalLock.current)return;
+    const request=++portalRead.current;
     setPortalReady(false);
-    try{const raw=await loadPortalSection();const value={...PORTAL_DEFAULT,...(raw===undefined?{}:configObject(raw))};if(!Array.isArray(value.pacientesBloqueados))throw Error('Configuração inválida.');setPortal(value);setPortalReady(true);}
-    catch{setPortalReady(false);}
+    try{const raw=await loadPortalSection();if(request!==portalRead.current)return;const value={...PORTAL_DEFAULT,...(raw===undefined?{}:configObject(raw))};if(!Array.isArray(value.pacientesBloqueados))throw Error('Configuração inválida.');setPortal(value);setPortalReady(true);}
+    catch{if(request===portalRead.current)setPortalReady(false);}
   },[loadPortalSection]);
-  useEffect(()=>{if(activeTab==='usuarios'&&isMaster){void loadAdmin();void loadPortal();}},[activeTab,isMaster,loadAdmin,loadPortal]);
+  useEffect(()=>{if(activeTab==='usuarios'&&isMaster){void loadAdmin();void loadPortal();}return()=>{adminRead.current++;portalRead.current++;};},[activeTab,isMaster,loadAdmin,loadPortal]);
   const savePortal=async(key:'permitirPortal'|'enviarSenhaAutomaticamente'|'enviarLinkAcesso',value:boolean)=>{
     if(!portalReady||portalLock.current||!window.confirm('Alterar esta regra geral do Portal do Paciente?'))return;
     portalLock.current=true;setPortalSaving(true);
@@ -343,21 +350,26 @@ const Configuracoes: React.FC = () => {
     integrationBaseline.current={...integrationBaseline.current,googleCalendar:next};setGoogleSaved(next);
   };
   const loadIntegrations=useCallback(async()=>{
+    if(integrationLock.current||integrationTestLock.current)return;
+    const request=++integrationRead.current;
     setIntegrationReady(false);
     try{await confirmAdmin();const {data,error}=await supabase.from('system_config').select('configuracoes').eq('id','default').maybeSingle();
       if(error||!data)throw Error('Consulta não confirmada.');
-      const raw=configObject(data.configuracoes);integrationBaseline.current=raw;
+      if(request!==integrationRead.current)return;
+      const raw=configObject(data.configuracoes);
+      // Keep only sections actually managed here, not the entire shared configuration.
+      integrationBaseline.current=Object.fromEntries(['googleCalendar','webhook','gmail','templates','canalNotificacao'].map(key=>[key,raw[key]]));
       const w={url:'',ativo:false,status:'inativo',...(raw.webhook===undefined?{}:configObject(raw.webhook))} as typeof webhook;
       const mail={ativo:false,email:'',senhaApp:'',smtpHost:'smtp.gmail.com',smtpPort:587,...(raw.gmail===undefined?{}:configObject(raw.gmail))};
       const t={...templates,...(raw.templates===undefined?{}:configObject(raw.templates))};
       setGoogleSaved({...googleCalendar,...(raw.googleCalendar===undefined?{}:configObject(raw.googleCalendar))});
       setWebhookSaved(w);setWebhookUrl(w.url);setWebhookEditing(!w.url);setGmailDraft({...mail,senhaApp:''});setTemplateDraft(t);
       setChannel(raw.canalNotificacao==='gmail'||raw.canalNotificacao==='ambos'?raw.canalNotificacao:'webhook');setIntegrationReady(true);
-    }catch{toast.error('Integrações não confirmadas. Atualize antes de editar.');}
+    }catch{if(request===integrationRead.current)toast.error('Integrações não confirmadas. Atualize antes de editar.');}
   },[confirmAdmin]);
-  useEffect(()=>{if(activeTab==='unidades'&&_isGlobalMaster){void loadIntegrations();void gcal.checkStatus();}},[activeTab,_isGlobalMaster,loadIntegrations,gcal.checkStatus]);
+  useEffect(()=>{if(activeTab==='unidades'&&_isGlobalMaster&&isMaster){void loadIntegrations();void gcal.checkStatus();}return()=>{integrationRead.current++;};},[activeTab,_isGlobalMaster,isMaster,loadIntegrations,gcal.checkStatus]);
   const saveIntegration=async(key:string,build:(old:unknown)=>unknown)=>{
-    if(integrationLock.current||!integrationReady)return false;
+    if(integrationLock.current||integrationTestLock.current||!integrationReady||!_isGlobalMaster)return false;
     integrationLock.current=true;setIntegrationBusy(true);
     try{await confirmAdmin();const old=integrationBaseline.current[key],value=build(old);await saveSystemConfigPatch({[key]:value},user?.authUserId,{key,value:old});integrationBaseline.current={...integrationBaseline.current,[key]:value};return true;}
     catch{setIntegrationReady(false);toast.error('Gravação não confirmada. Recarregue as integrações.');return false;}
@@ -884,13 +896,14 @@ const Configuracoes: React.FC = () => {
                   <div className="flex gap-2">
                     <Button className="gradient-primary text-primary-foreground flex-1" disabled={!webhookUrl.trim()||integrationBusy} onClick={()=>void saveWebhook(true)}>Salvar Webhook</Button>
                     <Button variant="outline" disabled={!webhookSaved.url || webhookTesting||webhookEditing||webhookUrl!==webhookSaved.url} onClick={async () => {
-                      if(!window.confirm('Enviar dados fictícios ao webhook salvo?'))return;
-                      setWebhookTesting(true);
+                      if(integrationTestLock.current||integrationLock.current||!integrationReady||!_isGlobalMaster||!window.confirm('Enviar dados fictícios ao webhook salvo?'))return;
+                      integrationTestLock.current=true;setWebhookTesting(true);
                       try {
+                        await confirmAdmin();
                         const { data, error } = await supabase.functions.invoke('webhook-notify', { body: { evento: 'teste', paciente_nome: 'Teste do Sistema', telefone: '(00) 00000-0000', email: 'teste@teste.com', data_consulta: new Date().toLocaleDateString('pt-BR'), hora_consulta: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), unidade: 'Unidade Teste', profissional: 'Profissional Teste', tipo_atendimento: 'Teste de Webhook', status_agendamento: 'teste', id_agendamento: 'teste-' + Date.now() } });
                         if (error||!explicitSuccess(data)) throw Error('Teste não confirmado.');
                         toast.success('Webhook testado com sucesso!');
-                      } catch { toast.error('Teste de webhook não confirmado.'); } finally { setWebhookTesting(false); }
+                      } catch { toast.error('Teste de webhook não confirmado.'); } finally { integrationTestLock.current=false;setWebhookTesting(false); }
                     }}>{webhookTesting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}Testar</Button>
                   </div>
                   {webhookSaved.ativo && <Button variant="ghost" className="w-full text-destructive" onClick={()=>void saveWebhook(false)}>Desativar Webhook</Button>}
@@ -916,11 +929,11 @@ const Configuracoes: React.FC = () => {
                     {gmailTesting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}Salvar Gmail
                   </Button>
                   <Button variant="outline" disabled={gmailTesting||integrationBusy} onClick={async () => {
-                    if(!window.confirm('Testar a configuração SMTP SALVA, não os rascunhos?'))return;
-                    setGmailTesting(true); setGmailMessage('');
-                    const result = await testGmail();
-                    setGmailStatus(result.status as any); setGmailMessage(result.message); setGmailTesting(false);
-                    if (result.success) toast.success('Teste SMTP confirmado pelo serviço.'); else toast.error(`Falha: ${result.message}`);
+                    if(integrationTestLock.current||integrationLock.current||!integrationReady||!_isGlobalMaster||!window.confirm('Testar a configuração SMTP SALVA, não os rascunhos?'))return;
+                    integrationTestLock.current=true;setGmailTesting(true);setGmailMessage('');
+                    try{await confirmAdmin();const result=await testGmail();const message=result.success?'Teste SMTP confirmado pelo serviço.':'Teste SMTP não confirmado. Confira a configuração salva.';setGmailStatus(result.success?'conectado':'erro_envio');setGmailMessage(message);if(result.success)toast.success(message);else toast.error(message);}
+                    catch{setGmailStatus('erro_envio');setGmailMessage('Teste SMTP não confirmado.');toast.error('Teste SMTP não confirmado.');}
+                    finally{integrationTestLock.current=false;setGmailTesting(false);}
                   }}>
                     {gmailTesting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}Testar
                   </Button>
