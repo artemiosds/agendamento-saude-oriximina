@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useAdministrativeConfigSection } from '@/hooks/useProntuarioSettings';
+import { conditionalCycle } from '@/lib/adminFieldConfig';
+import { matchesCatalogSearch } from '@/lib/adminCatalog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -259,6 +261,13 @@ const SortableCampo: React.FC<SortableCampoProps> = ({
 const ConfigEspecialidades: React.FC = () => {
   const [especialidades, setEspecialidades] = useState<EspecialidadeConfig[]>(DEFAULT_ESPECIALIDADES);
   const [loading, setLoading] = useState(true);
+  const [loadFailed,setLoadFailed]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [saveFailed,setSaveFailed]=useState(false);
+  const [status,setStatus]=useState('');
+  const [query,setQuery]=useState('');
+  const lock=useRef(false);
+  const {load,save:writeSection}=useAdministrativeConfigSection(CONFIG_KEY);
   const [selected, setSelected] = useState('fisioterapia');
   const [addFieldDialog, setAddFieldDialog] = useState(false);
   const [addEspDialog, setAddEspDialog] = useState(false);
@@ -282,40 +291,32 @@ const ConfigEspecialidades: React.FC = () => {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const loadConfig = useCallback(async () => {
-    const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-    const cfg = data?.configuracoes as any;
-    if (cfg?.[CONFIG_KEY]) {
-      const stored: EspecialidadeConfig[] = cfg[CONFIG_KEY];
-      setEspecialidades(stored.map(normalizeEspecialidade));
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    loadConfig();
-    // Realtime sync
-    const channel = supabase
-      .channel('config_especialidades_realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'system_config', filter: 'id=eq.default' },
-        () => loadConfig(),
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [loadConfig]);
-
-  const save = async (updated: EspecialidadeConfig[], silent = false) => {
-    const { data: existing } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-    const existingConfig = (existing?.configuracoes as any) || {};
-    await supabase.from('system_config').upsert({
-      id: 'default',
-      configuracoes: { ...existingConfig, [CONFIG_KEY]: updated },
-      updated_at: new Date().toISOString(),
-    });
-    setEspecialidades(updated);
-    if (!silent) toast.success('Configuração salva');
+  const loadConfig = useCallback(async()=>{
+    setLoading(true);setLoadFailed(false);setSaveFailed(false);setStatus('');
+    try{
+      const raw=await load();
+      const list=raw===undefined?DEFAULT_ESPECIALIDADES:raw;
+      if(!Array.isArray(list)||list.some(e=>!e||typeof e.key!=='string'||!Array.isArray(e.campos)||!Array.isArray(e.profissoes)))throw Error('Estrutura de especialidades inválida.');
+      const normalized=(list as EspecialidadeConfig[]).map(normalizeEspecialidade);
+      setEspecialidades(normalized);
+      setSelected(prev=>normalized.some(e=>e.key===prev)?prev:normalized[0]?.key??'');
+      setStatus('Configuração carregada');
+    }catch{setLoadFailed(true);}
+    finally{setLoading(false);}
+  },[load]);
+  useEffect(()=>{void loadConfig();},[loadConfig]);
+  // Administrative editor is not reset by unrelated realtime events; clinical subscriptions are unchanged.
+  const save=async(updated:EspecialidadeConfig[],silent=false):Promise<boolean>=>{
+    if(lock.current||loading||loadFailed||saveFailed)return false;
+    lock.current=true;setSaving(true);setStatus('Salvando…');
+    try{
+      const ok=await writeSection(()=>updated);
+      if(!ok){setSaveFailed(true);setStatus('Gravação não confirmada. Confira a configuração atual.');return false;}
+      setEspecialidades(updated);setStatus('Gravação confirmada');
+      if(!silent)toast.success('Configuração salva');
+      return true;
+    }catch(error){setSaveFailed(true);setStatus('Gravação não confirmada.');toast.error(error instanceof Error?error.message:'Erro ao salvar.');return false;}
+    finally{lock.current=false;setSaving(false);}
   };
 
   const esp = especialidades.find(e => e.key === selected);
@@ -326,7 +327,7 @@ const ConfigEspecialidades: React.FC = () => {
 
   const updateEsp = (mutator: (e: EspecialidadeConfig) => EspecialidadeConfig) => {
     const updated = especialidades.map(e => e.key === selected ? mutator(e) : e);
-    save(updated);
+    return save(updated);
   };
 
   const toggleCampo = (campoId: string) => {
@@ -334,7 +335,7 @@ const ConfigEspecialidades: React.FC = () => {
   };
 
   const reorderCampos = (newOrderIds: string[]) => {
-    if (!esp) return;
+    if (!esp || newOrderIds.length!==esp.campos.length || new Set(newOrderIds).size!==esp.campos.length || newOrderIds.some(id=>!esp.campos.some(c=>c.id===id))) return;
     const map = new Map(esp.campos.map(c => [c.id, c]));
     const reordered = newOrderIds
       .map((id, idx) => { const c = map.get(id); return c ? { ...c, order: idx + 1 } : null; })
@@ -362,17 +363,27 @@ const ConfigEspecialidades: React.FC = () => {
     reorderCampos(arrayMove(ids, oldIdx, newIdx));
   };
 
-  const saveEditedCampo = (updated: CampoEspecialidade) => {
-    updateEsp(e => ({ ...e, campos: e.campos.map(c => c.id === updated.id ? updated : c) }));
-    setEditingCampo(null);
+  const saveEditedCampo = async (updated: CampoEspecialidade) => {
+    if(!esp)return;
+    const original=esp.campos.find(c=>c.id===updated.id);
+    if(!original)return;
+    const next={...updated,id:original.id,key:original.key,isBuiltin:original.isBuiltin,label:updated.label.trim()};
+    if(!next.label||!next.tipos_prontuario?.length){toast.error('Informe o nome e ao menos um tipo de prontuário.');return;}
+    if(next.tipo==='select'&&!next.opcoes?.some(o=>o.trim())){toast.error('Informe ao menos uma opção.');return;}
+    if(next.condicao&&(!next.condicao.campo||!esp.campos.some(c=>c.key===next.condicao?.campo)||conditionalCycle(esp.campos.map(c=>({key:c.key,reference:c.id===next.id?next.condicao?.campo:c.condicao?.campo})),next.key))){toast.error('Referência condicional inválida ou circular.');return;}
+    if(await updateEsp(e=>({...e,campos:e.campos.map(c=>c.id===next.id?next:c)})))setEditingCampo(null);
   };
 
-  const addCampoEsp = () => {
+  const addCampoEsp = async () => {
     if (!newField.label.trim() || !esp) return;
     const needsOpcoes = newField.tipo === 'select';
+    const options=[...new Set(newField.opcoes.split(',').map(o=>o.trim()).filter(Boolean))];
+    if(!newField.tipos_prontuario.length){toast.error('Selecione ao menos um tipo de prontuário.');return;}
+    if(needsOpcoes&&!options.length){toast.error('Informe ao menos uma opção.');return;}
+    const id='custom_'+crypto.randomUUID();
     const campo: CampoEspecialidade = {
-      id: `custom_${Date.now()}`,
-      key: `custom_${Date.now()}`,
+      id,
+      key:id,
       label: newField.label.trim(),
       tipo: newField.tipo,
       obrigatorio: newField.obrigatorio,
@@ -380,11 +391,11 @@ const ConfigEspecialidades: React.FC = () => {
       isBuiltin: false,
       order: esp.campos.length + 1,
       tipos_prontuario: newField.tipos_prontuario.length ? newField.tipos_prontuario : [...DEFAULT_TIPOS],
-      opcoes: needsOpcoes ? newField.opcoes.split(',').map(o => o.trim()).filter(Boolean) : undefined,
+      opcoes: needsOpcoes ? options : undefined,
       valor_padrao: newField.valor_padrao.trim() || undefined,
       ajuda: newField.ajuda.trim() || undefined,
     };
-    updateEsp(e => ({ ...e, campos: [...e.campos, campo] }));
+    if(!await updateEsp(e => ({ ...e, campos: [...e.campos, campo] })))return;
     setAddFieldDialog(false);
     setNewField({
       label: '', tipo: 'textarea', obrigatorio: false, opcoes: '',
@@ -395,14 +406,17 @@ const ConfigEspecialidades: React.FC = () => {
   const deleteCampo = (campoId: string) => {
     const campo = esp?.campos.find(c => c.id === campoId);
     if (!campo || campo.isBuiltin) return;
+    if(esp?.campos.some(c=>c.condicao?.campo===campo.key)){toast.error('Este campo é referência de uma condição. Revise a condição antes de excluir.');return;}
+    if(!window.confirm('Excluir a configuração deste campo? Os registros clínicos não serão excluídos.'))return;
     updateEsp(e => ({ ...e, campos: e.campos.filter(c => c.id !== campoId) }));
   };
 
-  const copyCampoToEspecialidades = (campo: CampoEspecialidade, targets: string[]) => {
+  const copyCampoToEspecialidades = async (campo: CampoEspecialidade, targets: string[]) => {
     if (targets.length === 0) return;
+    if(campo.condicao&&especialidades.some(e=>targets.includes(e.key)&&!e.campos.some(c=>c.key===campo.condicao?.campo))){toast.error('Uma especialidade de destino não possui o campo de referência da condição.');return;}
     const updated = especialidades.map(e => {
       if (!targets.includes(e.key)) return e;
-      const newId = `copy_${campo.key}_${Date.now()}`;
+      const newId = 'copy_'+crypto.randomUUID();
       const novo: CampoEspecialidade = {
         ...campo,
         id: newId,
@@ -412,19 +426,18 @@ const ConfigEspecialidades: React.FC = () => {
       };
       return { ...e, campos: [...e.campos, novo] };
     });
-    save(updated);
-    setCopyDialog(null);
-    toast.success(`Campo copiado para ${targets.length} especialidade(s)`);
+    if(await save(updated,true)){setCopyDialog(null);toast.success(`Campo copiado para ${targets.length} especialidade(s)`);}
   };
 
-  const addNovaEspecialidade = () => {
+  const addNovaEspecialidade = async () => {
     if (!newEsp.label.trim()) return;
     const key = newEsp.label.toLowerCase().replace(/\s+/g, '_').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if(!key||especialidades.some(e=>e.key===key)){toast.error('Já existe uma especialidade com esse identificador.');return;}
     const nova: EspecialidadeConfig = {
       key, label: newEsp.label.trim(), ativa: true,
       profissoes: newEsp.profissoes, campos: [],
     };
-    save([...especialidades, nova]);
+    if(!await save([...especialidades,nova]))return;
     setSelected(key);
     setAddEspDialog(false);
     setNewEsp({ label: '', profissoes: [] });
@@ -435,10 +448,13 @@ const ConfigEspecialidades: React.FC = () => {
     save(updated);
   };
 
+  if(loadFailed)return <Card><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível carregar as especialidades. Edição bloqueada.</p><Button onClick={()=>void loadConfig()}>Tentar novamente</Button></CardContent></Card>;
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      <div className="rounded-xl border bg-card p-4 space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Especialidades e campos clínicos</h3><p role="status" className="text-xs text-muted-foreground">{status}</p></div><Button size="sm" variant="outline" disabled={saving} onClick={()=>{if(!saveFailed||window.confirm('Recarregar e descartar as alterações não confirmadas?')){setEditingCampo(null);setAddFieldDialog(false);setCopyDialog(null);setAddEspDialog(false);void loadConfig();}}}>Atualizar configurações</Button></div><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{[[especialidades.length,'Especialidades'],[especialidades.filter(e=>e.ativa).length,'Ativas'],[especialidades.reduce((n,e)=>n+e.campos.length,0),'Campos configurados']].map(([value,label])=><div key={label} className="rounded-lg border p-3"><p className="text-xl font-semibold tabular-nums">{value}</p><p className="text-xs text-muted-foreground">{label}</p></div>)}</div></div>
+      <fieldset disabled={saving||saveFailed} className="min-w-0">
       <Card className="shadow-card border-0">
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
@@ -455,8 +471,9 @@ const ConfigEspecialidades: React.FC = () => {
             </div>
           </div>
 
+          <Input className="mb-3" placeholder="Buscar especialidade ou profissão..." aria-label="Buscar especialidade" value={query} onChange={e=>setQuery(e.target.value)} />
           <div className="flex flex-wrap gap-2 mb-4">
-            {especialidades.map(e => (
+            {especialidades.filter(e=>matchesCatalogSearch(query,[e.label,...e.profissoes])).map(e => (
               <Button
                 key={e.key}
                 variant={selected === e.key ? 'default' : 'outline'}
@@ -508,6 +525,7 @@ const ConfigEspecialidades: React.FC = () => {
           )}
         </CardContent>
       </Card>
+      </fieldset>
 
       {/* Add field dialog */}
       <Dialog open={addFieldDialog} onOpenChange={setAddFieldDialog}>
@@ -589,7 +607,7 @@ const ConfigEspecialidades: React.FC = () => {
             <div className="flex items-start justify-between gap-3 p-3 rounded-lg border bg-muted/30">
               <div>
                 <Label className="cursor-pointer text-sm font-semibold">Campo Obrigatório</Label>
-                <p className="text-[11px] text-muted-foreground">O profissional não poderá salvar o prontuário sem preencher</p>
+                <p className="text-[11px] text-muted-foreground">Campo configurado como obrigatório nos leitores que aplicam esta regra</p>
               </div>
               <Switch
                 checked={newField.obrigatorio}
@@ -654,7 +672,7 @@ const ConfigEspecialidades: React.FC = () => {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddFieldDialog(false)}>Cancelar</Button>
-            <Button onClick={addCampoEsp} disabled={!newField.label.trim()}>Adicionar Campo</Button>
+            <Button onClick={addCampoEsp} disabled={saving||saveFailed||!newField.label.trim()}>Adicionar Campo</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -665,6 +683,7 @@ const ConfigEspecialidades: React.FC = () => {
         outrosCampos={esp?.campos.filter(c => c.id !== editingCampo?.id) || []}
         onClose={() => setEditingCampo(null)}
         onSave={saveEditedCampo}
+        disabled={saving||saveFailed}
       />
 
       {/* Copy field dialog */}
@@ -694,7 +713,7 @@ const ConfigEspecialidades: React.FC = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setCopyDialog(null)}>Cancelar</Button>
             <Button
-              disabled={!copyDialog?.targets.length}
+              disabled={saving||saveFailed||!copyDialog?.targets.length}
               onClick={() => copyDialog && copyCampoToEspecialidades(copyDialog.campo, copyDialog.targets)}
             >
               Copiar
@@ -750,7 +769,7 @@ const ConfigEspecialidades: React.FC = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddEspDialog(false)}>Cancelar</Button>
-            <Button onClick={addNovaEspecialidade} disabled={!newEsp.label.trim()}>Criar</Button>
+            <Button onClick={addNovaEspecialidade} disabled={saving||saveFailed||!newEsp.label.trim()}>Criar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -764,9 +783,10 @@ interface EditCampoDialogProps {
   outrosCampos: CampoEspecialidade[];
   onClose: () => void;
   onSave: (c: CampoEspecialidade) => void;
+  disabled:boolean;
 }
 
-const EditCampoDialog: React.FC<EditCampoDialogProps> = ({ campo, outrosCampos, onClose, onSave }) => {
+const EditCampoDialog: React.FC<EditCampoDialogProps> = ({ campo, outrosCampos, onClose, onSave, disabled }) => {
   const [draft, setDraft] = useState<CampoEspecialidade | null>(null);
 
   useEffect(() => {
@@ -793,7 +813,7 @@ const EditCampoDialog: React.FC<EditCampoDialogProps> = ({ campo, outrosCampos, 
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar campo</DialogTitle>
-          <DialogDescription>Altere as propriedades deste campo. Mudanças refletem em tempo real no prontuário.</DialogDescription>
+          <DialogDescription>Altere as propriedades deste campo. As alterações são aplicadas após a gravação confirmada.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
@@ -919,7 +939,7 @@ const EditCampoDialog: React.FC<EditCampoDialogProps> = ({ campo, outrosCampos, 
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={() => onSave(draft)} disabled={!draft.label.trim()}>Salvar</Button>
+          <Button onClick={() => onSave(draft)} disabled={disabled||!draft.label.trim()}>Salvar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

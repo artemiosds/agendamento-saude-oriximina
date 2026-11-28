@@ -1,4 +1,7 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useAdminCustomFields } from '@/hooks/useAdminCustomFields';
+import { conditionalCycle, validateFieldLimits } from '@/lib/adminFieldConfig';
+import { Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +18,6 @@ import {
 import { toast } from 'sonner';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import {
-  useCustomFields,
   CustomFieldDef,
   CustomFieldType,
   ScreenKey,
@@ -203,7 +205,11 @@ const SortableItem: React.FC<SortableItemProps> = ({
 // -------- Main component --------
 const ConfigPersonalizarCampos: React.FC = () => {
   const { unidades } = useOperacional();
-  const { getRawScreenConfig, updateScreenConfig, loading } = useCustomFields();
+  const { getRawScreenConfig, updateScreenConfig, loading,loadFailed,refetch } = useAdminCustomFields();
+  const [saving,setSaving]=useState(false);
+  const [saveFailed,setSaveFailed]=useState(false);
+  const [status,setStatus]=useState('');
+  const lock=useRef(false);
 
   const [selectedScreen, setSelectedScreen] = useState<ScreenKey>('paciente');
   const [selectedUnit, setSelectedUnit] = useState<string>('__global__');
@@ -235,16 +241,18 @@ const ConfigPersonalizarCampos: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!loading) {
+    if (!loading&&!loadFailed) {
       setScreenConfig(getRawScreenConfig(selectedScreen, selectedUnit));
     }
-  }, [selectedScreen, selectedUnit, loading, getRawScreenConfig]);
+  }, [selectedScreen, selectedUnit, loading, loadFailed,getRawScreenConfig]);
 
-  const save = useCallback(async (cfg: ScreenConfig) => {
-    setScreenConfig(cfg);
-    await updateScreenConfig(selectedScreen, selectedUnit, cfg);
-    toast.success('Configuração salva');
-  }, [selectedScreen, selectedUnit, updateScreenConfig]);
+  const save = useCallback(async (cfg: ScreenConfig):Promise<boolean> => {
+    if(lock.current||loading||loadFailed||saveFailed)return false;
+    lock.current=true;setSaving(true);setStatus('Salvando…');
+    try{const ok=await updateScreenConfig(selectedScreen,selectedUnit,cfg);if(!ok){setSaveFailed(true);setStatus('Gravação não confirmada. Recarregue antes de editar novamente.');return false;}setScreenConfig(cfg);setStatus('Gravação confirmada');toast.success('Configuração salva');return true;}
+    catch{setSaveFailed(true);setStatus('Gravação não confirmada.');return false;}
+    finally{lock.current=false;setSaving(false);}
+  }, [selectedScreen,selectedUnit,updateScreenConfig,loading,loadFailed,saveFailed]);
 
   // Build unified ordered list — uses orderedNames if present, otherwise [natives..., customs by ordem]
   const unifiedRows: UnifiedRow[] = useMemo(() => {
@@ -413,12 +421,21 @@ const ConfigPersonalizarCampos: React.FC = () => {
 
     const hasOptions = fieldForm.tipo === 'select' || fieldForm.tipo === 'multiselect' || fieldForm.tipo === 'radio';
 
+    if(!nome||(!editingField&&((NATIVE_FIELDS[selectedScreen]||[]).some(f=>f.nome===nome)||screenConfig.fields.some(f=>f.nome===nome)))){toast.error('Nome interno inválido ou já utilizado.');return;}
+    const options=[...new Set(fieldForm.opcoes.split(',').map(o=>o.trim()).filter(Boolean))];
+    if(hasOptions&&!options.length){toast.error('Informe ao menos uma opção.');return;}
+    const validation=validateFieldLimits(fieldForm.valMin,fieldForm.valMax,fieldForm.valMaxLength,fieldForm.valRegex);
+    if(validation){toast.error(validation);return;}
+    if(fieldForm.condEnabled&&!fieldForm.condField.trim()){toast.error('Informe o campo de referência.');return;}
+    const condition=buildCondition();
+    if(condition&&conditionalCycle([...screenConfig.fields.filter(f=>f.id!==editingField?.id).map(f=>({key:f.nome,reference:f.condicao?.fieldName})),{key:nome,reference:condition.fieldName}],nome)){toast.error('Regra condicional circular.');return;}
     const field: CustomFieldDef = {
+      ...editingField,
       id: editingField?.id || generateId(),
       nome,
       rotulo: fieldForm.rotulo.trim(),
       tipo: fieldForm.tipo,
-      opcoes: hasOptions ? fieldForm.opcoes.split(',').map((o) => o.trim()).filter(Boolean) : [],
+      opcoes: hasOptions ? options : [],
       obrigatorio: fieldForm.obrigatorio,
       ativo: editingField?.ativo ?? true,
       ordem: editingField?.ordem ?? (screenConfig.fields.length + 1) * 10,
@@ -428,7 +445,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
       helpText: fieldForm.helpText.trim() || undefined,
       validacao: buildValidation(),
       escopo: buildScope(),
-      condicao: buildCondition(),
+      condicao: condition,
     };
 
     const newFields = editingField
@@ -439,13 +456,14 @@ const ConfigPersonalizarCampos: React.FC = () => {
     const order = screenConfig.orderedNames || [];
     const newOrder = order.includes(nome) ? order : [...order, nome];
 
-    await save({ ...screenConfig, fields: newFields, orderedNames: newOrder });
-    setModalOpen(false);
+    if(await save({ ...screenConfig, fields: newFields, orderedNames: newOrder }))setModalOpen(false);
   };
 
   const deleteField = async (fieldId: string) => {
     if (!confirm('Excluir este campo personalizado? Os dados já preenchidos serão mantidos no banco.')) return;
     const target = screenConfig.fields.find((f) => f.id === fieldId);
+    if(!target)return;
+    if(screenConfig.fields.some(f=>f.id!==fieldId&&f.condicao?.fieldName===target.nome)){toast.error('Este campo é referência de uma condição. Revise a condição antes de excluir.');return;}
     const newFields = screenConfig.fields.filter((f) => f.id !== fieldId);
     const newOrder = (screenConfig.orderedNames || []).filter((n) => n !== target?.nome);
     await save({ ...screenConfig, fields: newFields, orderedNames: newOrder });
@@ -475,8 +493,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
     const overrides = { ...screenConfig.labelOverrides, [renameModal.nome]: renameModal.rotulo.trim() };
     // If user clears the rename, remove the override
     if (!renameModal.rotulo.trim()) delete overrides[renameModal.nome];
-    await save({ ...screenConfig, labelOverrides: overrides });
-    setRenameModal(null);
+    if(await save({ ...screenConfig, labelOverrides: overrides }))setRenameModal(null);
   };
 
   // ---------- Helpers for rendering ----------
@@ -490,8 +507,10 @@ const ConfigPersonalizarCampos: React.FC = () => {
     return row.field.rotulo;
   };
 
+  if(loading)return <div role="status" className="flex items-center justify-center gap-2 py-12"><Loader2 className="w-5 h-5 animate-spin"/>Carregando campos…</div>;
+  if(loadFailed)return <Card><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível consultar os campos. Edição bloqueada.</p><Button onClick={()=>void refetch()}>Tentar novamente</Button></CardContent></Card>;
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
           <Settings2 className="w-5 h-5 text-primary" />
@@ -499,11 +518,13 @@ const ConfigPersonalizarCampos: React.FC = () => {
         <div>
           <h2 className="text-lg font-semibold font-display text-foreground">Personalizar Campos</h2>
           <p className="text-sm text-muted-foreground">
-            Renomeie, reordene (com arrastar ou setas), oculte ou adicione campos. Mudanças refletem em tempo real em todo o sistema.
+            Renomeie, reordene (com arrastar ou setas), oculte ou adicione campos. Alterações são aplicadas após gravação confirmada.
           </p>
         </div>
       </div>
 
+      <div className="rounded-xl border bg-card p-4 space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-semibold">{SCREEN_LABELS[selectedScreen]}</p><p className="text-xs text-muted-foreground">{selectedUnit==='__global__'?'Todas as unidades':unidades.find(u=>u.id===selectedUnit)?.nome??'Unidade selecionada'}</p><p role="status" className="text-xs text-muted-foreground">{status||'Configuração carregada'}</p></div><Button size="sm" variant="outline" disabled={saving} onClick={()=>{if(!saveFailed||window.confirm('Descartar alterações não confirmadas e recarregar?')){setModalOpen(false);setRenameModal(null);setSaveFailed(false);setStatus('');void refetch();}}}>Atualizar campos</Button></div><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{[[unifiedRows.length,'Total de campos'],[screenConfig.fields.length,'Personalizados'],[unifiedRows.filter(isHiddenForRow).length,'Ocultos/inativos']].map(([value,label])=><div key={label} className="rounded-lg border p-3"><p className="text-xl font-semibold tabular-nums">{value}</p><p className="text-xs text-muted-foreground">{label}</p></div>)}</div></div>
+      <fieldset disabled={saving||saveFailed} className="space-y-4 min-w-0">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <Label className="text-sm font-medium">Tela</Label>
@@ -573,6 +594,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
           )}
         </CardContent>
       </Card>
+      </fieldset>
 
       {/* Add/Edit Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
@@ -580,7 +602,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
           <DialogHeader>
             <DialogTitle>{editingField ? 'Editar Campo Personalizado' : 'Novo Campo Personalizado'}</DialogTitle>
             <p className="text-xs text-muted-foreground">
-              Configure o campo e defina em quais contextos ele será exibido. As mudanças refletem em todas as telas e na impressão/PDF.
+              Configure o campo e defina em quais contextos ele será exibido. O alcance depende dos leitores já existentes em cada tela.
             </p>
           </DialogHeader>
 
@@ -774,7 +796,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button onClick={saveField}>{editingField ? 'Salvar' : 'Adicionar'}</Button>
+            <Button disabled={saving||saveFailed} onClick={saveField}>{editingField ? 'Salvar' : 'Adicionar'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -797,7 +819,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRenameModal(null)}>Cancelar</Button>
-            <Button onClick={saveRename}>Salvar</Button>
+            <Button disabled={saving||saveFailed} onClick={saveRename}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
