@@ -16,6 +16,12 @@ export function mergeAdminScope(current:CustomFieldsConfig,screen:string,unit:st
   const stored=readAdminScope(current,screen,unit);
   if(!sameConfigSection(stored,expected))throw Error('Esta tela/unidade foi alterada por outra sessão. Recarregue antes de editar.');
   const previous=stored??emptyAdminScreen();
+  // A global reference can be consumed by any unit. Reject removal while an overlapping scope still refers to it.
+  const removed=previous.fields.filter(f=>!next.fields.some(n=>n.id===f.id));
+  for(const field of removed){
+    if(next.fields.some(f=>f.condicao?.fieldName===field.nome))throw Error('Campo referenciado por uma condição.');
+    if(unit==='__global__'&&Object.entries(current[screen]??{}).some(([scope,value])=>scope!==unit&&value.fields.some(f=>f.condicao?.fieldName===field.nome)))throw Error('Campo global referenciado por uma unidade.');
+  }
   const group=current[screen]??{};
   const added=next.fields.filter(f=>!previous.fields.some(old=>old.id===f.id));
   for(const field of added){

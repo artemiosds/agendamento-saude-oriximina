@@ -20,6 +20,11 @@ describe('configuração administrativa de campos',()=>{
   expect(()=>mergeAdminScope({paciente:{__global__:next}},'paciente','u1',undefined,next,[])).toThrow('Nome');
   expect(mergeAdminScope({paciente:{u2:next}},'paciente','u1',undefined,next,[]).paciente.u1).toEqual(next);
  });
+ it('protege campo global referenciado por uma unidade',()=>{
+  const empty=emptyAdminScreen(),global={...empty,fields:[field('origem')]};
+  const unit={...empty,fields:[{...field('destino'),condicao:{fieldName:'origem',op:'notempty' as const}}]};
+  expect(()=>mergeAdminScope({paciente:{__global__:global,u1:unit}},'paciente','__global__',global,empty,[])).toThrow('referenciado');
+ });
  it('detecta referência circular e mantém dependências válidas',()=>{
   expect(conditionalCycle([{key:'a',reference:'b'},{key:'b',reference:'a'}],'a')).toBe(true);
   expect(conditionalCycle([{key:'a',reference:'a'}],'a')).toBe(true);

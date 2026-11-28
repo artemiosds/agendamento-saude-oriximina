@@ -380,7 +380,7 @@ const ConfigEspecialidades: React.FC = () => {
     const options=[...new Set(newField.opcoes.split(',').map(o=>o.trim()).filter(Boolean))];
     if(!newField.tipos_prontuario.length){toast.error('Selecione ao menos um tipo de prontuário.');return;}
     if(needsOpcoes&&!options.length){toast.error('Informe ao menos uma opção.');return;}
-    const id='custom_'+crypto.randomUUID();
+    const id='custom_'+crypto.randomUUID().replace(/-/g,'_');
     const campo: CampoEspecialidade = {
       id,
       key:id,
@@ -416,7 +416,7 @@ const ConfigEspecialidades: React.FC = () => {
     if(campo.condicao&&especialidades.some(e=>targets.includes(e.key)&&!e.campos.some(c=>c.key===campo.condicao?.campo))){toast.error('Uma especialidade de destino não possui o campo de referência da condição.');return;}
     const updated = especialidades.map(e => {
       if (!targets.includes(e.key)) return e;
-      const newId = 'copy_'+crypto.randomUUID();
+      const newId = 'copy_'+crypto.randomUUID().replace(/-/g,'_');
       const novo: CampoEspecialidade = {
         ...campo,
         id: newId,
@@ -479,7 +479,7 @@ const ConfigEspecialidades: React.FC = () => {
                 variant={selected === e.key ? 'default' : 'outline'}
                 size="sm"
                 className={`text-xs ${!e.ativa ? 'opacity-50' : ''}`}
-                onClick={() => setSelected(e.key)}
+                onClick={()=>{if(!lock.current&&!editingCampo&&!addFieldDialog&&!copyDialog&&!addEspDialog)setSelected(e.key);}}
               >
                 {e.label}
                 {!e.ativa && <span className="ml-1 text-[9px]">(inativa)</span>}
@@ -528,7 +528,7 @@ const ConfigEspecialidades: React.FC = () => {
       </fieldset>
 
       {/* Add field dialog */}
-      <Dialog open={addFieldDialog} onOpenChange={setAddFieldDialog}>
+      <Dialog open={addFieldDialog} onOpenChange={v=>{if(!lock.current)setAddFieldDialog(v);}}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -671,7 +671,7 @@ const ConfigEspecialidades: React.FC = () => {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddFieldDialog(false)}>Cancelar</Button>
+            <Button variant="outline" disabled={saving} onClick={() => setAddFieldDialog(false)}>Cancelar</Button>
             <Button onClick={addCampoEsp} disabled={saving||saveFailed||!newField.label.trim()}>Adicionar Campo</Button>
           </DialogFooter>
         </DialogContent>
@@ -681,13 +681,13 @@ const ConfigEspecialidades: React.FC = () => {
       <EditCampoDialog
         campo={editingCampo}
         outrosCampos={esp?.campos.filter(c => c.id !== editingCampo?.id) || []}
-        onClose={() => setEditingCampo(null)}
+        onClose={()=>{if(!lock.current)setEditingCampo(null);}}
         onSave={saveEditedCampo}
         disabled={saving||saveFailed}
       />
 
       {/* Copy field dialog */}
-      <Dialog open={!!copyDialog} onOpenChange={(o) => !o && setCopyDialog(null)}>
+      <Dialog open={!!copyDialog} onOpenChange={o=>{if(!o&&!lock.current)setCopyDialog(null);}}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Copiar campo para outras especialidades</DialogTitle>
@@ -711,7 +711,7 @@ const ConfigEspecialidades: React.FC = () => {
             ))}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCopyDialog(null)}>Cancelar</Button>
+            <Button variant="outline" disabled={saving} onClick={() => setCopyDialog(null)}>Cancelar</Button>
             <Button
               disabled={saving||saveFailed||!copyDialog?.targets.length}
               onClick={() => copyDialog && copyCampoToEspecialidades(copyDialog.campo, copyDialog.targets)}
@@ -748,7 +748,7 @@ const ConfigEspecialidades: React.FC = () => {
       </Dialog>
 
       {/* Add especialidade dialog */}
-      <Dialog open={addEspDialog} onOpenChange={setAddEspDialog}>
+      <Dialog open={addEspDialog} onOpenChange={v=>{if(!lock.current)setAddEspDialog(v);}}>
         <DialogContent>
           <DialogHeader><DialogTitle>Nova Especialidade</DialogTitle></DialogHeader>
           <div className="space-y-3">
@@ -768,7 +768,7 @@ const ConfigEspecialidades: React.FC = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddEspDialog(false)}>Cancelar</Button>
+            <Button variant="outline" disabled={saving} onClick={() => setAddEspDialog(false)}>Cancelar</Button>
             <Button onClick={addNovaEspecialidade} disabled={saving||saveFailed||!newEsp.label.trim()}>Criar</Button>
           </DialogFooter>
         </DialogContent>

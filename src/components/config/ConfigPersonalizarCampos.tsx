@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { useAdminCustomFields } from '@/hooks/useAdminCustomFields';
 import { conditionalCycle, validateFieldLimits } from '@/lib/adminFieldConfig';
 import { Loader2 } from 'lucide-react';
@@ -213,9 +213,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
 
   const [selectedScreen, setSelectedScreen] = useState<ScreenKey>('paciente');
   const [selectedUnit, setSelectedUnit] = useState<string>('__global__');
-  const [screenConfig, setScreenConfig] = useState<ScreenConfig>({
-    fields: [], hiddenNative: [], labelOverrides: {}, orderedNames: [],
-  });
+  const screenConfig = useMemo(()=>getRawScreenConfig(selectedScreen,selectedUnit),[getRawScreenConfig,selectedScreen,selectedUnit]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingField, setEditingField] = useState<CustomFieldDef | null>(null);
@@ -240,16 +238,10 @@ const ConfigPersonalizarCampos: React.FC = () => {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  useEffect(() => {
-    if (!loading&&!loadFailed) {
-      setScreenConfig(getRawScreenConfig(selectedScreen, selectedUnit));
-    }
-  }, [selectedScreen, selectedUnit, loading, loadFailed,getRawScreenConfig]);
-
   const save = useCallback(async (cfg: ScreenConfig):Promise<boolean> => {
     if(lock.current||loading||loadFailed||saveFailed)return false;
     lock.current=true;setSaving(true);setStatus('Salvando…');
-    try{const ok=await updateScreenConfig(selectedScreen,selectedUnit,cfg);if(!ok){setSaveFailed(true);setStatus('Gravação não confirmada. Recarregue antes de editar novamente.');return false;}setScreenConfig(cfg);setStatus('Gravação confirmada');toast.success('Configuração salva');return true;}
+    try{const ok=await updateScreenConfig(selectedScreen,selectedUnit,cfg);if(!ok){setSaveFailed(true);setStatus('Gravação não confirmada. Recarregue antes de editar novamente.');return false;}setStatus('Gravação confirmada');toast.success('Configuração salva');return true;}
     catch{setSaveFailed(true);setStatus('Gravação não confirmada.');return false;}
     finally{lock.current=false;setSaving(false);}
   }, [selectedScreen,selectedUnit,updateScreenConfig,loading,loadFailed,saveFailed]);
@@ -404,7 +396,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
           ? fieldForm.condValue.split(',').map(s => s.trim()).filter(Boolean)
           : fieldForm.condValue)
       : undefined;
-    return { fieldName: fieldForm.condField, op, value };
+    return { fieldName: fieldForm.condField.trim(), op, value };
   };
 
   const saveField = async () => {
@@ -428,6 +420,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
     if(validation){toast.error(validation);return;}
     if(fieldForm.condEnabled&&!fieldForm.condField.trim()){toast.error('Informe o campo de referência.');return;}
     const condition=buildCondition();
+    if(condition&&condition.op!=='empty'&&condition.op!=='notempty'&&(Array.isArray(condition.value)?!condition.value.length:!String(condition.value??'').trim())){toast.error('Informe o valor da condição.');return;}
     if(condition&&conditionalCycle([...screenConfig.fields.filter(f=>f.id!==editingField?.id).map(f=>({key:f.nome,reference:f.condicao?.fieldName})),{key:nome,reference:condition.fieldName}],nome)){toast.error('Regra condicional circular.');return;}
     const field: CustomFieldDef = {
       ...editingField,
@@ -528,7 +521,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <Label className="text-sm font-medium">Tela</Label>
-          <Select value={selectedScreen} onValueChange={(v) => setSelectedScreen(v as ScreenKey)}>
+          <Select disabled={saving||saveFailed||modalOpen||!!renameModal} value={selectedScreen} onValueChange={(v) => {if(!lock.current&&!modalOpen&&!renameModal){setSelectedScreen(v as ScreenKey);setStatus('');}}}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {(Object.keys(SCREEN_LABELS) as ScreenKey[]).map((k) => (
@@ -539,7 +532,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
         </div>
         <div>
           <Label className="text-sm font-medium">Unidade</Label>
-          <Select value={selectedUnit} onValueChange={setSelectedUnit}>
+          <Select disabled={saving||saveFailed||modalOpen||!!renameModal} value={selectedUnit} onValueChange={v=>{if(!lock.current&&!modalOpen&&!renameModal){setSelectedUnit(v);setStatus('');}}}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__global__">Global (Todas as unidades)</SelectItem>
@@ -597,7 +590,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
       </fieldset>
 
       {/* Add/Edit Modal */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+      <Dialog open={modalOpen} onOpenChange={v=>{if(!lock.current)setModalOpen(v);}}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingField ? 'Editar Campo Personalizado' : 'Novo Campo Personalizado'}</DialogTitle>
@@ -795,14 +788,14 @@ const ConfigPersonalizarCampos: React.FC = () => {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
+            <Button variant="outline" disabled={saving} onClick={() => setModalOpen(false)}>Cancelar</Button>
             <Button disabled={saving||saveFailed} onClick={saveField}>{editingField ? 'Salvar' : 'Adicionar'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Rename Modal */}
-      <Dialog open={!!renameModal} onOpenChange={() => setRenameModal(null)}>
+      <Dialog open={!!renameModal} onOpenChange={v=>{if(!v&&!lock.current)setRenameModal(null);}}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Renomear Campo</DialogTitle>
@@ -818,7 +811,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
             </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameModal(null)}>Cancelar</Button>
+            <Button variant="outline" disabled={saving} onClick={() => setRenameModal(null)}>Cancelar</Button>
             <Button disabled={saving||saveFailed} onClick={saveRename}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
