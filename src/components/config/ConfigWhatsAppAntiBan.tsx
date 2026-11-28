@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOperacional } from '@/contexts/OperacionalContext';
@@ -18,6 +18,8 @@ import {
 import { Shield, Loader2, Save, Trash2, RefreshCw, AlertTriangle, Clock, PowerOff, Power } from 'lucide-react';
 import CircuitBreakerCard from './whatsapp/CircuitBreakerCard';
 import { toast } from 'sonner';
+import type {Tables,TablesUpdate} from '@/integrations/supabase/types';
+import {nextVersion} from '@/lib/adminWhatsApp';
 
 const DAYS = [
   { v: 0, l: 'Dom' }, { v: 1, l: 'Seg' }, { v: 2, l: 'Ter' },
@@ -76,6 +78,10 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
   const [selectedUnit, setSelectedUnit] = useState<string>(userUnitId || editableUnits[0]?.id || '');
 
   const [cfg, setCfg] = useState<UnitCfg>(DEFAULT);
+  const [failed,setFailed]=useState(false);
+  const baseline=useRef<{unit:string;row:Tables<'whatsapp_config'>|null}|null>(null);
+  const lock=useRef(false),generation=useRef(0);
+  const confirmSession=async()=>{const {data,error}=await supabase.auth.getSession();if(error||!user?.authUserId||user.role!=='master'||user.ativo!==true||data.session?.user.id!==user.authUserId)throw Error('Sessão não confirmada.');};
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -98,20 +104,16 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
   }>>([]);
   const [pendenciasLoading, setPendenciasLoading] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!selectedUnit) return;
-    setLoading(true);
-    const { data } = await supabase
-      .from('whatsapp_config')
-      .select('*')
-      .eq('unidade_id', selectedUnit)
-      .maybeSingle();
-    if (data) setCfg(data as any);
-    else setCfg({ ...DEFAULT, unidade_id: selectedUnit });
-    setLoading(false);
-  }, [selectedUnit]);
-
-  useEffect(() => { load(); }, [load]);
+  const load=useCallback(async()=>{
+    const request=++generation.current;baseline.current=null;setLoading(true);setFailed(false);
+    try{if(!selectedUnit)throw Error('Selecione a unidade.');
+      const {data,error}=await supabase.from('whatsapp_config').select('*').eq('unidade_id',selectedUnit).maybeSingle();
+      if(error)throw error;if(request!==generation.current)return;
+      baseline.current={unit:selectedUnit,row:data};setCfg(data??{...DEFAULT,unidade_id:selectedUnit});
+    }catch{if(request===generation.current)setFailed(true);}
+    finally{if(request===generation.current)setLoading(false);}
+  },[selectedUnit]);
+  useEffect(()=>{void load();return()=>{generation.current++;baseline.current=null;};},[load]);
 
   const loadQueue = useCallback(async () => {
     setQueueLoading(true);
@@ -187,107 +189,49 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
 
   useEffect(() => { loadPendenciasCadastro(); }, [loadPendenciasCadastro]);
 
-  // Realtime: assina mudanças na config da unidade selecionada para
-  // sincronizar o estado entre múltiplas estações instantaneamente.
-  useEffect(() => {
-    if (!selectedUnit) return;
-    const channel = supabase
-      .channel(`anti_ban_cfg_${selectedUnit}`)
-      .on(
-        'postgres_changes' as any,
-        { event: '*', schema: 'public', table: 'whatsapp_config', filter: `unidade_id=eq.${selectedUnit}` },
-        (payload: any) => {
-          const next = payload.new;
-          if (next) setCfg(prev => ({ ...prev, ...next }));
-        },
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [selectedUnit]);
-
-  /** Persiste APENAS o campo whatsapp_ativo (toggle imediato, sem clicar Salvar). */
-  const persistAtivo = async (novoValor: boolean) => {
-    setTogglingActive(true);
-    try {
-      const payload = { ...cfg, unidade_id: selectedUnit, whatsapp_ativo: novoValor };
-      delete (payload as any).id;
-      delete (payload as any).created_at;
-      delete (payload as any).updated_at;
-      const { error } = await supabase
-        .from('whatsapp_config')
-        .upsert(payload, { onConflict: 'unidade_id' });
-      if (error) throw error;
-      setCfg(p => ({ ...p, whatsapp_ativo: novoValor }));
-      toast.success(novoValor
-        ? '✅ WhatsApp reativado — automações voltarão a funcionar'
-        : '🔕 WhatsApp pausado — nenhum envio será processado');
-    } catch (e: any) {
-      toast.error(`Erro ao alterar status: ${e.message}`);
-    } finally {
-      setTogglingActive(false);
-    }
+  // Explicit reload and version check prevent an external update replacing a local draft.
+  const write=async(patch:TablesUpdate<'whatsapp_config'>)=>{
+    await confirmSession();const old=baseline.current;
+    if(!old||old.unit!==selectedUnit||failed||loading)throw Error('Configuração não confirmada.');
+    const payload={...patch,updated_at:old.row?nextVersion(old.row.updated_at):new Date().toISOString()};
+    const result=old.row?await supabase.from('whatsapp_config').update(payload).eq('id',old.row.id).eq('unidade_id',selectedUnit).eq('updated_at',old.row.updated_at).select('*').maybeSingle():await supabase.from('whatsapp_config').insert({...DEFAULT,...payload,unidade_id:selectedUnit}).select('*').single();
+    if(result.error||!result.data||result.data.unidade_id!==selectedUnit)throw Error('Gravação não confirmada.');
+    baseline.current={unit:selectedUnit,row:result.data};return result.data;
   };
-
-  const handleToggleAtivo = (novoValor: boolean) => {
-    if (!selectedUnit) { toast.error('Selecione uma unidade'); return; }
-    if (!novoValor) {
-      // Desativando → abre confirmação para escolher pausar ou limpar fila
-      setConfirmDeactivate(true);
-    } else {
-      persistAtivo(true);
-    }
+  const persistAtivo=async(novoValor:boolean,clear=false)=>{
+    if(lock.current||failed||loading||!selectedUnit)return;
+    lock.current=true;setTogglingActive(true);setConfirmDeactivate(false);
+    try{
+      const data=await write({whatsapp_ativo:novoValor});
+      if(data.whatsapp_ativo!==novoValor)throw Error('Pausa/reativação não confirmada.');
+      setCfg(p=>({...p,whatsapp_ativo:novoValor}));
+      if(clear){
+        const {error,count}=await supabase.from('whatsapp_queue').update({status:'cancelado',motivo_erro:'Cancelado ao desativar WhatsApp da unidade'},{count:'exact'}).eq('unidade_id',selectedUnit).eq('status','pendente');
+        if(error||count===null){toast.error('Pausa confirmada; cancelamento da fila não confirmado. Confira antes de repetir.');return;}
+        toast.success(`Pausa confirmada · ${count} mensagens pendentes canceladas.`);
+      }else toast.success(novoValor?'WhatsApp reativado.':'WhatsApp pausado.');
+    }catch{setFailed(true);toast.error('Operação não confirmada. Nenhuma limpeza adicional será iniciada.');}
+    finally{lock.current=false;setTogglingActive(false);void loadQueue();}
   };
-
-  /** Apenas pausa: muda flag para false, fila pendente permanece (mas será bloqueada no envio). */
-  const pausarEnvios = async () => {
-    setConfirmDeactivate(false);
-    await persistAtivo(false);
-    loadQueue();
+  const handleToggleAtivo=(novoValor:boolean)=>{if(!selectedUnit||failed||loading||lock.current)return;if(!novoValor)setConfirmDeactivate(true);else if(window.confirm('Reativar os envios da unidade?'))void persistAtivo(true);};
+  const pausarEnvios=()=>void persistAtivo(false);
+  const limparFila=()=>void persistAtivo(false,true);
+  const save=async()=>{
+    if(lock.current||failed||loading||!selectedUnit)return;
+    lock.current=true;setSaving(true);
+    try{
+      const {max_msgs_paciente_dia,max_msgs_paciente_semana,intervalo_minimo_minutos,delay_aleatorio_min_seg,delay_aleatorio_max_seg,limite_global_por_minuto,horario_inicio,horario_fim,dias_permitidos}=cfg;
+      const data=await write({max_msgs_paciente_dia,max_msgs_paciente_semana,intervalo_minimo_minutos,delay_aleatorio_min_seg,delay_aleatorio_max_seg,limite_global_por_minuto,horario_inicio,horario_fim,dias_permitidos});
+      setCfg(data);toast.success('Configuração confirmada.');
+    }catch{setFailed(true);toast.error('Gravação não confirmada. Recarregue antes de repetir.');}
+    finally{lock.current=false;setSaving(false);}
   };
-
-  /** Pausa + limpa toda a fila pendente da unidade. */
-  const limparFila = async () => {
-    setConfirmDeactivate(false);
-    await persistAtivo(false);
-    try {
-      const { error, count } = await supabase
-        .from('whatsapp_queue')
-        .update({ status: 'cancelado', motivo_erro: 'Cancelado ao desativar WhatsApp da unidade' }, { count: 'exact' })
-        .eq('unidade_id', selectedUnit)
-        .eq('status', 'pendente');
-      if (error) throw error;
-      toast.success(`🧹 ${count || 0} mensagem(ns) pendente(s) canceladas`);
-      loadQueue();
-    } catch (e: any) {
-      toast.error(`Erro ao limpar fila: ${e.message}`);
-    }
-  };
-
-
-  const save = async () => {
-    if (!selectedUnit) { toast.error('Selecione uma unidade'); return; }
-    setSaving(true);
-    try {
-      const payload = { ...cfg, unidade_id: selectedUnit };
-      delete (payload as any).id;
-      delete (payload as any).created_at;
-      delete (payload as any).updated_at;
-      const { error } = await supabase
-        .from('whatsapp_config')
-        .upsert(payload, { onConflict: 'unidade_id' });
-      if (error) throw error;
-      toast.success('Configuração anti-ban salva!');
-      load();
-    } catch (e: any) {
-      toast.error(`Erro: ${e.message}`);
-    }
-    setSaving(false);
-  };
-
-  const cancelMsg = async (id: string) => {
-    await supabase.from('whatsapp_queue').update({ status: 'cancelado' }).eq('id', id);
-    toast.success('Mensagem cancelada');
-    loadQueue();
+  const cancelMsg=async(id:string)=>{
+    if(lock.current||!window.confirm('Cancelar esta mensagem pendente?'))return;
+    lock.current=true;setSaving(true);
+    try{await confirmSession();let query=supabase.from('whatsapp_queue').update({status:'cancelado'}).eq('id',id).eq('status','pendente');if(!isGlobalAdmin)query=query.eq('unidade_id',userUnitId);const {data,error}=await query.select('id').maybeSingle();if(error||!data)throw Error('Cancelamento não confirmado.');toast.success('Mensagem cancelada.');}
+    catch{toast.error('Cancelamento não confirmado. Confira a fila.');}
+    finally{lock.current=false;setSaving(false);void loadQueue();}
   };
 
   const toggleDay = (d: number) => {
@@ -332,7 +276,7 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
         <Card className="border-0 shadow-card">
           <CardContent className="p-4 flex items-center gap-3">
             <Label className="whitespace-nowrap">Unidade:</Label>
-            <Select value={selectedUnit} onValueChange={setSelectedUnit}>
+            <Select disabled={saving||togglingActive||confirmDeactivate} value={selectedUnit} onValueChange={v=>{if(!lock.current&&!confirmDeactivate)setSelectedUnit(v);}}>
               <SelectTrigger className="max-w-md"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {editableUnits.map(u => (
@@ -349,7 +293,7 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
         <CardContent className="p-5 space-y-5">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-          ) : (
+          ) : failed ? <div role="alert" className="space-y-2"><p>Configuração não confirmada. Edição bloqueada.</p><Button variant="outline" onClick={()=>void load()}>Recarregar</Button></div> : (
             <>
               <div className={`flex items-center justify-between p-4 rounded-xl border-2 transition-colors ${
                 cfg.whatsapp_ativo
@@ -374,7 +318,7 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
                 </div>
                 <Switch
                   checked={cfg.whatsapp_ativo}
-                  disabled={togglingActive}
+                  disabled={togglingActive||saving||failed}
                   onCheckedChange={handleToggleAtivo}
                 />
               </div>
@@ -462,7 +406,7 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
 
 
               <div className="flex justify-end pt-2">
-                <Button onClick={save} disabled={saving} className="gap-2">
+                <Button onClick={save} disabled={saving||togglingActive||failed} className="gap-2">
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Salvar Configuração
                 </Button>
@@ -583,7 +527,7 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       {m.status === 'pendente' && (
-                        <Button size="sm" variant="ghost" onClick={() => cancelMsg(m.id)}
+                        <Button size="sm" variant="ghost" disabled={saving||togglingActive} onClick={() => cancelMsg(m.id)}
                           className="h-7 px-2 text-destructive hover:text-destructive">
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>

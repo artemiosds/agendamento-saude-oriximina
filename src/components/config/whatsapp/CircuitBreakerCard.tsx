@@ -11,6 +11,8 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Activity, Pause, Play, Loader2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import {useAdministrativeConfigSection} from '@/hooks/useProntuarioSettings';
+import {configObject} from '@/lib/configSectionGuard';
 
 export const CircuitBreakerCard: React.FC = () => {
   const [paused, setPaused] = useState<{ ate: string; motivo: string | null } | null>(null);
@@ -19,63 +21,47 @@ export const CircuitBreakerCard: React.FC = () => {
   const [horaFim, setHoraFim] = useState('21:00');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [failed,setFailed]=useState(false);
+  const {load:loadSection,save:writeSection}=useAdministrativeConfigSection('whatsapp_humanizado');
 
   const load = useCallback(async () => {
-    setLoading(true);
+    setLoading(true);setFailed(false);
     try {
-      const { data: conn } = await supabase
+      const { data: conn,error:connError } = await supabase
         .from('whatsapp_connection_status')
         .select('fila_pausada_ate, fila_pausada_motivo')
         .order('updated_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+      if(connError)throw connError;
       if (conn?.fila_pausada_ate && new Date(conn.fila_pausada_ate).getTime() > Date.now()) {
         setPaused({ ate: conn.fila_pausada_ate, motivo: conn.fila_pausada_motivo });
       } else setPaused(null);
 
-      const { data: cfg } = await supabase
-        .from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-      const wh = (cfg?.configuracoes as any)?.whatsapp_humanizado || {};
+      const raw=await loadSection();const wh=raw===undefined?{}:configObject(raw);
       setHumanized(wh.enabled !== false);
-      setHoraIni(wh.hora_inicio || '07:00');
-      setHoraFim(wh.hora_fim || '21:00');
-    } finally { setLoading(false); }
-  }, []);
+      setHoraIni(typeof wh.hora_inicio==='string'?wh.hora_inicio:'07:00');
+      setHoraFim(typeof wh.hora_fim==='string'?wh.hora_fim:'21:00');
+    } catch{setFailed(true);} finally { setLoading(false); }
+  }, [loadSection]);
 
   useEffect(() => { load(); }, [load]);
 
-  const togglePause = async () => {
-    if (paused) {
-      await supabase.from('whatsapp_connection_status')
-        .update({ fila_pausada_ate: null, fila_pausada_motivo: null })
-        .neq('id', '00000000-0000-0000-0000-000000000000');
-      toast.success('Fila retomada');
-    } else {
-      const ate = new Date(Date.now() + 30 * 60_000).toISOString();
-      await supabase.from('whatsapp_connection_status')
-        .update({ fila_pausada_ate: ate, fila_pausada_motivo: 'Pausado manualmente (Master)' })
-        .neq('id', '00000000-0000-0000-0000-000000000000');
-      toast.success('Fila pausada por 30 min');
-    }
-    load();
+  const togglePause=async()=>{
+    if(saving||failed||!window.confirm(paused?'Retomar fila de envios?':'Pausar a fila por 30 minutos?'))return;setSaving(true);
+    try{
+      const ate=paused?null:new Date(Date.now()+30*60_000).toISOString();
+      const {data,error}=await supabase.from('whatsapp_connection_status').update({fila_pausada_ate:ate,fila_pausada_motivo:paused?null:'Pausado manualmente (Master)'}).neq('id','00000000-0000-0000-0000-000000000000').select('id');
+      if(error||!data?.length)throw Error('Operação não confirmada.');
+      toast.success(paused?'Retomada confirmada.':'Pausa confirmada.');await load();
+    }catch{setFailed(true);toast.error('Operação não confirmada. Recarregue.');}finally{setSaving(false);}
   };
-
-  const saveHumanized = async () => {
-    setSaving(true);
-    try {
-      const { data: cur } = await supabase
-        .from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-      const next = { ...(cur?.configuracoes as any || {}), whatsapp_humanizado: {
-        enabled: humanized, hora_inicio: horaIni, hora_fim: horaFim, tz: 'America/Belem',
-      }};
-      const { error } = await supabase.from('system_config')
-        .upsert({ id: 'default', configuracoes: next }, { onConflict: 'id' });
-      if (error) throw error;
-      toast.success('Configuração de humanização salva');
-    } catch (e: any) {
-      toast.error('Erro: ' + e.message);
-    } finally { setSaving(false); }
+  const saveHumanized=async()=>{
+    if(saving||failed)return;setSaving(true);
+    try{if(!await writeSection(previous=>({...previous===undefined?{}:configObject(previous),enabled:humanized,hora_inicio:horaIni,hora_fim:horaFim,tz:'America/Belem'})))throw Error('Gravação não confirmada.');toast.success('Configuração confirmada.');}
+    catch{setFailed(true);toast.error('Gravação não confirmada. Recarregue.');}finally{setSaving(false);}
   };
+  if(failed)return <Card><CardContent className="p-4 space-y-2"><p role="alert">Configuração não confirmada.</p><Button onClick={()=>void load()}>Recarregar</Button></CardContent></Card>;
 
   if (loading) return <div className="flex items-center justify-center py-6"><Loader2 className="w-5 h-5 animate-spin" /></div>;
 
@@ -100,7 +86,7 @@ export const CircuitBreakerCard: React.FC = () => {
             <Badge className={paused ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}>
               {paused ? 'PAUSADO' : 'NORMAL'}
             </Badge>
-            <Button size="sm" variant={paused ? 'destructive' : 'secondary'} onClick={togglePause}>
+            <Button size="sm" variant={paused ? 'destructive' : 'secondary'} disabled={saving} onClick={togglePause}>
               {paused ? <Play className="w-4 h-4 mr-1" /> : <Pause className="w-4 h-4 mr-1" />}
               {paused ? 'Retomar fila' : 'Pausar fila'}
             </Button>

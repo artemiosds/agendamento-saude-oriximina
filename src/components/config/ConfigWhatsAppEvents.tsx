@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOperacional } from '@/contexts/OperacionalContext';
@@ -30,58 +30,36 @@ const ConfigWhatsAppEvents: React.FC = () => {
   const editableUnits = isGlobalAdmin ? unidades : unidades.filter(u => u.id === userUnitId);
   const [selectedUnit, setSelectedUnit] = useState<string>(userUnitId || editableUnits[0]?.id || '');
 
+  const [failed,setFailed]=useState(false);
+  const lock=useRef(false),generation=useRef(0);
   const [eventConfig, setEventConfig] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!selectedUnit) return;
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('whatsapp_event_config' as any)
-        .select('evento, ativo')
-        .eq('unidade_id', selectedUnit);
-      
-      if (error) throw error;
-      
-      const configMap: Record<string, boolean> = {};
-      (data || []).forEach((item: any) => {
-        configMap[item.evento] = item.ativo;
-      });
-      
-      setEventConfig(configMap);
-    } catch (err: any) {
-      toast.error('Erro ao carregar eventos: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedUnit]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const toggleEvent = async (tipo: string, currentStatus: boolean) => {
-    if (!selectedUnit) return;
-    setToggling(tipo);
-    try {
-      const { error } = await supabase
-        .from('whatsapp_event_config' as any)
-        .upsert({
-          unidade_id: selectedUnit,
-          evento: tipo,
-          ativo: !currentStatus,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'unidade_id, evento' });
-      
-      if (error) throw error;
-      
-      setEventConfig(prev => ({ ...prev, [tipo]: !currentStatus }));
-      toast.success(`${tipo} ${!currentStatus ? 'ativado' : 'desativado'} com sucesso!`);
-    } catch (err: any) {
-      toast.error('Erro ao salvar: ' + err.message);
-    } finally {
-      setToggling(null);
-    }
+  const load=useCallback(async()=>{
+    const request=++generation.current;setLoading(true);setFailed(false);
+    try{if(!selectedUnit)throw Error('Selecione a unidade.');
+      const {data,error}=await supabase.from('whatsapp_event_config').select('evento,ativo').eq('unidade_id',selectedUnit);
+      if(error||!data)throw Error('Consulta não confirmada.');
+      if(request!==generation.current)return;const map:Record<string,boolean>={};for(const item of data)map[item.evento]=item.ativo;setEventConfig(map);
+    }catch{if(request===generation.current)setFailed(true);}
+    finally{if(request===generation.current)setLoading(false);}
+  },[selectedUnit]);
+  useEffect(()=>{void load();return()=>{generation.current++;};},[load]);
+  const toggleEvent=async(tipo:string,currentStatus:boolean)=>{
+    if(!selectedUnit||loading||failed||lock.current)return;
+    lock.current=true;setToggling(tipo);
+    try{
+      const {data:auth,error:authError}=await supabase.auth.getSession();
+      if(authError||!user?.authUserId||user.role!=='master'||user.ativo!==true||auth.session?.user.id!==user.authUserId)throw Error('Sessão não confirmada.');
+      const {data:old,error:readError}=await supabase.from('whatsapp_event_config').select('id,ativo').eq('unidade_id',selectedUnit).eq('evento',tipo).maybeSingle();
+      if(readError||old?.ativo!==eventConfig[tipo])throw Error('Evento alterado. Recarregue antes de repetir.');
+      const patch={ativo:!currentStatus,updated_at:new Date().toISOString()};
+      const result=old?await supabase.from('whatsapp_event_config').update(patch).eq('id',old.id).eq('unidade_id',selectedUnit).eq('ativo',old.ativo).select('id,ativo').maybeSingle():await supabase.from('whatsapp_event_config').insert({...patch,unidade_id:selectedUnit,evento:tipo}).select('id,ativo').single();
+      if(result.error||!result.data||result.data.ativo!==!currentStatus)throw Error('Gravação não confirmada.');
+      setEventConfig(prev=>({...prev,[tipo]:!currentStatus}));toast.success('Evento atualizado.');
+    }catch{setFailed(true);toast.error('Gravação não confirmada. Recarregue os eventos.');}
+    finally{lock.current=false;setToggling(null);}
   };
 
   return (
@@ -100,7 +78,7 @@ const ConfigWhatsAppEvents: React.FC = () => {
         <Card className="border-0 shadow-card">
           <CardContent className="p-4 flex items-center gap-3">
             <Label className="whitespace-nowrap">Unidade:</Label>
-            <Select value={selectedUnit} onValueChange={setSelectedUnit}>
+            <Select disabled={!!toggling} value={selectedUnit} onValueChange={v=>{if(!lock.current)setSelectedUnit(v);}}>
               <SelectTrigger className="max-w-md"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {editableUnits.map(u => (
@@ -116,7 +94,7 @@ const ConfigWhatsAppEvents: React.FC = () => {
         <CardContent className="p-0">
           {loading ? (
             <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
-          ) : (
+          ) : failed ? <div role="alert" className="p-4 space-y-2"><p>Consulta ou gravação não confirmada.</p><button className="underline" onClick={()=>void load()}>Recarregar eventos</button></div> : (
             <div className="divide-y divide-border">
               {EVENT_LIST.map((event) => {
                 const isActive = eventConfig[event.tipo] ?? true;
@@ -145,7 +123,7 @@ const ConfigWhatsAppEvents: React.FC = () => {
                         <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                       ) : (
                         <Switch 
-                          checked={isActive} 
+                          checked={isActive} disabled={!!toggling||failed}
                           onCheckedChange={() => toggleEvent(event.tipo, isActive)}
                         />
                       )}
