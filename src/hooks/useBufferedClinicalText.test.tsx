@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useBufferedClinicalText } from './useBufferedClinicalText';
 import { DebouncedTextarea } from '@/components/ui/debounced-textarea';
 import AutosaveBadge, { createAutosaveIndicator } from '@/components/prontuario/AutosaveBadge';
+import { canCloseClinicalDraft, clinicalDraftKey, readClinicalDraft, storeClinicalDraft } from '@/lib/clinicalDraftRecovery';
 
 const initial = { paciente_id: 'patient-a', queixa: '', soap: '', date: '2026-11-22', custom_data: { cid: ['F840'], prescriptions: [{ name: 'Prescrição existente' }] } };
 function useFixture(onIdle = vi.fn()) {
@@ -17,6 +18,23 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('buffer clínico por ficha', () => {
+  it('fechar e retomar sem paciente preserva último caractere sem fingir salvamento no banco', () => {
+    const { result } = renderHook(() => useFixture());
+    const key = clinicalDraftKey('isolated-professional', 'isolated-unit');
+    const entries = new Map<string, string>();
+    const storage = { getItem: (k: string) => entries.get(k) ?? null, setItem: (k: string, value: string) => { entries.set(k, value); }, removeItem: (k: string) => { entries.delete(k); } };
+    act(() => {
+      result.current.resetTextForm({ ...initial, paciente_id: '' });
+      result.current.bufferText('soap', 'Última letra antes do X: ç');
+    });
+    const confirmed = storeClinicalDraft(storage, key, result.current.readLatestForm());
+    expect(canCloseClinicalDraft(false, confirmed, false)).toBe(true);
+    expect(result.current.savedTextRevision.current).toBeLessThan(result.current.textRevision.current);
+    const restored = readClinicalDraft<typeof initial>(storage, key);
+    expect(restored?.soap).toBe('Última letra antes do X: ç');
+    expect(restored?.custom_data).toEqual(initial.custom_data);
+    expect(restored?.paciente_id).toBe('');
+  });
   it('digita e salva em segundo plano sem atualizar o formulário React a cada pausa', () => {
     let renders = 0;
     const idle = vi.fn();

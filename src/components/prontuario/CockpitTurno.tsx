@@ -17,13 +17,13 @@ function waitMinutes(value: string | undefined, now: string): number | null {
 }
 
 /** Leitura do turno do próprio profissional; não altera fila, status ou chamadas. */
-export default function CockpitTurno({ professionalId, unitId, enabled }: { professionalId: string; unitId: string; enabled: boolean }) {
+export default function CockpitTurno({ professionalId, unitId, enabled, paused = false }: { professionalId: string; unitId: string; enabled: boolean; paused?: boolean }) {
   const day = todayLocalStr();
   const { data, error, isPending, refetch, isFetching } = useQuery({
     queryKey: ["cockpit-turno", professionalId, unitId, day],
     enabled: enabled && !!professionalId && !!unitId,
-    refetchInterval: 30000,
-    refetchOnWindowFocus: true,
+    refetchInterval: paused ? false : 30000,
+    refetchOnWindowFocus: !paused,
     queryFn: async (): Promise<TurnAppointment[]> => {
       const { data: appointments, error: appointmentError } = await supabase.from("agendamentos")
         .select("id,paciente_nome,hora,status").eq("data", day).eq("profissional_id", professionalId)
@@ -62,6 +62,6 @@ export default function CockpitTurno({ professionalId, unitId, enabled }: { prof
             </div>;
           })}
         </div> : <p className="text-xs text-muted-foreground">Sem agendamentos para hoje.</p>}
-    <p className="text-[11px] text-muted-foreground mt-1">Atualiza a cada 30 segundos. A chamada do próximo paciente segue a conferência existente da Agenda.</p>
+    <p className="text-[11px] text-muted-foreground mt-1">{paused ? "Atualização automática pausada durante o preenchimento." : "Atualiza a cada 30 segundos."} A chamada do próximo paciente segue a conferência existente da Agenda.</p>
   </section>;
 }

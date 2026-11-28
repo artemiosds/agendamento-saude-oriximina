@@ -4,6 +4,7 @@ import ProcedureCidPicker from "@/components/prontuario/ProcedureCidPicker";
 import { loadProcedureCidOptions, partitionProcedureCids, normalizeProcedureCid, resolveManualProcedureCid } from "@/lib/procedureCidSelection";
 import AutosaveBadge, { createAutosaveIndicator } from '@/components/prontuario/AutosaveBadge';
 import { useBufferedClinicalText } from '@/hooks/useBufferedClinicalText';
+import { canCloseClinicalDraft, clinicalDraftKey, storeClinicalDraft, readClinicalDraft, clearClinicalDraft } from '@/lib/clinicalDraftRecovery';
 import { instrumentoBadge } from '@/lib/sigtapInstruments';
 import { usePreviousProcedures } from "@/hooks/usePreviousProcedures";
 import { createTreatmentSessionOperations, type TreatmentOperationRpcClient } from "@/services/treatmentSessionOperations";
@@ -781,7 +782,7 @@ const ProntuarioPage: React.FC = () => {
   const canEdit = can('prontuario', 'can_edit');
   const canDelete = can('prontuario', 'can_delete');
   const tempoLimite = user?.tempoAtendimento || 30;
-  const { enabledFields: structureFields } = useProntuarioStructure(form.tipo_registro);
+  const { enabledFields: structureFields, loading: structureLoading } = useProntuarioStructure(form.tipo_registro);
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
@@ -950,7 +951,7 @@ const ProntuarioPage: React.FC = () => {
     return getTreatmentSpecialtyFromSource(form, formProfessional, !editId ? user?.profissao : '') || user?.profissao;
   }, [editId, form, formProfessional, form.tipo_registro, sessaoCycle?.specialty, user?.profissao]);
 
-  const { isBlocoVisible: isProfBlocoVisible, isBlocoRequired, config: profConfig, visibleBlocks } = useProntuarioConfig(form.profissional_id || user?.id, form.tipo_registro, effectiveProfissao);
+  const { isBlocoVisible: isProfBlocoVisible, isBlocoRequired, config: profConfig, visibleBlocks, loading: professionalConfigLoading } = useProntuarioConfig(form.profissional_id || user?.id, form.tipo_registro, effectiveProfissao);
 
   const showSoapDropdown = hasDropdownSoap(effectiveProfissao);
   const [sessaoCycleSessions, setSessaoCycleSessions] = useState<CycleSession[]>([]);
@@ -1732,17 +1733,17 @@ const ProntuarioPage: React.FC = () => {
     const agendaTipo = searchParams.get("tipo");
 
     if (pacienteId && pacienteNome && agendamentoId) {
+      // A reload must offer the tab fallback before opening another record from the URL.
+      try {
+        if (user?.id && readClinicalDraft(sessionStorage, clinicalDraftKey(user.id, user.unidadeId || ""))) {
+          initializedRef.current = true;
+          return;
+        }
+      } catch { /* unavailable storage does not block normal opening */ }
       // Only initialize once per searchParams to avoid re-opening/resetting the form
       // when prontuarios refresh in background
       if (initializedRef.current) {
-        // If already initialized, only update if we find an existing prontuário for this agendamento
-        // and we don't already have the dialog open
-        if (!dialogOpen) {
-          const existingForAgendamento = prontuarios.find((p) => p.agendamento_id === agendamentoId);
-          if (existingForAgendamento) {
-            openEdit(existingForAgendamento);
-          }
-        }
+        // Background refresh must never reopen an editor explicitly closed with X.
         return;
       }
       initializedRef.current = true;
@@ -1918,6 +1919,10 @@ const ProntuarioPage: React.FC = () => {
 
 
   const openNew = (pacienteId?: string, pacienteNome?: string) => {
+    if (hasRecoveryDraft) {
+      toast.info("Retome o rascunho pendente e salve antes de abrir outro prontuário.");
+      return;
+    }
     triagemRequestRef.current += 1;
     setTriagem(null);
     setEditId(null);
@@ -1953,6 +1958,7 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const openEdit = async (item: ProntuarioDB) => {
+    if (hasRecoveryDraft) { toast.info("Retome o rascunho pendente e salve antes de abrir outro prontuário."); return; }
     if(!canEdit||(isProfissional&&item.profissional_id!==user?.id)){toast.error("Você não possui permissão para editar este prontuário.");return;}
     let p:ProntuarioDB;
     try{p=await loadFullProntuario(item.id);}catch{toast.error("Não foi possível carregar o prontuário para edição.");return;}
@@ -2556,6 +2562,8 @@ const ProntuarioPage: React.FC = () => {
         toast.info("Há texto digitado após o início do salvamento. Revise e salve novamente.");
         return false;
       }
+      if (recoveryKey) { try { clearClinicalDraft(sessionStorage, recoveryKey); } catch { /* unavailable */ } }
+      setHasRecoveryDraft(false);
       // Mantenha o formulário aberto até que a Agenda confirme a finalização.
       if (!shouldRegisterSession && !keepOpenForFinalization) {
         setDialogOpen(false);
@@ -2729,6 +2737,15 @@ const ProntuarioPage: React.FC = () => {
       }
       const currentTextSaved = acknowledgeTextSave(epoch, revision);
       if (epoch !== textEpoch.current) return false;
+      if (currentTextSaved && recoveryKey) {
+        try {
+          const recovery = readClinicalDraft<RecoveryDraft>(sessionStorage, recoveryKey);
+          if (recovery && (recovery.form.paciente_id === f.paciente_id || !recovery.form.paciente_id)) {
+            clearClinicalDraft(sessionStorage, recoveryKey);
+            setHasRecoveryDraft(false);
+          }
+        } catch { /* local storage must not affect confirmed saves */ }
+      }
       setAutosaveStatus(currentTextSaved ? 'saved' : 'idle');
       if (currentTextSaved) setAutosaveAt(new Date());
       return currentTextSaved;
@@ -3990,7 +4007,11 @@ const ProntuarioPage: React.FC = () => {
     setEspecialidadeFields(prev => (prev[key] === val ? prev : { ...prev, [key]: val }));
   }, []);
   const persistTextBeforeLeaving = async () => {
-    if (closingDraft.current || savingRef.current || finalizingRef.current || registeringSessionRef.current) return false;
+    if (closingDraft.current) return false;
+    if (savingRef.current || finalizingRef.current || registeringSessionRef.current) {
+      toast.info("Aguarde a gravação em andamento antes de sair.");
+      return false;
+    }
     closingDraft.current = true;
     try {
       flushText();
@@ -3998,10 +4019,18 @@ const ProntuarioPage: React.FC = () => {
       while (autosaveInFlightRef.current && Date.now() - started < 5000) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
-      if (!autosaveInFlightRef.current && savedTextRevision.current !== textRevision.current) {
-        await performAutosaveRef.current();
+      // Never ignore selectors, prescriptions or metrics merely because text is unchanged.
+      let saved = false;
+      if (!autosaveInFlightRef.current) {
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+          saved = await Promise.race([
+            performAutosaveRef.current(),
+            new Promise<boolean>(resolve => { timeout = setTimeout(() => resolve(false), 5000); }),
+          ]);
+        } finally { if (timeout) clearTimeout(timeout); }
       }
-      if (autosaveInFlightRef.current || savedTextRevision.current !== textRevision.current) {
+      if (!saved || autosaveInFlightRef.current || savedTextRevision.current !== textRevision.current) {
         toast.error("O rascunho ainda não foi salvo. Salve o prontuário ou registre a sessão antes de sair.");
         return false;
       }
@@ -4011,6 +4040,91 @@ const ProntuarioPage: React.FC = () => {
     } finally {
       closingDraft.current = false;
     }
+  };
+
+  const recoveryKey = user?.id ? clinicalDraftKey(user.id, user.unidadeId || "") : null;
+  type RecoveryDraft = {
+    form: typeof emptyForm; editId: string | null;
+    selectedProcIds: typeof selectedProcIds; procedimentos: typeof procedimentos;
+    procDetails: typeof procDetails; selectedCidsByProc: typeof selectedCidsByProc;
+    listaExames: typeof listaExames; listaPrescricao: typeof listaPrescricao;
+    especialidadeFields: typeof especialidadeFields; customFields: typeof customFields;
+    sigtapJustificationByProc: typeof sigtapJustificationByProc; soapEnabled: boolean;
+    activeAtendimento: typeof activeAtendimento;
+  };
+  const [hasRecoveryDraft, setHasRecoveryDraft] = useState(false);
+  useEffect(() => {
+    try { setHasRecoveryDraft(!!recoveryKey && !!readClinicalDraft(sessionStorage, recoveryKey)); }
+    catch { setHasRecoveryDraft(false); }
+  }, [recoveryKey]);
+
+  const closeEditor = async () => {
+    if (closingDraft.current || savingRef.current || finalizingRef.current || registeringSessionRef.current) {
+      toast.info("Aguarde a gravação em andamento antes de sair.");
+      return;
+    }
+    const snapshot = flushText();
+    // No clinical content is silently discarded, including text without a patient.
+    let backedUp = false;
+    const backupLatest = () => {
+      if (!recoveryKey) return false;
+      try {
+        return storeClinicalDraft(sessionStorage, recoveryKey, {
+          form: readLatestForm(), editId: editIdRef.current, selectedProcIds: selectedProcIdsRef.current, procedimentos,
+          procDetails: procDetailsRef.current, selectedCidsByProc: selectedCidsByProcRef.current,
+          listaExames: listaExamesRef.current, listaPrescricao: listaPrescricaoRef.current,
+          especialidadeFields: especialidadeFieldsRef.current, customFields, sigtapJustificationByProc, soapEnabled, activeAtendimento,
+        } satisfies RecoveryDraft);
+      } catch { return false; }
+    };
+    backedUp = backupLatest();
+    const editableSnapshot = () => JSON.stringify([readLatestForm(), selectedProcIdsRef.current,
+      procDetailsRef.current, selectedCidsByProcRef.current, listaExamesRef.current,
+      listaPrescricaoRef.current, especialidadeFieldsRef.current]);
+    const sentSnapshot = editableSnapshot();
+    const emptyUnlinked = !snapshot.paciente_id && textRevision.current === savedTextRevision.current
+      && !selectedProcIds.length && !listaExames.length && !listaPrescricao.length
+      && !Object.keys(especialidadeFields).length && !Object.keys(snapshot.custom_data || {}).length;
+    const saveConfirmed = snapshot.paciente_id ? await persistTextBeforeLeaving() : false;
+    const remoteSaved = saveConfirmed && sentSnapshot === editableSnapshot();
+    if (!remoteSaved) backedUp = backupLatest();
+    if (!canCloseClinicalDraft(remoteSaved, backedUp, emptyUnlinked)) {
+      toast.error("Não foi possível guardar as alterações. O prontuário permanece aberto para proteger o preenchimento.");
+      return;
+    }
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = null;
+    flushText();
+    if (remoteSaved || emptyUnlinked) {
+      if (recoveryKey) { try { clearClinicalDraft(sessionStorage, recoveryKey); } catch { /* unavailable */ } }
+      setHasRecoveryDraft(false);
+    } else {
+      setHasRecoveryDraft(true);
+      toast.info("Rascunho guardado somente nesta aba por até 8 horas. Retome e salve antes de fechar a aba.");
+    }
+    setDialogOpen(false);
+    setActiveAtendimento(null);
+    setSessionRegistrationRequested(false);
+    setSoapErrors(false);
+  };
+
+  const restoreClosedDraft = () => {
+    if (!recoveryKey || !canEdit) return;
+    let draft: RecoveryDraft | null = null;
+    try { draft = readClinicalDraft<RecoveryDraft>(sessionStorage, recoveryKey); } catch { /* unavailable */ }
+    if (!draft?.form || !Array.isArray(draft.selectedProcIds)) return;
+    resetTextForm(draft.form);
+    // A local fallback is pending, never marked as remotely saved.
+    textRevision.current += 1;
+    setEditId(draft.editId); editIdRef.current = draft.editId;
+    setSelectedProcIds(draft.selectedProcIds); setProcedimentos(draft.procedimentos);
+    setProcDetails(draft.procDetails); setSelectedCidsByProc(draft.selectedCidsByProc);
+    setListaExames(draft.listaExames); setListaPrescricao(draft.listaPrescricao);
+    setEspecialidadeFields(draft.especialidadeFields); setCustomFields(draft.customFields);
+    setSigtapJustificationByProc(draft.sigtapJustificationByProc);
+    setSoapEnabled(draft.soapEnabled); setActiveAtendimento(draft.activeAtendimento);
+    if (draft.form.paciente_id) loadEpisodios(draft.form.paciente_id);
+    setDialogOpen(true);
   };
 
   const handlePacienteChange = async (id: string, nome: string) => {
@@ -4077,6 +4191,7 @@ const ProntuarioPage: React.FC = () => {
           </div>
           {(canEdit || user?.role === 'master')&&<Button type="button" variant="outline" className="clinical-hub-new gap-2" onClick={()=>setBlankLibraryOpen(true)}><Printer className="w-4 h-4"/>Biblioteca de Documentos</Button>}
           {canEdit&&<Button type="button" onClick={()=>openNew(undefined,undefined)} className="clinical-hub-new"><Plus className="w-4 h-4"/>Novo Prontuário</Button>}
+          {canEdit && hasRecoveryDraft && <Button type="button" variant="outline" onClick={restoreClosedDraft}><History className="w-4 h-4 mr-2" />Retomar rascunho pendente</Button>}
         </header>
       )}
 
@@ -4238,28 +4353,24 @@ const ProntuarioPage: React.FC = () => {
             setDialogOpen(true);
             return;
           }
-          void (async () => {
-            if (!(await persistTextBeforeLeaving())) return;
-            setDialogOpen(false);
-            setActiveAtendimento(null);
-            setSessionRegistrationRequested(false);
-            setSoapErrors(false);
-          })();
+          void closeEditor();
         }}
       >
-        <DialogContent className="w-screen max-w-none h-screen sm:rounded-none p-0 flex flex-col overflow-hidden gap-0" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader className="px-6 py-3 border-b border-border shrink-0">
+        <DialogContent reducedEffects className="w-screen max-w-none h-screen sm:rounded-none p-0 flex flex-col overflow-hidden gap-0" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
+          <DialogHeader className="pl-6 pr-14 py-3 border-b border-border shrink-0">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <DialogTitle className="font-display">{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
               {user?.role === "profissional" && can("prontuario", "can_view") && form.paciente_id && <PassaporteClinico patientId={form.paciente_id} professionalId={user.id} profession={user.profissao || ""} enabled={dialogOpen} />}
               <AutosaveBadge indicator={autosaveIndicator} />
             </div>
           </DialogHeader>
-          {user?.role === "profissional" && <CockpitTurno professionalId={user.id} unitId={user.unidadeId || ""} enabled={dialogOpen} />}
+          {user?.role === "profissional" && <CockpitTurno professionalId={user.id} unitId={user.unidadeId || ""} enabled={dialogOpen} paused={!!form.paciente_id} />}
 
           <div className="flex-1 grid grid-cols-1 lg:grid-cols-[65%_35%] min-h-0 overflow-hidden">
           <div className="flex flex-col min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4" aria-busy={structureLoading || professionalConfigLoading}>
+          {(structureLoading || professionalConfigLoading) && <p role="status" className="text-sm text-muted-foreground">Carregando campos do prontuário…</p>}
+          <div className={structureLoading || professionalConfigLoading ? "invisible pointer-events-none" : "contents"}>
 
           {activeAtendimento && (
             <AtendimentoTimer
@@ -5777,6 +5888,7 @@ const ProntuarioPage: React.FC = () => {
               <EvolucaoClinica patientId={form.paciente_id} cycleId={sessaoCycle.id} />
             </>}
 
+          </div>{/* end configured fields */}
           </div>{/* end scroll area */}
           </div>{/* end left column */}
 
@@ -5796,6 +5908,7 @@ const ProntuarioPage: React.FC = () => {
 
             <div className="flex items-center justify-between gap-2 flex-wrap shrink-0 border-t border-border py-3 px-6 bg-background">
               <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" onClick={() => { void closeEditor(); }}><X className="w-4 h-4 mr-2" />Sair</Button>
                 {canFinalize && (
                   <Button onClick={() => { void handleSave(); }} disabled={loadingScheduledExams || saving} variant="ghost" size="sm" className="text-muted-foreground">
                     {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Salvar Rascunho

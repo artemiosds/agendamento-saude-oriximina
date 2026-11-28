@@ -1,5 +1,11 @@
 # Etapa 5 — instalação limpa
 
+## Prontuário leve e fechamento seguro
+- [x] Corrigir fechamento sem descartar alterações silenciosamente e testar falha/repetição de salvamento.
+- [x] Reduzir efeitos gráficos e redesenho inicial mantendo configurações clínicas e isolamento.
+- [x] Validar testes isolados e compilação; não publicar nem usar registros reais.
+- [ ] Validar X/retomada na tela autenticada: sessão restaurada redirecionou para login, sem acesso ao prontuário.
+
 - [x] Capturar apenas metadados da estrutura atual e identificar dependências de implantação.
 - [x] Preparar pacote separado, sem dados clínicos, usuários, segredos ou configurações de Oriximiná.
 - [x] Incluir barreira contra aplicação em ambiente existente e verificações de integridade.

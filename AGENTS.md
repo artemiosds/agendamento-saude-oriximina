@@ -2,3 +2,6 @@
 - SaaS client registry lives in system_config id='saas_clientes'; restrictive RLS + is_global_owner() lock it (and id='licenca' writes) to admin.sms — commercial control must not depend on UI hiding.
 - New-client provisioning artifacts are generated from read-only schema metadata, never application rows or historical migrations; installation is blocked on nonempty targets and remains unapproved until isolated restore tests pass.
 - Fila de espera: chamada/encaixe filtra por especialidade_destino x profissão do profissional (src/lib/filaSpecialtyMatch.ts); entradas sem destino mantêm regra antiga — evita convocar paciente para categoria errada sem mexer na Triagem.
+- Clinical close fallback uses tab-scoped sessionStorage keyed by user and unit, expires after eight hours, and requires verified storage before closing an unsaved editor; it must never be presented as a database save.
+- Reduced dialog effects are opt-in for the clinical editor so other dialogs retain their existing presentation.
+- Clinical configuration loading keeps fields mounted but hidden until the current type/professional scope resolves; background agenda refresh must not reopen an explicitly closed editor.

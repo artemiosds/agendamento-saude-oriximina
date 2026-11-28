@@ -19,8 +19,11 @@ export interface ProntuarioField {
 export function useProntuarioStructure(tipoProntuario?: string) {
   const [fields, setFields] = useState<ProntuarioField[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadedType, setLoadedType] = useState<string | undefined>(undefined);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
     const load = async () => {
       try {
         const { data } = await supabase
@@ -63,14 +66,15 @@ export function useProntuarioStructure(tipoProntuario?: string) {
           }
         }
 
-        setFields(allFields);
+        if (!cancelled) setFields(allFields);
       } catch (err) {
         console.error('Error loading prontuario structure:', err);
       } finally {
-        setLoading(false);
+        if (!cancelled) { setLoading(false); setLoadedType(tipoProntuario); }
       }
     };
     load();
+    return () => { cancelled = true; };
   }, [tipoProntuario]);
 
   const getFieldsForType = (type: string) => {
@@ -84,5 +88,5 @@ export function useProntuarioStructure(tipoProntuario?: string) {
 
   const enabledFields = tipoProntuario ? getFieldsForType(tipoProntuario) : [];
 
-  return { fields, enabledFields, loading, getFieldsForType };
+  return { fields, enabledFields, loading: loading || loadedType !== tipoProntuario, getFieldsForType };
 }

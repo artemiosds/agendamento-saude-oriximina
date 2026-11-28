@@ -415,6 +415,8 @@ export function useProntuarioConfig(profissionalId: string | undefined, tipoPron
   const [adminConfig, setAdminConfig] = useState<AdminEspecialidadeConfig[] | null>(null);
   const [adminProntuario, setAdminProntuario] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
+  const scope = JSON.stringify([profissionalId, tipoNormalized, profissao]);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -465,12 +467,12 @@ export function useProntuarioConfig(profissionalId: string | undefined, tipoPron
         console.error('[useProntuarioConfig] Load error:', err);
         if (!cancelled) setConfig(getDefaultConfig(tipoNormalized));
       }
-      if (!cancelled) setLoading(false);
+      if (!cancelled) { setLoading(false); setLoadedScope(scope); }
     };
 
     load();
     return () => { cancelled = true; };
-  }, [profissionalId, tipoNormalized, profissao]);
+  }, [profissionalId, tipoNormalized, profissao, scope]);
 
   const saveConfig = useCallback(async (newConfig: ProntuarioConfigData) => {
     if (!profissionalId) return;
@@ -514,7 +516,7 @@ export function useProntuarioConfig(profissionalId: string | undefined, tipoPron
     config,
     adminConfig,
     adminProntuario,
-    loading,
+    loading: loading || loadedScope !== scope,
     saving,
     saveConfig,
     visibleBlocks,
