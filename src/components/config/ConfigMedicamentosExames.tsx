@@ -60,6 +60,7 @@ const ConfigMedicamentosExames: React.FC = () => {
   const [exams, setExams] = useState<ExamType[]>([]);
   const [loading, setLoading] = useState(true);
   const [catalogReady, setCatalogReady] = useState(false);
+  const [activeTab, setActiveTab] = useState('medicamentos');
   const [catalogError, setCatalogError] = useState(false);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
@@ -96,14 +97,14 @@ const ConfigMedicamentosExames: React.FC = () => {
   }, [identity]);
 
   const readMeds = () => readCompleteCatalog<Medication>(async (from, to) => {
-    const { data, error } = await supabase.from('medications').select('*').order('id').range(from,to);
+    const { data, error, count } = await supabase.from('medications').select('*',{count:'exact'}).order('id').range(from,to);
     if (error || !data) throw Error('Não foi possível consultar os medicamentos.');
-    return data;
+    return { rows:data,count };
   });
   const readExams = () => readCompleteCatalog<ExamType>(async (from, to) => {
-    const { data, error } = await supabase.from('exam_types').select('*').order('id').range(from,to);
+    const { data, error, count } = await supabase.from('exam_types').select('*',{count:'exact'}).order('id').range(from,to);
     if (error || !data) throw Error('Não foi possível consultar os exames.');
-    return data;
+    return { rows:data,count };
   });
 
   const loadData = useCallback(async () => {
@@ -192,16 +193,18 @@ const ConfigMedicamentosExames: React.FC = () => {
     return map;
   }, [filteredExams]);
 
+  const unconfirmedCatalog = (message: string): never => { setCatalogReady(false); setCatalogError(true); throw Error(message); };
+
   const changeMed = async (med: Medication, patch: Partial<Medication>, expected: Partial<Medication>, message: string) => {
     const { data, error } = await supabase.from('medications').update(patch).eq('id',med.id).match(expected).select('*').maybeSingle();
-    if (error || !data) throw Error('Alteração não confirmada. Recarregue o catálogo e confira o registro.');
+    if (error || !data) return unconfirmedCatalog('Alteração não confirmada. Recarregue o catálogo e confira o registro.');
     await confirmSession();
     setMeds(prev => prev.map(m => m.id === data.id ? data : m));
     toast.success(message);
   };
   const changeExam = async (exam: ExamType, patch: Partial<ExamType>, expected: Partial<ExamType>, message: string) => {
     const { data, error } = await supabase.from('exam_types').update(patch).eq('id',exam.id).match(expected).select('*').maybeSingle();
-    if (error || !data) throw Error('Alteração não confirmada. Recarregue o catálogo e confira o registro.');
+    if (error || !data) return unconfirmedCatalog('Alteração não confirmada. Recarregue o catálogo e confira o registro.');
     await confirmSession();
     setExams(prev => prev.map(e => e.id === data.id ? data : e));
     toast.success(message);
@@ -246,7 +249,7 @@ const ConfigMedicamentosExames: React.FC = () => {
       is_global:true, ativo:true, origem:'manual',
     };
     const {data,error} = await supabase.from('medications').insert(payload).select('*').single();
-    if (error || !data) throw Error('Cadastro não confirmado. Confira o catálogo antes de repetir.');
+    if (error || !data) return unconfirmedCatalog('Cadastro não confirmado. Atualize o catálogo antes de repetir.');
     await confirmSession();
     setMeds(prev=>[...prev,data]); setAddMedDialog(false);
     setNewMed({ nome:'',nome_comercial:'',principio_ativo:'',classe_terapeutica:'',apresentacao:'',dosagem_padrao:'',via_padrao:'oral',forma_farmaceutica:'',concentracao:'',tipo:'comum' });
@@ -255,7 +258,7 @@ const ConfigMedicamentosExames: React.FC = () => {
   const addNewExam = () => runMutation(async () => {
     if (!newExam.nome.trim()) return;
     const {data,error} = await supabase.from('exam_types').insert({...newExam,nome:newExam.nome.trim(),is_global:true,ativo:true}).select('*').single();
-    if (error || !data) throw Error('Cadastro não confirmado. Confira o catálogo antes de repetir.');
+    if (error || !data) return unconfirmedCatalog('Cadastro não confirmado. Atualize o catálogo antes de repetir.');
     await confirmSession();
     setExams(prev=>[...prev,data]); setAddExamDialog(false);
     setNewExam({nome:'',codigo_sus:'',categoria:''}); toast.success('Exame criado');
@@ -299,9 +302,9 @@ const ConfigMedicamentosExames: React.FC = () => {
     let confirmed = 0;
     try {
       const existing = await readCompleteCatalog(async (from,to) => {
-        const {data,error} = await supabase.from('medications').select('id,codigo_rename').not('codigo_rename','is',null).order('id').range(from,to);
+        const {data,error,count} = await supabase.from('medications').select('id,codigo_rename',{count:'exact'}).not('codigo_rename','is',null).order('id').range(from,to);
         if (error||!data) throw Error('Consulta de códigos não confirmada.');
-        return data;
+        return {rows:data,count};
       });
       const novos = missingCatalogSeeds(lista,existing);
       const payload = novos.map(item=>({...item,origem,is_global:true,ativo:true}));
@@ -335,13 +338,13 @@ const ConfigMedicamentosExames: React.FC = () => {
         {busy && <p role="status" className="text-xs text-muted-foreground">Operação em andamento…</p>}
       </div>
       <fieldset disabled={busy} className="min-w-0">
-      <Tabs defaultValue="medicamentos">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full flex-wrap h-auto">
-          <TabsTrigger value="medicamentos" className="flex-1"><Pill className="w-4 h-4 mr-1.5" />Medicamentos <Badge variant="secondary" className="ml-1.5 text-[10px]">{meds.filter(m => m.ativo).length}</Badge></TabsTrigger>
-          <TabsTrigger value="exames" className="flex-1"><FlaskConical className="w-4 h-4 mr-1.5" />Exames <Badge variant="secondary" className="ml-1.5 text-[10px]">{exams.filter(e => e.ativo).length}</Badge></TabsTrigger>
-          <TabsTrigger value="categorias" className="flex-1"><FolderTree className="w-4 h-4 mr-1.5" />Categorias <Badge variant="secondary" className="ml-1.5 text-[10px]">{allClasses.length}</Badge></TabsTrigger>
-          <TabsTrigger value="personalizados" className="flex-1"><Pencil className="w-4 h-4 mr-1.5" />Personalizados <Badge variant="secondary" className="ml-1.5 text-[10px]">{customMeds.length}</Badge></TabsTrigger>
-          <TabsTrigger value="inativos" className="flex-1"><Trash2 className="w-4 h-4 mr-1.5" />Inativos <Badge variant="secondary" className="ml-1.5 text-[10px]">{inactiveMeds.length}</Badge></TabsTrigger>
+          <TabsTrigger value="medicamentos" className="flex-1"><Pill className="w-4 h-4 mr-1.5" />Medicamentos <Badge variant="secondary" className="ml-1.5 text-[10px]">{catalogReady ? meds.filter(m => m.ativo).length : '—'}</Badge></TabsTrigger>
+          <TabsTrigger value="exames" className="flex-1"><FlaskConical className="w-4 h-4 mr-1.5" />Exames <Badge variant="secondary" className="ml-1.5 text-[10px]">{catalogReady ? exams.filter(e => e.ativo).length : '—'}</Badge></TabsTrigger>
+          <TabsTrigger value="categorias" className="flex-1"><FolderTree className="w-4 h-4 mr-1.5" />Categorias <Badge variant="secondary" className="ml-1.5 text-[10px]">{catalogReady ? allClasses.length : '—'}</Badge></TabsTrigger>
+          <TabsTrigger value="personalizados" className="flex-1"><Pencil className="w-4 h-4 mr-1.5" />Personalizados <Badge variant="secondary" className="ml-1.5 text-[10px]">{catalogReady ? customMeds.length : '—'}</Badge></TabsTrigger>
+          <TabsTrigger value="inativos" className="flex-1"><Trash2 className="w-4 h-4 mr-1.5" />Inativos <Badge variant="secondary" className="ml-1.5 text-[10px]">{catalogReady ? inactiveMeds.length : '—'}</Badge></TabsTrigger>
           <TabsTrigger value="importacao" className="flex-1"><Download className="w-4 h-4 mr-1.5" />Importação</TabsTrigger>
           <TabsTrigger value="perfil" className="flex-1"><Eye className="w-4 h-4 mr-1.5" />Permissões</TabsTrigger>
         </TabsList>
@@ -552,7 +555,7 @@ const ConfigMedicamentosExames: React.FC = () => {
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Editar Medicamento</DialogTitle></DialogHeader>
           {editMed && (
-            <div className="space-y-3">
+            <fieldset disabled={busy||!catalogReady} className="space-y-3 min-w-0">
               <div className="grid grid-cols-2 gap-2">
                 <div><Label>Nome Genérico</Label><Input value={editMed.nome} onChange={e => setEditMed({ ...editMed, nome: e.target.value })} /></div>
                 <div><Label>Nome Comercial</Label><Input value={editMed.nome_comercial || ''} onChange={e => setEditMed({ ...editMed, nome_comercial: e.target.value })} /></div>
@@ -595,10 +598,11 @@ const ConfigMedicamentosExames: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2"><Switch checked={editMed.is_global} onCheckedChange={v => setEditMed({ ...editMed, is_global: v })} /><Label>Global (visível para todos)</Label></div>
-            </div>
+            </fieldset>
           )}
+          {!catalogReady && <p role="alert" className="text-xs text-destructive">Feche o editor e atualize o catálogo antes de repetir.</p>}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditMed(null)}>Cancelar</Button>
+            <Button variant="outline" disabled={busy} onClick={() => setEditMed(null)}>Cancelar</Button>
             <Button disabled={!catalogReady||busy} onClick={saveEditMed}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
@@ -609,15 +613,16 @@ const ConfigMedicamentosExames: React.FC = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Editar Exame</DialogTitle></DialogHeader>
           {editExam && (
-            <div className="space-y-3">
+            <fieldset disabled={busy||!catalogReady} className="space-y-3 min-w-0">
               <div><Label>Nome</Label><Input value={editExam.nome} onChange={e => setEditExam({ ...editExam, nome: e.target.value })} /></div>
               <div><Label>Código SUS</Label><Input value={editExam.codigo_sus} onChange={e => setEditExam({ ...editExam, codigo_sus: e.target.value })} /></div>
               <div><Label>Categoria</Label><Input value={editExam.categoria} onChange={e => setEditExam({ ...editExam, categoria: e.target.value })} /></div>
               <div className="flex items-center gap-2"><Switch checked={editExam.is_global} onCheckedChange={v => setEditExam({ ...editExam, is_global: v })} /><Label>Global</Label></div>
-            </div>
+            </fieldset>
           )}
+          {!catalogReady && <p role="alert" className="text-xs text-destructive">Feche o editor e atualize o catálogo antes de repetir.</p>}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditExam(null)}>Cancelar</Button>
+            <Button variant="outline" disabled={busy} onClick={() => setEditExam(null)}>Cancelar</Button>
             <Button disabled={!catalogReady||busy} onClick={saveEditExam}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
@@ -627,7 +632,7 @@ const ConfigMedicamentosExames: React.FC = () => {
       <Dialog open={addMedDialog} onOpenChange={open=>{if(!busy)setAddMedDialog(open);}}>
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>Novo Medicamento</DialogTitle></DialogHeader>
-          <div className="space-y-3">
+          <fieldset disabled={busy||!catalogReady} className="space-y-3 min-w-0">
             <div className="grid grid-cols-2 gap-2">
               <div><Label>Nome Genérico *</Label><Input value={newMed.nome || ''} onChange={e => setNewMed(p => ({ ...p, nome: e.target.value }))} /></div>
               <div><Label>Nome Comercial</Label><Input value={newMed.nome_comercial || ''} onChange={e => setNewMed(p => ({ ...p, nome_comercial: e.target.value }))} /></div>
@@ -653,9 +658,10 @@ const ConfigMedicamentosExames: React.FC = () => {
                 </Select>
               </div>
             </div>
-          </div>
+          </fieldset>
+          {!catalogReady && <p role="alert" className="text-xs text-destructive">Feche a janela e atualize o catálogo antes de repetir. O formulário permanece preenchido.</p>}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddMedDialog(false)}>Cancelar</Button>
+            <Button variant="outline" disabled={busy} onClick={() => setAddMedDialog(false)}>Cancelar</Button>
             <Button onClick={addNewMed} disabled={!catalogReady||busy||!newMed.nome?.trim()}>Criar</Button>
           </DialogFooter>
         </DialogContent>
@@ -665,13 +671,14 @@ const ConfigMedicamentosExames: React.FC = () => {
       <Dialog open={addExamDialog} onOpenChange={open=>{if(!busy)setAddExamDialog(open);}}>
         <DialogContent>
           <DialogHeader><DialogTitle>Novo Exame</DialogTitle></DialogHeader>
-          <div className="space-y-3">
+          <fieldset disabled={busy||!catalogReady} className="space-y-3 min-w-0">
             <div><Label>Nome *</Label><Input value={newExam.nome} onChange={e => setNewExam(p => ({ ...p, nome: e.target.value }))} /></div>
             <div><Label>Código SUS</Label><Input value={newExam.codigo_sus} onChange={e => setNewExam(p => ({ ...p, codigo_sus: e.target.value }))} /></div>
             <div><Label>Categoria</Label><Input value={newExam.categoria} onChange={e => setNewExam(p => ({ ...p, categoria: e.target.value }))} /></div>
-          </div>
+          </fieldset>
+          {!catalogReady && <p role="alert" className="text-xs text-destructive">Feche a janela e atualize o catálogo antes de repetir. O formulário permanece preenchido.</p>}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddExamDialog(false)}>Cancelar</Button>
+            <Button variant="outline" disabled={busy} onClick={() => setAddExamDialog(false)}>Cancelar</Button>
             <Button onClick={addNewExam} disabled={!catalogReady||busy||!newExam.nome.trim()}>Criar</Button>
           </DialogFooter>
         </DialogContent>
@@ -682,9 +689,10 @@ const ConfigMedicamentosExames: React.FC = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Desativar {deleteItem?.type === 'med' ? 'medicamento' : 'exame'}?</AlertDialogTitle>
             <AlertDialogDescription>O item será desativado, sem exclusão física. Medicamentos podem ser reativados em Inativos; exames na aba Exames.</AlertDialogDescription>
+            {!catalogReady && <p role="alert" className="text-xs text-destructive">Alteração não confirmada. Feche a janela e atualize o catálogo.</p>}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
             <AlertDialogAction disabled={!catalogReady||busy} onClick={e=>{e.preventDefault();void handleDelete();}}>Confirmar</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

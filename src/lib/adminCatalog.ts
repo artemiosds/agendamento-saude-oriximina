@@ -1,17 +1,20 @@
 /** Administrative catalog helpers. No clinical prescribing rules. */
-export async function readCompleteCatalog<T extends { id: string }>(read: (from: number, to: number) => Promise<T[]>, pageSize = 200): Promise<T[]> {
+export async function readCompleteCatalog<T extends { id: string }>(read: (from: number, to: number) => Promise<{ rows: T[]; count: number | null }>, pageSize = 200): Promise<T[]> {
   if (!Number.isSafeInteger(pageSize) || pageSize < 1) throw Error('Tamanho de página inválido.');
   const result: T[] = [];
   const seen = new Set<string>();
+  let total: number | null = null;
   for (;;) {
-    const page = await read(result.length, result.length + pageSize - 1);
-    if (!page.length) return result;
-    if (page.length > pageSize) throw Error('Consulta de catálogo inconsistente.');
+    const { rows: page, count } = await read(result.length, result.length + pageSize - 1);
+    if (count === null || !Number.isSafeInteger(count) || count < 0 || count > 100000) throw Error('Total do catálogo não confirmado.');
+    if (total !== null && count !== total) throw Error('O catálogo mudou durante a consulta. Recarregue antes de editar.');
+    total = count;
+    if (page.length > pageSize || result.length + page.length > total || (!page.length && result.length !== total)) throw Error('Consulta de catálogo inconsistente.');
     for (const row of page) {
       if (!row.id || seen.has(row.id)) throw Error('O catálogo mudou durante a consulta. Recarregue antes de editar.');
       seen.add(row.id); result.push(row);
     }
-    if (result.length > 100000) throw Error('Limite de consulta atingido. Nenhuma lista parcial será usada.');
+    if (result.length === total) return result;
   }
 }
 export function missingCatalogSeeds<T extends { codigo_rename: string }>(seeds: readonly T[], existing: readonly { codigo_rename: string | null }[]): T[] {

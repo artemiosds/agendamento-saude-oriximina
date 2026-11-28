@@ -5,13 +5,19 @@ describe('catálogo administrativo', () => {
   it('consulta todas as páginas, inclusive páginas menores que o limite pedido', async () => {
     const rows = [{id:'a'},{id:'b'},{id:'c'}];
     const calls: number[] = [];
-    const result = await readCompleteCatalog(async (from) => { calls.push(from); return rows.slice(from, from + 1); }, 2);
+    const result = await readCompleteCatalog(async (from) => { calls.push(from); return {rows:rows.slice(from, from + 1),count:rows.length}; }, 2);
     expect(result).toEqual(rows);
-    expect(calls).toEqual([0,1,2,3]);
+    expect(calls).toEqual([0,1,2]);
   });
   it('não retorna catálogo parcial após erro ou duplicação de página', async () => {
-    await expect(readCompleteCatalog(async from => { if (from) throw Error('rede'); return [{id:'a'}]; }, 1)).rejects.toThrow('rede');
-    await expect(readCompleteCatalog(async () => [{id:'a'}], 1)).rejects.toThrow('mudou');
+    await expect(readCompleteCatalog(async from => { if (from) throw Error('rede'); return {rows:[{id:'a'}],count:2}; }, 1)).rejects.toThrow('rede');
+    await expect(readCompleteCatalog(async () => ({rows:[{id:'a'}],count:2}), 1)).rejects.toThrow('mudou');
+  });
+  it('recusa contagem ausente, alteração do total e página vazia prematura', async () => {
+    await expect(readCompleteCatalog(async () => ({rows:[],count:null}))).rejects.toThrow('Total');
+    await expect(readCompleteCatalog(async from => ({rows:[{id:String(from)}],count:from ? 3 : 2}),1)).rejects.toThrow('mudou');
+    await expect(readCompleteCatalog(async () => ({rows:[],count:1}))).rejects.toThrow('inconsistente');
+    expect(await readCompleteCatalog(async () => ({rows:[],count:0}))).toEqual([]);
   });
   it('preserva códigos já existentes, inclusive inativos, e não duplica a entrada', () => {
     const seeds = ['a','b','b','c'].map(codigo_rename => ({codigo_rename}));
