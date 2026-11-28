@@ -418,8 +418,8 @@ const Configuracoes: React.FC = () => {
           <div className="space-y-6">
             <ConfigFluxoAtendimento />
             <Separator />
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
+            <Card className="config-admin-card shadow-card border-0">
+              <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                     <HeartPulse className="w-5 h-5 text-primary" />
@@ -450,8 +450,8 @@ const Configuracoes: React.FC = () => {
             </Card>
             <ConfiguracaoTriagem />
             <Separator />
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
+            <Card className="config-admin-card shadow-card border-0">
+              <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                     <SettingsIcon className="w-5 h-5 text-primary" />
@@ -484,8 +484,8 @@ const Configuracoes: React.FC = () => {
               <div className="flex flex-wrap gap-2"><Button asChild variant="outline"><Link to="/painel/funcionarios"><Users className="w-4 h-4 mr-2"/>Gerenciar funcionários</Link></Button><Button asChild variant="outline"><Link to="/painel/permissoes"><Shield className="w-4 h-4 mr-2"/>Gerenciar permissões</Link></Button></div>
               <p className="text-xs text-muted-foreground">As páginas de destino mantêm as verificações de acesso existentes.</p>
             </div>
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
+            <Card className="config-admin-card shadow-card border-0">
+              <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                     <Shield className="w-5 h-5 text-primary" />
@@ -538,7 +538,7 @@ const Configuracoes: React.FC = () => {
 
             <Separator />
 
-            <Card className="shadow-card border border-border/50">
+            <Card className="config-admin-card shadow-card border border-border/50">
               <CardContent className="p-6">
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center">
@@ -623,7 +623,7 @@ const Configuracoes: React.FC = () => {
               </CardContent>
             </Card>
 
-            <Card className="shadow-card border border-border/50">
+            <Card className="config-admin-card shadow-card border border-border/50">
               <CardContent className="p-6">
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -701,7 +701,7 @@ const Configuracoes: React.FC = () => {
 
             <div className="flex flex-wrap gap-2 items-center justify-between"><p role="status" className="text-sm text-muted-foreground">{adminFailed?'Configurações não confirmadas. Edição bloqueada.':agOnlineLoading||cancelLoading?'Consultando regras…':'Regras gerais do portal consultadas'}</p><Button variant="outline" size="sm" disabled={agOnlineSaving||cancelSaving||agOnlineLoading||cancelLoading} onClick={()=>{if(window.confirm('Descartar alterações locais e atualizar as regras?'))void loadAdmin();}}>Atualizar regras</Button></div>
             <fieldset disabled={adminFailed||agOnlineLoading||cancelLoading||agOnlineSaving||cancelSaving} className="space-y-6 min-w-0">
-            <Card className="shadow-card border border-border/50">
+            <Card className="config-admin-card shadow-card border border-border/50">
               <CardContent className="p-6">
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center">
@@ -764,7 +764,7 @@ const Configuracoes: React.FC = () => {
               </CardContent>
             </Card>
 
-            <Card className="shadow-card border border-border/50">
+            <Card className="config-admin-card shadow-card border border-border/50">
               <CardContent className="p-6">
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center">
@@ -846,8 +846,8 @@ const Configuracoes: React.FC = () => {
             <div className="flex flex-wrap items-center justify-between gap-2"><p role="status" className="text-sm text-muted-foreground">{integrationReady?'Configurações consultadas':'Consulta não confirmada'}</p><Button variant="outline" size="sm" disabled={integrationBusy||gmailTesting||webhookTesting} onClick={()=>{if(window.confirm('Atualizar e descartar rascunhos?'))void loadIntegrations();}}>Atualizar integrações</Button></div>
             <fieldset disabled={!integrationReady||integrationBusy||gmailTesting||webhookTesting} className="space-y-6 min-w-0">
 
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
+            <Card className="config-admin-card shadow-card border-0">
+              <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Calendar className="w-5 h-5 text-primary" /></div>
                   <div className="flex-1"><h3 className="font-semibold font-display text-foreground">Google Agenda</h3><p className="text-sm text-muted-foreground">Sincronizar agendamentos</p></div>
@@ -872,8 +872,8 @@ const Configuracoes: React.FC = () => {
               </CardContent>
             </Card>
 
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
+            <Card className="config-admin-card shadow-card border-0">
+              <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center"><Webhook className="w-5 h-5 text-accent-foreground" /></div>
                   <div className="flex-1"><h3 className="font-semibold font-display text-foreground">Webhook Make.com</h3><p className="text-sm text-muted-foreground">Automações via webhook</p></div>
@@ -898,8 +898,8 @@ const Configuracoes: React.FC = () => {
               </CardContent>
             </Card>
 
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
+            <Card className="config-admin-card shadow-card border-0">
+              <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center"><Mail className="w-5 h-5 text-destructive" /></div>
                   <div className="flex-1"><h3 className="font-semibold font-display text-foreground">Gmail SMTP</h3><p className="text-sm text-muted-foreground">Envio de e-mails</p></div>
@@ -931,8 +931,8 @@ const Configuracoes: React.FC = () => {
 
             <Separator />
             <h2 className="text-lg font-semibold font-display text-foreground">Notificações</h2>
-            <Card className="shadow-card border-0 ring-2 ring-primary/20">
-              <CardContent className="p-5">
+            <Card className="config-admin-card shadow-card border-0 ring-2 ring-primary/20">
+              <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Send className="w-5 h-5 text-primary" /></div>
                   <div><h3 className="font-semibold font-display text-foreground">Canal de Notificação ao Paciente</h3><p className="text-sm text-muted-foreground">Define como o paciente recebe notificações</p></div>
@@ -947,8 +947,8 @@ const Configuracoes: React.FC = () => {
                 </Select>
               </CardContent>
             </Card>
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
+            <Card className="config-admin-card shadow-card border-0">
+              <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center"><MessageSquare className="w-5 h-5 text-warning" /></div>
                   <div><h3 className="font-semibold font-display text-foreground">Templates de Mensagem</h3><p className="text-sm text-muted-foreground">Personalizar mensagens automáticas</p></div>

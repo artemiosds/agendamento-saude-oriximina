@@ -206,8 +206,8 @@ const ConfigFluxoAtendimento: React.FC = () => {
       <div className="rounded-xl border bg-card p-4 flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Fluxo assistencial e regras operacionais</h3><p role="status" className="text-xs text-muted-foreground">{status}</p></div><Button size="sm" variant="outline" disabled={saving||triageLoading} onClick={()=>{if(!failed||window.confirm('Descartar alterações não confirmadas e recarregar?'))void loadConfig();}}>Atualizar configurações</Button></div>
       <fieldset disabled={saving||failed} className="space-y-4 min-w-0">
       {/* 5.1 Tipos de atendimento */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <h3 className="font-semibold font-display text-foreground mb-4">Tipos de Atendimento</h3>
           <div className="space-y-2">
             {config.tiposAtendimento.map(tipo => (
@@ -224,8 +224,8 @@ const ConfigFluxoAtendimento: React.FC = () => {
       </Card>
 
       {/* 5.2 Triagem */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold font-display text-foreground">Triagem — regra global</h3>
             {triageLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : triageFailed ? <span role="alert" className="text-xs text-destructive">Regra global não confirmada</span> : <Switch checked={triageEnabled} onCheckedChange={toggleGlobal}/>}
@@ -251,8 +251,8 @@ const ConfigFluxoAtendimento: React.FC = () => {
       </Card>
 
       {/* 5.3 Classificação de risco */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <h3 className="font-semibold font-display text-foreground mb-4">Classificação de Risco</h3>
           <div className="space-y-2">
             {config.classificacaoRisco.map(cr => (
@@ -277,8 +277,8 @@ const ConfigFluxoAtendimento: React.FC = () => {
       </Card>
 
       {/* 5.4 Regras de agendamento */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <h3 className="font-semibold font-display text-foreground mb-4">Regras de Agendamento</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
@@ -307,8 +307,8 @@ const ConfigFluxoAtendimento: React.FC = () => {
       </Card>
 
       {/* 5.5 PTS e Ciclo */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <h3 className="font-semibold font-display text-foreground mb-4">PTS e Ciclo de Tratamento</h3>
           <div className="space-y-3">
             {[
@@ -348,8 +348,8 @@ const ConfigFluxoAtendimento: React.FC = () => {
       </Card>
 
       {/* 5.6 Turnos */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold font-display text-foreground">Turnos</h3>
@@ -486,8 +486,8 @@ const ControleFaltasCard: React.FC = () => {
   if (loading) return <p role="status" className="text-sm">Carregando controle de faltas…</p>;
 
   return (
-    <Card className="shadow-card border-0">
-      <CardContent className="p-5 space-y-4">
+    <Card className="config-admin-card shadow-card border-0">
+      <CardContent className="p-3 sm:p-4 space-y-4">
         <div>
           <h3 className="font-semibold font-display text-foreground">Controle de Faltas</h3>
           <p role="status" className="text-xs text-muted-foreground">{status}</p>{failed&&<Button size="sm" variant="outline" onClick={()=>void reload()}>Recarregar</Button>}
@@ -564,8 +564,8 @@ const ControleFaltasCard: React.FC = () => {
 // ─── Cartão: Controle de Atendimentos (Master) ────────────────────────────────
 const ControleAtendimentosCard:React.FC<{config:FluxoConfig;edit:(fn:(p:FluxoConfig)=>FluxoConfig)=>void;save:()=>Promise<boolean>}>=({config,edit,save})=>{
   return (
-    <Card className="shadow-card border-0">
-      <CardContent className="p-5 space-y-4">
+    <Card className="config-admin-card shadow-card border-0">
+      <CardContent className="p-3 sm:p-4 space-y-4">
         <div>
           <h3 className="font-semibold font-display text-foreground">Controle de Atendimentos</h3>
           <p className="text-xs text-muted-foreground mt-1">

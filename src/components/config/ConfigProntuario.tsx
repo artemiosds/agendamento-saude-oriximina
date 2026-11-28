@@ -340,7 +340,7 @@ const ConfigProntuario: React.FC = () => {
     setNewAlert({ campo: '', operador: '>=', valor: '', mensagem: '' });
   };
 
-  if (loadFailed) return <Card><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível confirmar a configuração do prontuário. Edição bloqueada para evitar sobrescrita.</p><Button onClick={() => void loadConfig()}>Tentar novamente</Button></CardContent></Card>;
+  if (loadFailed) return <Card className="config-admin-card"><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível confirmar a configuração do prontuário. Edição bloqueada para evitar sobrescrita.</p><Button onClick={() => void loadConfig()}>Tentar novamente</Button></CardContent></Card>;
 
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
@@ -351,8 +351,8 @@ const ConfigProntuario: React.FC = () => {
         {saveState === 'error' && <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => void saveConfig(config)}>Tentar salvar novamente</Button><Button variant="outline" size="sm" onClick={() => { if (window.confirm('Recarregar os valores do banco e descartar o rascunho desta seção?')) void loadConfig(); }}>Recarregar</Button></div>}
       </div>
       {/* Modelos de Prontuário — abre o construtor visual em modal */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold font-display text-foreground">Modelos de Prontuário</h3>
@@ -391,8 +391,8 @@ const ConfigProntuario: React.FC = () => {
 
       <Separator />
 
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <h3 className="font-semibold font-display text-foreground mb-4">Campos por Tipo de Prontuário</h3>
 
           <div className="flex flex-wrap gap-2 mb-4">
@@ -494,8 +494,8 @@ const ConfigProntuario: React.FC = () => {
         </CardContent>
       </Card>
 
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <h3 className="font-semibold font-display text-foreground mb-4">Labels da Evolução SOAP</h3>
           <p className="text-xs text-muted-foreground mb-3">Renomeie os campos SOAP para adequar ao vocabulário da equipe. Os 4 campos são sempre obrigatórios.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -514,8 +514,8 @@ const ConfigProntuario: React.FC = () => {
         </CardContent>
       </Card>
 
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <h3 className="font-semibold font-display text-foreground mb-4">Alertas Clínicos</h3>
           <div className="space-y-2">
             {config.alertas.map(alerta => (
@@ -541,8 +541,8 @@ const ConfigProntuario: React.FC = () => {
         </CardContent>
       </Card>
 
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5 space-y-4">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4 space-y-4">
           <div>
             <h3 className="font-semibold font-display text-foreground mb-2">Tempo Limite de Edição</h3>
             <p className="text-xs text-muted-foreground mb-2">Após salvar, profissional pode editar por este período. Depois, somente Master desbloqueia.</p>
@@ -575,8 +575,8 @@ const ConfigProntuario: React.FC = () => {
       </Card>
 
       <Dialog open={addFieldDialog} onOpenChange={setAddFieldDialog}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Adicionar Campo Personalizado</DialogTitle></DialogHeader>
+        <DialogContent className="config-admin-modal">
+          <DialogHeader className="config-admin-modal-header"><DialogTitle className="config-admin-modal-title">Adicionar Campo Personalizado</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Nome do campo</Label><Input value={newField.label} onChange={e => setNewField(p => ({ ...p, label: e.target.value }))} /></div>
             <div><Label>Tipo</Label>
@@ -605,7 +605,7 @@ const ConfigProntuario: React.FC = () => {
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="config-admin-modal-footer">
             <Button variant="outline" onClick={() => setAddFieldDialog(false)}>Cancelar</Button>
             <Button onClick={addCampo} disabled={!newField.label.trim() || !newField.tiposProntuario.length}>Adicionar</Button>
           </DialogFooter>
@@ -613,8 +613,8 @@ const ConfigProntuario: React.FC = () => {
       </Dialog>
 
       <Dialog open={addAlertDialog} onOpenChange={setAddAlertDialog}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Adicionar Alerta Personalizado</DialogTitle></DialogHeader>
+        <DialogContent className="config-admin-modal">
+          <DialogHeader className="config-admin-modal-header"><DialogTitle className="config-admin-modal-title">Adicionar Alerta Personalizado</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Campo</Label><Input value={newAlert.campo} onChange={e => setNewAlert(p => ({ ...p, campo: e.target.value }))} placeholder="Ex: imc, eva, pressao" /></div>
             <div className="grid grid-cols-2 gap-2">
@@ -633,7 +633,7 @@ const ConfigProntuario: React.FC = () => {
             </div>
             <div><Label>Mensagem</Label><Input value={newAlert.mensagem} onChange={e => setNewAlert(p => ({ ...p, mensagem: e.target.value }))} placeholder="⚠️ Mensagem de alerta" /></div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="config-admin-modal-footer">
             <Button variant="outline" onClick={() => setAddAlertDialog(false)}>Cancelar</Button>
             <Button onClick={addAlerta} disabled={!newAlert.mensagem.trim()}>Adicionar</Button>
           </DialogFooter>
@@ -642,9 +642,9 @@ const ConfigProntuario: React.FC = () => {
 
       {/* Modal de Edição de Propriedades do Campo */}
       <Dialog open={!!editFieldDialog} onOpenChange={(o) => { if (!o) setEditFieldDialog(null); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+        <DialogContent className="config-admin-modal max-w-lg">
+          <DialogHeader className="config-admin-modal-header">
+            <DialogTitle className="config-admin-modal-title flex items-center gap-2">
               <Pencil className="w-4 h-4 text-primary" />
               Editar Campo
             </DialogTitle>
@@ -733,7 +733,7 @@ const ConfigProntuario: React.FC = () => {
               )}
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="config-admin-modal-footer">
             <Button variant="outline" onClick={() => setEditFieldDialog(null)}>Cancelar</Button>
             <Button onClick={saveEditField} disabled={saving}>
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
@@ -744,12 +744,12 @@ const ConfigProntuario: React.FC = () => {
       </Dialog>
 
       <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir campo personalizado?</AlertDialogTitle>
+        <AlertDialogContent className="config-admin-modal config-admin-confirm">
+          <AlertDialogHeader className="config-admin-modal-header">
+            <AlertDialogTitle className="config-admin-modal-title">Excluir campo personalizado?</AlertDialogTitle>
             <AlertDialogDescription>O campo será removido da configuração. Registros já salvos em prontuários anteriores não são afetados.</AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="config-admin-modal-footer">
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={() => deleteConfirm && deleteCampo(deleteConfirm)}>Excluir</AlertDialogAction>
           </AlertDialogFooter>

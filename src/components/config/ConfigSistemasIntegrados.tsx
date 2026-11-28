@@ -132,7 +132,7 @@ const ConfigSistemasIntegrados: React.FC = () => {
 
   if (!isMaster) {
     return (
-      <Card><CardContent className="p-6 text-sm text-muted-foreground">
+      <Card className="config-admin-card"><CardContent className="p-6 text-sm text-muted-foreground">
         Apenas usuários Master podem gerenciar Sistemas Integrados.
       </CardContent></Card>
     );
@@ -140,7 +140,7 @@ const ConfigSistemasIntegrados: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <Card className="border-primary/20 bg-primary/5">
+      <Card className="config-admin-card border-primary/20 bg-primary/5">
         <CardContent className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="space-y-1">
             <h4 className="text-sm font-semibold flex items-center gap-2">
@@ -161,7 +161,7 @@ const ConfigSistemasIntegrados: React.FC = () => {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="config-admin-card">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
@@ -251,9 +251,9 @@ const ConfigSistemasIntegrados: React.FC = () => {
 
       {/* Dialog de edição */}
       <Dialog open={!!editing} onOpenChange={o=>{if(!o&&!lock.current)setEditing(null);}}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editing?.id ? 'Editar Sistema Integrado' : 'Novo Sistema Integrado'}</DialogTitle>
+        <DialogContent className="config-admin-modal max-w-2xl">
+          <DialogHeader className="config-admin-modal-header">
+            <DialogTitle className="config-admin-modal-title">{editing?.id ? 'Editar Sistema Integrado' : 'Novo Sistema Integrado'}</DialogTitle>
             <DialogDescription>
               Configure os dados de conexão entre este sistema e o sistema externo.
             </DialogDescription>
@@ -370,7 +370,7 @@ const ConfigSistemasIntegrados: React.FC = () => {
               </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="config-admin-modal-footer">
             <Button variant="outline" disabled={busy} onClick={() => setEditing(null)}>Cancelar</Button>
             <Button onClick={salvar} disabled={busy||failed||saving}>
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-1" />} Salvar
@@ -381,9 +381,9 @@ const ConfigSistemasIntegrados: React.FC = () => {
 
       {/* Dialog mostrando token gerado UMA VEZ */}
       <Dialog open={!!generatedToken} onOpenChange={(o) => !o && setGeneratedToken(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+        <DialogContent className="config-admin-modal">
+          <DialogHeader className="config-admin-modal-header">
+            <DialogTitle className="config-admin-modal-title flex items-center gap-2">
               <KeyRound className="w-5 h-5 text-amber-600" /> Token de Entrada gerado
             </DialogTitle>
             <DialogDescription>
@@ -405,7 +405,7 @@ const ConfigSistemasIntegrados: React.FC = () => {
               </p>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="config-admin-modal-footer">
             <Button onClick={() => setGeneratedToken(null)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>

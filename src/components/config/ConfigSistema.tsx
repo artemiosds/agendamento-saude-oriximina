@@ -60,7 +60,7 @@ const ConfigSistema: React.FC<{onDirtyChange?:(dirty:boolean)=>void}> = ({onDirt
     finally{lock.current=false;}
   };
   const reload=()=>{if(!lock.current&&(!dirty||window.confirm('Descartar alterações locais e consultar os valores salvos?')))void loadConfig();};
-  if(loadFailed)return <Card><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível confirmar as configurações institucionais. Edição indisponível.</p><Button onClick={reload}>Tentar novamente</Button></CardContent></Card>;
+  if(loadFailed)return <Card className="config-admin-card"><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível confirmar as configurações institucionais. Edição indisponível.</p><Button onClick={reload}>Tentar novamente</Button></CardContent></Card>;
 
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
@@ -75,8 +75,8 @@ const ConfigSistema: React.FC<{onDirtyChange?:(dirty:boolean)=>void}> = ({onDirt
       </div>
       <fieldset disabled={saveState==='saving'||saveState==='error'} className="space-y-4 min-w-0">
       {/* 9.1 Informações da instituição */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <div className="flex items-center gap-2 mb-4">
             <Building2 className="w-5 h-5 text-primary" />
             <h3 className="font-semibold font-display text-foreground">Informações da Instituição</h3>
@@ -100,8 +100,8 @@ const ConfigSistema: React.FC<{onDirtyChange?:(dirty:boolean)=>void}> = ({onDirt
       </Card>
 
       {/* 9.2 Notificações */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <div className="flex items-center gap-2 mb-4">
             <Bell className="w-5 h-5 text-primary" />
             <h3 className="font-semibold font-display text-foreground">Notificações do Sistema</h3>
@@ -137,8 +137,8 @@ const ConfigSistema: React.FC<{onDirtyChange?:(dirty:boolean)=>void}> = ({onDirt
       </Card>
 
       {/* 9.3 Backup */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <h3 className="font-semibold font-display text-foreground mb-4">Backup e Dados</h3>
           <p className="text-sm text-muted-foreground mb-3">A exportação JSON antiga não comprovava cobertura e não era um backup restaurável. Utilize os procedimentos protegidos da central de dados.</p>
           <Button variant="outline" className="w-full" asChild><Link to="/painel/configuracoes-avancadas?aba=dados"><Download className="w-4 h-4 mr-2"/>Abrir Gestão Operacional e Dados</Link></Button>
@@ -146,8 +146,8 @@ const ConfigSistema: React.FC<{onDirtyChange?:(dirty:boolean)=>void}> = ({onDirt
       </Card>
 
       {/* 9.4 Aparência */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <div className="flex items-center gap-2 mb-4">
             <Palette className="w-5 h-5 text-primary" />
             <h3 className="font-semibold font-display text-foreground">Aparência</h3>
@@ -189,8 +189,8 @@ const ConfigSistema: React.FC<{onDirtyChange?:(dirty:boolean)=>void}> = ({onDirt
       </Card>
 
       {/* 9.5 Conformidade LGPD */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <div className="flex items-center gap-2 mb-4">
             <Shield className="w-5 h-5 text-primary" />
             <h3 className="font-semibold font-display text-foreground">Termos e Conformidade (LGPD)</h3>

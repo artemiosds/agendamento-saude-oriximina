@@ -501,7 +501,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
   };
 
   if(loading)return <div role="status" className="flex items-center justify-center gap-2 py-12"><Loader2 className="w-5 h-5 animate-spin"/>Carregando campos…</div>;
-  if(loadFailed)return <Card><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível consultar os campos. Edição bloqueada.</p><Button onClick={()=>void refetch()}>Tentar novamente</Button></CardContent></Card>;
+  if(loadFailed)return <Card className="config-admin-card"><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível consultar os campos. Edição bloqueada.</p><Button onClick={()=>void refetch()}>Tentar novamente</Button></CardContent></Card>;
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -544,8 +544,8 @@ const ConfigPersonalizarCampos: React.FC = () => {
         </div>
       </div>
 
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
             <div>
               <h3 className="font-semibold text-foreground">Campos da Tela</h3>
@@ -591,9 +591,9 @@ const ConfigPersonalizarCampos: React.FC = () => {
 
       {/* Add/Edit Modal */}
       <Dialog open={modalOpen} onOpenChange={v=>{if(!lock.current)setModalOpen(v);}}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingField ? 'Editar Campo Personalizado' : 'Novo Campo Personalizado'}</DialogTitle>
+        <DialogContent className="config-admin-modal max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="config-admin-modal-header">
+            <DialogTitle className="config-admin-modal-title">{editingField ? 'Editar Campo Personalizado' : 'Novo Campo Personalizado'}</DialogTitle>
             <p className="text-xs text-muted-foreground">
               Configure o campo e defina em quais contextos ele será exibido. O alcance depende dos leitores já existentes em cada tela.
             </p>
@@ -787,7 +787,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
             </section>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="config-admin-modal-footer">
             <Button variant="outline" disabled={saving} onClick={() => setModalOpen(false)}>Cancelar</Button>
             <Button disabled={saving||saveFailed} onClick={saveField}>{editingField ? 'Salvar' : 'Adicionar'}</Button>
           </DialogFooter>
@@ -796,9 +796,9 @@ const ConfigPersonalizarCampos: React.FC = () => {
 
       {/* Rename Modal */}
       <Dialog open={!!renameModal} onOpenChange={v=>{if(!v&&!lock.current)setRenameModal(null);}}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Renomear Campo</DialogTitle>
+        <DialogContent className="config-admin-modal max-w-sm">
+          <DialogHeader className="config-admin-modal-header">
+            <DialogTitle className="config-admin-modal-title">Renomear Campo</DialogTitle>
           </DialogHeader>
           <div>
             <Label>Novo rótulo (deixe vazio para restaurar o original)</Label>
@@ -810,7 +810,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
               O nome do campo no banco não muda — apenas o que aparece na tela.
             </p>
           </div>
-          <DialogFooter>
+          <DialogFooter className="config-admin-modal-footer">
             <Button variant="outline" disabled={saving} onClick={() => setRenameModal(null)}>Cancelar</Button>
             <Button disabled={saving||saveFailed} onClick={saveRename}>Salvar</Button>
           </DialogFooter>

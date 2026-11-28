@@ -273,7 +273,7 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
       {/* Seletor de unidade */}
 
       {editableUnits.length > 1 && (
-        <Card className="border-0 shadow-card">
+        <Card className="config-admin-card border-0 shadow-card">
           <CardContent className="p-4 flex items-center gap-3">
             <Label className="whitespace-nowrap">Unidade:</Label>
             <Select disabled={saving||togglingActive||confirmDeactivate} value={selectedUnit} onValueChange={v=>{if(!lock.current&&!confirmDeactivate)setSelectedUnit(v);}}>
@@ -289,8 +289,8 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
       )}
 
       {/* Config form */}
-      <Card className="border-0 shadow-card">
-        <CardContent className="p-5 space-y-5">
+      <Card className="config-admin-card border-0 shadow-card">
+        <CardContent className="p-3 sm:p-4 space-y-5">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : failed ? <div role="alert" className="space-y-2"><p>Configuração não confirmada. Edição bloqueada.</p><Button variant="outline" onClick={()=>void load()}>Recarregar</Button></div> : (
@@ -417,8 +417,8 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
       </Card>
 
       {/* Pendências de Cadastro: pacientes agendados sem telefone válido */}
-      <Card className="border-0 shadow-card">
-        <CardContent className="p-5">
+      <Card className="config-admin-card border-0 shadow-card">
+        <CardContent className="p-3 sm:p-4">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <div className="flex items-center gap-3">
               <h3 className="font-semibold text-foreground flex items-center gap-2">
@@ -469,8 +469,8 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
       </Card>
 
       {/* Fila */}
-      <Card className="border-0 shadow-card">
-        <CardContent className="p-5">
+      <Card className="config-admin-card border-0 shadow-card">
+        <CardContent className="p-3 sm:p-4">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <div className="flex items-center gap-3">
               <h3 className="font-semibold text-foreground">Fila de envios</h3>
@@ -543,9 +543,9 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
 
       {/* Diálogo: confirmar desativação do WhatsApp */}
       <AlertDialog open={confirmDeactivate} onOpenChange={setConfirmDeactivate}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
+        <AlertDialogContent className="config-admin-modal config-admin-confirm">
+          <AlertDialogHeader className="config-admin-modal-header">
+            <AlertDialogTitle className="config-admin-modal-title flex items-center gap-2">
               <PowerOff className="w-5 h-5 text-destructive" />
               Pausar automações de WhatsApp?
             </AlertDialogTitle>
@@ -559,7 +559,7 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+          <AlertDialogFooter className="config-admin-modal-footer flex-col sm:flex-row gap-2">
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <Button variant="outline" onClick={pausarEnvios} className="gap-2">
               <PowerOff className="w-4 h-4" /> Apenas pausar (mantém fila)

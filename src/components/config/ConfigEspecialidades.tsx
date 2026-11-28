@@ -448,15 +448,15 @@ const ConfigEspecialidades: React.FC = () => {
     save(updated);
   };
 
-  if(loadFailed)return <Card><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível carregar as especialidades. Edição bloqueada.</p><Button onClick={()=>void loadConfig()}>Tentar novamente</Button></CardContent></Card>;
+  if(loadFailed)return <Card className="config-admin-card"><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível carregar as especialidades. Edição bloqueada.</p><Button onClick={()=>void loadConfig()}>Tentar novamente</Button></CardContent></Card>;
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
   return (
     <div className="space-y-4">
       <div className="rounded-xl border bg-card p-4 space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Especialidades e campos clínicos</h3><p role="status" className="text-xs text-muted-foreground">{status}</p></div><Button size="sm" variant="outline" disabled={saving} onClick={()=>{if(!saveFailed||window.confirm('Recarregar e descartar as alterações não confirmadas?')){setEditingCampo(null);setAddFieldDialog(false);setCopyDialog(null);setAddEspDialog(false);void loadConfig();}}}>Atualizar configurações</Button></div><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{[[especialidades.length,'Especialidades'],[especialidades.filter(e=>e.ativa).length,'Ativas'],[especialidades.reduce((n,e)=>n+e.campos.length,0),'Campos configurados']].map(([value,label])=><div key={label} className="rounded-lg border p-3"><p className="text-xl font-semibold tabular-nums">{value}</p><p className="text-xs text-muted-foreground">{label}</p></div>)}</div></div>
       <fieldset disabled={saving||saveFailed} className="min-w-0">
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
+      <Card className="config-admin-card shadow-card border-0">
+        <CardContent className="p-3 sm:p-4">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <h3 className="font-semibold font-display text-foreground">Campos por Especialidade</h3>
             <div className="flex gap-2">
@@ -529,9 +529,9 @@ const ConfigEspecialidades: React.FC = () => {
 
       {/* Add field dialog */}
       <Dialog open={addFieldDialog} onOpenChange={v=>{if(!lock.current)setAddFieldDialog(v);}}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+        <DialogContent className="config-admin-modal max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="config-admin-modal-header">
+            <DialogTitle className="config-admin-modal-title flex items-center gap-2">
               <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                 <Plus className="w-4 h-4 text-primary" />
               </span>
@@ -670,7 +670,7 @@ const ConfigEspecialidades: React.FC = () => {
             </p>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="config-admin-modal-footer">
             <Button variant="outline" disabled={saving} onClick={() => setAddFieldDialog(false)}>Cancelar</Button>
             <Button onClick={addCampoEsp} disabled={saving||saveFailed||!newField.label.trim()}>Adicionar Campo</Button>
           </DialogFooter>
@@ -688,9 +688,9 @@ const ConfigEspecialidades: React.FC = () => {
 
       {/* Copy field dialog */}
       <Dialog open={!!copyDialog} onOpenChange={o=>{if(!o&&!lock.current)setCopyDialog(null);}}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Copiar campo para outras especialidades</DialogTitle>
+        <DialogContent className="config-admin-modal">
+          <DialogHeader className="config-admin-modal-header">
+            <DialogTitle className="config-admin-modal-title">Copiar campo para outras especialidades</DialogTitle>
             <DialogDescription>Selecione as especialidades que devem receber uma cópia de "{copyDialog?.campo.label}".</DialogDescription>
           </DialogHeader>
           <div className="space-y-2 max-h-72 overflow-y-auto">
@@ -710,7 +710,7 @@ const ConfigEspecialidades: React.FC = () => {
               </div>
             ))}
           </div>
-          <DialogFooter>
+          <DialogFooter className="config-admin-modal-footer">
             <Button variant="outline" disabled={saving} onClick={() => setCopyDialog(null)}>Cancelar</Button>
             <Button
               disabled={saving||saveFailed||!copyDialog?.targets.length}
@@ -724,9 +724,9 @@ const ConfigEspecialidades: React.FC = () => {
 
       {/* Preview dialog */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-primary" /> Preview — {esp?.label}</DialogTitle>
+        <DialogContent className="config-admin-modal max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader className="config-admin-modal-header">
+            <DialogTitle className="config-admin-modal-title flex items-center gap-2"><Sparkles className="w-4 h-4 text-primary" /> Preview — {esp?.label}</DialogTitle>
             <DialogDescription>Como ficará o prontuário para esta especialidade no tipo selecionado.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -749,8 +749,8 @@ const ConfigEspecialidades: React.FC = () => {
 
       {/* Add especialidade dialog */}
       <Dialog open={addEspDialog} onOpenChange={v=>{if(!lock.current)setAddEspDialog(v);}}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Nova Especialidade</DialogTitle></DialogHeader>
+        <DialogContent className="config-admin-modal">
+          <DialogHeader className="config-admin-modal-header"><DialogTitle className="config-admin-modal-title">Nova Especialidade</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Nome</Label><Input value={newEsp.label} onChange={e => setNewEsp(p => ({ ...p, label: e.target.value }))} /></div>
             <div>
@@ -767,7 +767,7 @@ const ConfigEspecialidades: React.FC = () => {
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="config-admin-modal-footer">
             <Button variant="outline" disabled={saving} onClick={() => setAddEspDialog(false)}>Cancelar</Button>
             <Button onClick={addNovaEspecialidade} disabled={saving||saveFailed||!newEsp.label.trim()}>Criar</Button>
           </DialogFooter>
@@ -810,9 +810,9 @@ const EditCampoDialog: React.FC<EditCampoDialogProps> = ({ campo, outrosCampos, 
 
   return (
     <Dialog open={!!campo} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Editar campo</DialogTitle>
+      <DialogContent className="config-admin-modal max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader className="config-admin-modal-header">
+          <DialogTitle className="config-admin-modal-title">Editar campo</DialogTitle>
           <DialogDescription>Altere as propriedades deste campo. As alterações são aplicadas após a gravação confirmada.</DialogDescription>
         </DialogHeader>
 
@@ -937,7 +937,7 @@ const EditCampoDialog: React.FC<EditCampoDialogProps> = ({ campo, outrosCampos, 
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="config-admin-modal-footer">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button onClick={() => onSave(draft)} disabled={disabled||!draft.label.trim()}>Salvar</Button>
         </DialogFooter>

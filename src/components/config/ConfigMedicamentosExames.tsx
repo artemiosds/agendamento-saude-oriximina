@@ -339,7 +339,7 @@ const ConfigMedicamentosExames: React.FC = () => {
       </div>
       <fieldset disabled={busy} className="min-w-0">
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full flex-wrap h-auto">
+        <TabsList className="config-admin-tabs w-full flex-wrap h-auto">
           <TabsTrigger value="medicamentos" className="flex-1"><Pill className="w-4 h-4 mr-1.5" />Medicamentos <Badge variant="secondary" className="ml-1.5 text-[10px]">{catalogReady ? meds.filter(m => m.ativo).length : '—'}</Badge></TabsTrigger>
           <TabsTrigger value="exames" className="flex-1"><FlaskConical className="w-4 h-4 mr-1.5" />Exames <Badge variant="secondary" className="ml-1.5 text-[10px]">{catalogReady ? exams.filter(e => e.ativo).length : '—'}</Badge></TabsTrigger>
           <TabsTrigger value="categorias" className="flex-1"><FolderTree className="w-4 h-4 mr-1.5" />Categorias <Badge variant="secondary" className="ml-1.5 text-[10px]">{catalogReady ? allClasses.length : '—'}</Badge></TabsTrigger>
@@ -388,7 +388,7 @@ const ConfigMedicamentosExames: React.FC = () => {
           <p className="text-xs text-muted-foreground">{catalogReady ? `${filteredMeds.length} medicamento(s) encontrado(s)` : 'Resultado não confirmado'}</p>
 
           {Array.from(medsByClass.entries()).map(([classe, items]) => (
-            <Card key={classe} className="shadow-card border-0">
+            <Card key={classe} className="config-admin-card shadow-card border-0">
               <CardContent className="p-4">
                 <h4 className="text-sm font-semibold text-foreground mb-2 border-l-4 border-accent pl-2 flex items-center gap-2">
                   {classe} <Badge variant="outline" className="text-[10px]">{items.length}</Badge>
@@ -430,7 +430,7 @@ const ConfigMedicamentosExames: React.FC = () => {
           </div>
           <p className="text-xs text-muted-foreground">{catalogReady ? `${filteredExams.length} exame(s) encontrado(s)` : 'Resultado não confirmado'}</p>
           {Array.from(examsByCategory.entries()).map(([cat, items]) => (
-            <Card key={cat} className="shadow-card border-0">
+            <Card key={cat} className="config-admin-card shadow-card border-0">
               <CardContent className="p-4">
                 <h4 className="text-sm font-semibold text-foreground mb-2 border-l-4 border-green-500 pl-2">{cat}</h4>
                 <div className="space-y-1.5">
@@ -450,7 +450,7 @@ const ConfigMedicamentosExames: React.FC = () => {
 
         {/* CATEGORIAS */}
         <TabsContent value="categorias" className="mt-4">
-          <Card className="shadow-card border-0">
+          <Card className="config-admin-card shadow-card border-0">
             <CardContent className="p-4 space-y-2">
               <h3 className="text-sm font-semibold mb-3">Classes terapêuticas em uso</h3>
               {allClasses.map(c => {
@@ -469,9 +469,9 @@ const ConfigMedicamentosExames: React.FC = () => {
         {/* PERSONALIZADOS */}
         <TabsContent value="personalizados" className="mt-4 space-y-3">
           {customMeds.length === 0 ? (
-            <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">Nenhum medicamento personalizado por profissionais.</CardContent></Card>
+            <Card className="config-admin-card"><CardContent className="p-8 text-center text-sm text-muted-foreground">Nenhum medicamento personalizado por profissionais.</CardContent></Card>
           ) : customMeds.map(m => (
-            <Card key={m.id} className="shadow-card border-0">
+            <Card key={m.id} className="config-admin-card shadow-card border-0">
               <CardContent className="p-3 flex items-center gap-2">
                 <span className="text-sm flex-1">{m.nome} <span className="text-xs text-muted-foreground">— {m.dosagem_padrao}</span></span>
                 <Badge variant="outline" className="text-[10px]">Personalizado</Badge>
@@ -485,9 +485,9 @@ const ConfigMedicamentosExames: React.FC = () => {
         {/* INATIVOS */}
         <TabsContent value="inativos" className="mt-4 space-y-2">
           {inactiveMeds.length === 0 ? (
-            <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">Nenhum medicamento inativo.</CardContent></Card>
+            <Card className="config-admin-card"><CardContent className="p-8 text-center text-sm text-muted-foreground">Nenhum medicamento inativo.</CardContent></Card>
           ) : inactiveMeds.map(m => (
-            <Card key={m.id} className="shadow-card border-0">
+            <Card key={m.id} className="config-admin-card shadow-card border-0">
               <CardContent className="p-3 flex items-center gap-2">
                 <span className="text-sm flex-1 opacity-70">{m.nome} <span className="text-xs text-muted-foreground">— {m.classe_terapeutica}</span></span>
                 <Button size="sm" variant="outline" disabled={!catalogReady||busy} onClick={() => reactivateMed(m.id)}>Reativar</Button>
@@ -499,7 +499,7 @@ const ConfigMedicamentosExames: React.FC = () => {
         {/* IMPORTAÇÃO */}
         <TabsContent value="importacao" className="mt-4 space-y-4">
           {importReport && <p role="status" className="rounded-lg border p-3 text-sm">{importReport}</p>}
-          <Card className="shadow-card border-0">
+          <Card className="config-admin-card shadow-card border-0">
             <CardContent className="p-4 space-y-2">
               <h3 className="font-semibold">Base padrão de Medicamentos — RENAME</h3>
               <p className="text-sm text-muted-foreground">
@@ -512,7 +512,7 @@ const ConfigMedicamentosExames: React.FC = () => {
               </Button>
             </CardContent>
           </Card>
-          <Card className="shadow-card border-0">
+          <Card className="config-admin-card shadow-card border-0">
             <CardContent className="p-4 space-y-2">
               <h3 className="font-semibold">Base padrão de Medicamentos — REME</h3>
               <p className="text-sm text-muted-foreground">
@@ -528,8 +528,8 @@ const ConfigMedicamentosExames: React.FC = () => {
 
         {/* PERMISSÕES */}
         <TabsContent value="perfil" className="space-y-4 mt-4">
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4">
               <h3 className="font-semibold mb-1">Prescrição de Medicamentos</h3>
               <p className="text-xs text-muted-foreground mb-3">Configuração de acesso à prescrição no sistema. Não substitui as normas profissionais vigentes.</p>
               {prescricaoError && <p role="alert" className="mb-3 text-sm text-destructive">Permissões não confirmadas. Atualize os catálogos antes de editar novamente.</p>}
@@ -552,8 +552,8 @@ const ConfigMedicamentosExames: React.FC = () => {
 
       {/* EDIT MED DIALOG */}
       <Dialog open={!!editMed} onOpenChange={open => {if(!open&&!busy)setEditMed(null);}}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Editar Medicamento</DialogTitle></DialogHeader>
+        <DialogContent className="config-admin-modal max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader className="config-admin-modal-header"><DialogTitle className="config-admin-modal-title">Editar Medicamento</DialogTitle></DialogHeader>
           {editMed && (
             <fieldset disabled={busy||!catalogReady} className="space-y-3 min-w-0">
               <div className="grid grid-cols-2 gap-2">
@@ -601,7 +601,7 @@ const ConfigMedicamentosExames: React.FC = () => {
             </fieldset>
           )}
           {!catalogReady && <p role="alert" className="text-xs text-destructive">Feche o editor e atualize o catálogo antes de repetir.</p>}
-          <DialogFooter>
+          <DialogFooter className="config-admin-modal-footer">
             <Button variant="outline" disabled={busy} onClick={() => setEditMed(null)}>Cancelar</Button>
             <Button disabled={!catalogReady||busy} onClick={saveEditMed}>Salvar</Button>
           </DialogFooter>
@@ -610,8 +610,8 @@ const ConfigMedicamentosExames: React.FC = () => {
 
       {/* EDIT EXAM */}
       <Dialog open={!!editExam} onOpenChange={open => {if(!open&&!busy)setEditExam(null);}}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Editar Exame</DialogTitle></DialogHeader>
+        <DialogContent className="config-admin-modal">
+          <DialogHeader className="config-admin-modal-header"><DialogTitle className="config-admin-modal-title">Editar Exame</DialogTitle></DialogHeader>
           {editExam && (
             <fieldset disabled={busy||!catalogReady} className="space-y-3 min-w-0">
               <div><Label>Nome</Label><Input value={editExam.nome} onChange={e => setEditExam({ ...editExam, nome: e.target.value })} /></div>
@@ -621,7 +621,7 @@ const ConfigMedicamentosExames: React.FC = () => {
             </fieldset>
           )}
           {!catalogReady && <p role="alert" className="text-xs text-destructive">Feche o editor e atualize o catálogo antes de repetir.</p>}
-          <DialogFooter>
+          <DialogFooter className="config-admin-modal-footer">
             <Button variant="outline" disabled={busy} onClick={() => setEditExam(null)}>Cancelar</Button>
             <Button disabled={!catalogReady||busy} onClick={saveEditExam}>Salvar</Button>
           </DialogFooter>
@@ -630,8 +630,8 @@ const ConfigMedicamentosExames: React.FC = () => {
 
       {/* ADD MED */}
       <Dialog open={addMedDialog} onOpenChange={open=>{if(!busy)setAddMedDialog(open);}}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Novo Medicamento</DialogTitle></DialogHeader>
+        <DialogContent className="config-admin-modal max-w-2xl">
+          <DialogHeader className="config-admin-modal-header"><DialogTitle className="config-admin-modal-title">Novo Medicamento</DialogTitle></DialogHeader>
           <fieldset disabled={busy||!catalogReady} className="space-y-3 min-w-0">
             <div className="grid grid-cols-2 gap-2">
               <div><Label>Nome Genérico *</Label><Input value={newMed.nome || ''} onChange={e => setNewMed(p => ({ ...p, nome: e.target.value }))} /></div>
@@ -660,7 +660,7 @@ const ConfigMedicamentosExames: React.FC = () => {
             </div>
           </fieldset>
           {!catalogReady && <p role="alert" className="text-xs text-destructive">Feche a janela e atualize o catálogo antes de repetir. O formulário permanece preenchido.</p>}
-          <DialogFooter>
+          <DialogFooter className="config-admin-modal-footer">
             <Button variant="outline" disabled={busy} onClick={() => setAddMedDialog(false)}>Cancelar</Button>
             <Button onClick={addNewMed} disabled={!catalogReady||busy||!newMed.nome?.trim()}>Criar</Button>
           </DialogFooter>
@@ -669,15 +669,15 @@ const ConfigMedicamentosExames: React.FC = () => {
 
       {/* ADD EXAM */}
       <Dialog open={addExamDialog} onOpenChange={open=>{if(!busy)setAddExamDialog(open);}}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Novo Exame</DialogTitle></DialogHeader>
+        <DialogContent className="config-admin-modal">
+          <DialogHeader className="config-admin-modal-header"><DialogTitle className="config-admin-modal-title">Novo Exame</DialogTitle></DialogHeader>
           <fieldset disabled={busy||!catalogReady} className="space-y-3 min-w-0">
             <div><Label>Nome *</Label><Input value={newExam.nome} onChange={e => setNewExam(p => ({ ...p, nome: e.target.value }))} /></div>
             <div><Label>Código SUS</Label><Input value={newExam.codigo_sus} onChange={e => setNewExam(p => ({ ...p, codigo_sus: e.target.value }))} /></div>
             <div><Label>Categoria</Label><Input value={newExam.categoria} onChange={e => setNewExam(p => ({ ...p, categoria: e.target.value }))} /></div>
           </fieldset>
           {!catalogReady && <p role="alert" className="text-xs text-destructive">Feche a janela e atualize o catálogo antes de repetir. O formulário permanece preenchido.</p>}
-          <DialogFooter>
+          <DialogFooter className="config-admin-modal-footer">
             <Button variant="outline" disabled={busy} onClick={() => setAddExamDialog(false)}>Cancelar</Button>
             <Button onClick={addNewExam} disabled={!catalogReady||busy||!newExam.nome.trim()}>Criar</Button>
           </DialogFooter>
@@ -685,13 +685,13 @@ const ConfigMedicamentosExames: React.FC = () => {
       </Dialog>
 
       <AlertDialog open={!!deleteItem} onOpenChange={open=>{if(!open&&!busy)setDeleteItem(null);}}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Desativar {deleteItem?.type === 'med' ? 'medicamento' : 'exame'}?</AlertDialogTitle>
+        <AlertDialogContent className="config-admin-modal config-admin-confirm">
+          <AlertDialogHeader className="config-admin-modal-header">
+            <AlertDialogTitle className="config-admin-modal-title">Desativar {deleteItem?.type === 'med' ? 'medicamento' : 'exame'}?</AlertDialogTitle>
             <AlertDialogDescription>O item será desativado, sem exclusão física. Medicamentos podem ser reativados em Inativos; exames na aba Exames.</AlertDialogDescription>
             {!catalogReady && <p role="alert" className="text-xs text-destructive">Alteração não confirmada. Feche a janela e atualize o catálogo.</p>}
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="config-admin-modal-footer">
             <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
             <AlertDialogAction disabled={!catalogReady||busy} onClick={e=>{e.preventDefault();void handleDelete();}}>Confirmar</AlertDialogAction>
           </AlertDialogFooter>

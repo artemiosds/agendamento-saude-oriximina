@@ -75,7 +75,7 @@ const ConfigWhatsAppEvents: React.FC = () => {
       </div>
 
       {editableUnits.length > 1 && (
-        <Card className="border-0 shadow-card">
+        <Card className="config-admin-card border-0 shadow-card">
           <CardContent className="p-4 flex items-center gap-3">
             <Label className="whitespace-nowrap">Unidade:</Label>
             <Select disabled={!!toggling} value={selectedUnit} onValueChange={v=>{if(!lock.current)setSelectedUnit(v);}}>
@@ -90,7 +90,7 @@ const ConfigWhatsAppEvents: React.FC = () => {
         </Card>
       )}
 
-      <Card className="border-0 shadow-card">
+      <Card className="config-admin-card border-0 shadow-card">
         <CardContent className="p-0">
           {loading ? (
             <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>

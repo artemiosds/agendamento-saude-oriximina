@@ -114,7 +114,7 @@ export default function ConfigRegrasCarencia() {
       <p className="text-sm text-muted-foreground mt-1">A carência se aplica somente a altas manuais do tipo conclusão. Regras novas começam desligadas.</p>
     </div>
     <fieldset disabled={!!saving||failed} className="space-y-4 min-w-0">
-    <Card className="border-primary/20"><CardContent className="p-4 space-y-3">
+    <Card className="config-admin-card border-primary/20"><CardContent className="p-4 space-y-3">
       <div className="flex items-start gap-3">
         {mappingConfirmed ? <ShieldCheck className="w-5 h-5 text-success mt-0.5" /> : <AlertTriangle className="w-5 h-5 text-warning mt-0.5" />}
         <div className="flex-1">
@@ -132,8 +132,8 @@ export default function ConfigRegrasCarencia() {
       </div>
     </CardContent></Card>
 
-    {failed ? <p role="alert" className="text-sm text-destructive">Dados não confirmados. Atualize as regras.</p> : rules.length === 0 ? <Card><CardContent className="p-6 text-sm text-muted-foreground">Não há profissões ativas cadastradas.</CardContent></Card> :
-      rules.map(row => <Card key={row.profession_key} className="shadow-sm"><CardContent className="p-4 space-y-4">
+    {failed ? <p role="alert" className="text-sm text-destructive">Dados não confirmados. Atualize as regras.</p> : rules.length === 0 ? <Card className="config-admin-card"><CardContent className="p-6 text-sm text-muted-foreground">Não há profissões ativas cadastradas.</CardContent></Card> :
+      rules.map(row => <Card key={row.profession_key} className="config-admin-card shadow-sm"><CardContent className="p-4 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="font-semibold">{row.suggested_name}</h3>

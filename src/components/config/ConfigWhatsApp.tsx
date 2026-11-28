@@ -630,7 +630,7 @@ const ConfigWhatsApp: React.FC = () => {
 
       <div className="rounded-xl border bg-card p-4 flex flex-wrap gap-3 items-center justify-between"><div><p className="font-semibold">Provedor salvo: {connectionFailed||evolutionLoading?'não confirmado':activeProvider==='evolution'?'Evolution API':'UazapiGO'}</p><p role="status" className="text-xs text-muted-foreground">{connectionFailed?'Conexão não confirmada. Atualize antes de editar.':connectionBusy?'Gravando configuração…':'As verificações consultam a configuração salva.'}</p></div><Button size="sm" variant="outline" disabled={connectionBusy||actionBusy||reminderSaving||evolutionLoading} onClick={()=>{if(window.confirm('Recarregar a conexão e descartar alterações locais?'))void loadConnection();}}>Atualizar conexão</Button></div>
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
-        <TabsList className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 w-full h-auto gap-1">
+        <TabsList className="config-admin-tabs grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 w-full h-auto gap-1">
           <TabsTrigger value="conexao" className="gap-1.5"><Zap className="w-4 h-4" /> Conexão</TabsTrigger>
           <TabsTrigger value="mensagens" className="gap-1.5"><FileText className="w-4 h-4" /> Mensagens</TabsTrigger>
           <TabsTrigger value="eventos" className="gap-1.5"><Bell className="w-4 h-4" /> Eventos</TabsTrigger>
@@ -666,8 +666,8 @@ const ConfigWhatsApp: React.FC = () => {
         {/* ─── CONEXÃO ─── */}
         <TabsContent value="conexao" className="space-y-4 mt-4">
           {/* ─── PROVEDOR ATIVO ─── */}
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-3">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
                   <h3 className="font-semibold text-foreground flex items-center gap-2"><Zap className="w-4 h-4" /> Provedor de envio ativo</h3>
@@ -693,8 +693,8 @@ const ConfigWhatsApp: React.FC = () => {
 
 
 
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-4">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-4">
               <h3 className="font-semibold text-foreground flex items-center gap-2"><Smartphone className="w-4 h-4" /> Evolution API</h3>
               {evolutionLoading ? (
                 <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
@@ -753,8 +753,8 @@ const ConfigWhatsApp: React.FC = () => {
           </Card>
 
           {/* ─── UAZAPIGO ─── */}
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-4">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <h3 className="font-semibold text-foreground flex items-center gap-2">
                   <Smartphone className="w-4 h-4" /> UazapiGO
@@ -851,8 +851,8 @@ const ConfigWhatsApp: React.FC = () => {
 
           {/* Painel de monitoramento e fila */}
 
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-4">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <h3 className="font-semibold text-foreground flex items-center gap-2">
                   <Shield className="w-4 h-4" /> Monitoramento e Fila
@@ -923,8 +923,8 @@ const ConfigWhatsApp: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-4">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-4">
               <h3 className="font-semibold text-foreground flex items-center gap-2"><Send className="w-4 h-4" /> Teste de Envio</h3>
               <div className="flex gap-2">
                 <Input placeholder="5593999990000" value={testPhone} onChange={e => setTestPhone(e.target.value)} className="flex-1" />
@@ -935,8 +935,8 @@ const ConfigWhatsApp: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-4">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-4">
               <h3 className="font-semibold text-foreground flex items-center gap-2"><Clock className="w-4 h-4" /> Configuração de Tempo</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -987,8 +987,8 @@ const ConfigWhatsApp: React.FC = () => {
 
             {/* Editor */}
             <div className="lg:col-span-2 space-y-4">
-              <Card className="shadow-card border-0">
-                <CardContent className="p-5 space-y-4">
+              <Card className="config-admin-card shadow-card border-0">
+                <CardContent className="p-3 sm:p-4 space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold text-foreground">{templateInfo?.icon} {templateInfo?.label}</h3>
@@ -1033,8 +1033,8 @@ const ConfigWhatsApp: React.FC = () => {
               </Card>
 
               {/* Preview */}
-              <Card className="shadow-card border-0">
-                <CardContent className="p-5">
+              <Card className="config-admin-card shadow-card border-0">
+                <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Eye className="w-4 h-4 text-muted-foreground" />
                     <h3 className="font-semibold text-foreground text-sm">Preview</h3>
@@ -1056,8 +1056,8 @@ const ConfigWhatsApp: React.FC = () => {
 
         {/* ─── EVENTOS ─── */}
         <TabsContent value="eventos" className="space-y-4 mt-4">
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4">
               <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
                 <Bell className="w-4 h-4" /> Eventos Ativos por Tipo
               </h3>
@@ -1082,8 +1082,8 @@ const ConfigWhatsApp: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4">
               <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
                 <Settings className="w-4 h-4" /> Configurações Globais
               </h3>
@@ -1133,8 +1133,8 @@ const ConfigWhatsApp: React.FC = () => {
 
         {/* ─── LOGS ─── */}
         <TabsContent value="logs" className="space-y-4 mt-4">
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-foreground flex items-center gap-2">
                   <Clock className="w-4 h-4" /> Histórico de Envios

@@ -293,7 +293,7 @@ const ConfigImpressaoDocumentos: React.FC = () => {
         <div className="flex flex-wrap gap-2">{!loadFailed&&!loading&&<Button size="sm" variant="outline" disabled={saving||!!uploading} onClick={saveCurrent}>Salvar configuração</Button>}{(loadFailed||saveState==='error')&&<Button size="sm" variant="outline" disabled={saving||!!uploading} onClick={()=>{if(loadFailed||window.confirm('Descartar o rascunho e recarregar?'))void loadConfig();}}>Recarregar configuração</Button>}</div>
       </div>
       <Tabs defaultValue="cabecalho" className="w-full">
-        <TabsList className="w-full overflow-x-auto flex justify-start gap-1 h-auto bg-muted/40 p-1 rounded-lg">
+        <TabsList className="config-admin-tabs w-full overflow-x-auto flex justify-start gap-1 h-auto bg-muted/40 p-1 rounded-lg">
           <TabsTrigger value="cabecalho">Cabeçalho & Logos</TabsTrigger>
           <TabsTrigger value="tipografia">Tipografia & Margens</TabsTrigger>
           <TabsTrigger value="rodape">Rodapé</TabsTrigger>
@@ -305,8 +305,8 @@ const ConfigImpressaoDocumentos: React.FC = () => {
         {/* ============== CABEÇALHO & LOGOS ============== */}
         <TabsContent value="cabecalho" className="space-y-5 mt-5">
           {loading||loadFailed ? <p role="status" className="text-sm text-muted-foreground p-4">{loading?'Carregando…':'Recarregue a configuração antes de editar o layout.'}</p> : <fieldset disabled={!!uploading} className="space-y-5 min-w-0">
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-5">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-5">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
                   <h3 className="font-semibold font-display text-foreground">3 Logos do Cabeçalho Oficial</h3>
@@ -337,8 +337,8 @@ const ConfigImpressaoDocumentos: React.FC = () => {
           </Card>
 
 
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-3">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-3">
               <h3 className="font-semibold font-display text-foreground">Bloco Institucional (até 4 linhas)</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div><Label>Linha 1 — Secretaria</Label><Input value={config.linha1} onChange={e => update('linha1', e.target.value)} onBlur={saveCurrent} /></div>
@@ -354,8 +354,8 @@ const ConfigImpressaoDocumentos: React.FC = () => {
           </Card>
 
           {/* Preview A4 ao vivo — usa o MESMO shell de impressão para fidelidade total */}
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><FileText className="w-4 h-4" /> Preview do Documento (A4)</h3>
                 <span className="text-[11px] text-muted-foreground">Amostra do layout atual</span>
@@ -377,8 +377,8 @@ const ConfigImpressaoDocumentos: React.FC = () => {
         {/* ============== TIPOGRAFIA & MARGENS ============== */}
         <TabsContent value="tipografia" className="space-y-5 mt-5">
           {loading||loadFailed ? <p role="status" className="text-sm text-muted-foreground p-4">{loading?'Carregando…':'Recarregue a configuração antes de editar o layout.'}</p> : <fieldset disabled={!!uploading} className="space-y-5 min-w-0">
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-4">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-4">
               <h3 className="font-semibold font-display text-foreground">Tipografia</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div>
@@ -437,8 +437,8 @@ const ConfigImpressaoDocumentos: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-4">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-4">
               <h3 className="font-semibold font-display text-foreground">Margens A4 (mm)</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {(['superior', 'inferior', 'esquerda', 'direita'] as const).map(side => (
@@ -459,8 +459,8 @@ const ConfigImpressaoDocumentos: React.FC = () => {
         {/* ============== RODAPÉ ============== */}
         <TabsContent value="rodape" className="space-y-5 mt-5">
           {loading||loadFailed ? <p role="status" className="text-sm text-muted-foreground p-4">{loading?'Carregando…':'Recarregue a configuração antes de editar o layout.'}</p> : <fieldset disabled={!!uploading} className="space-y-5 min-w-0">
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-3">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold font-display text-foreground">Rodapé Institucional</h3>
                 <div className="flex items-center gap-2">
@@ -478,8 +478,8 @@ const ConfigImpressaoDocumentos: React.FC = () => {
         {/* ============== DOCUMENTOS (configs por tipo) ============== */}
         <TabsContent value="documentos" className="space-y-5 mt-5">
           {loading||loadFailed ? <p role="status" className="text-sm text-muted-foreground p-4">{loading?'Carregando…':'Recarregue a configuração antes de editar o layout.'}</p> : <fieldset disabled={!!uploading} className="space-y-5 min-w-0">
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-3">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-3">
               <h3 className="font-semibold font-display text-foreground">Receituário</h3>
               <div><Label>Título</Label><Input value={config.receituario.titulo} onChange={e => updateNested('receituario', 'titulo', e.target.value)} onBlur={saveCurrent} /></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -499,8 +499,8 @@ const ConfigImpressaoDocumentos: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-3">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-3">
               <h3 className="font-semibold font-display text-foreground">Solicitação de Exames</h3>
               <div><Label>Título</Label><Input value={config.solicitacaoExames.titulo} onChange={e => updateNested('solicitacaoExames', 'titulo', e.target.value)} onBlur={saveCurrent} /></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -519,8 +519,8 @@ const ConfigImpressaoDocumentos: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-3">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold font-display text-foreground">Relatório de Evolução</h3>
                 <Switch checked={config.relatorioEvolucao.habilitado} onCheckedChange={v => save({ ...draft.current, relatorioEvolucao: { ...draft.current.relatorioEvolucao, habilitado: v } })} />
@@ -532,8 +532,8 @@ const ConfigImpressaoDocumentos: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5 space-y-3">
+          <Card className="config-admin-card shadow-card border-0">
+            <CardContent className="p-3 sm:p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold font-display text-foreground">Termo de Consentimento</h3>
