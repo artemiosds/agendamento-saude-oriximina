@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { saveSystemConfigPatch } from '@/lib/systemConfigWriter';
+import type { ExpectedConfigSection } from '@/lib/configSectionGuard';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { auditService } from '@/services/auditService';
@@ -54,12 +55,12 @@ export function useConfiguracao() {
   }, []);
 
   const atualizarConfiguracao = useCallback(
-    async (key:string,value:unknown,options?:{silent?:boolean;auditAcao?:string}):Promise<boolean>=>{
+    async (key:string,value:unknown,options?:{silent?:boolean;auditAcao?:string;expectedSection?:ExpectedConfigSection}):Promise<boolean>=>{
       if(!user||user.role!=='master'||user.ativo!==true){toast.error('Acesso não autorizado.');return false;}
       const err=validate(key,value);
       if(err){toast.error('Validação falhou: '+err);return false;}
       try{
-        await saveSystemConfigPatch({[key]:value},user.authUserId);
+        await saveSystemConfigPatch({[key]:value},user.authUserId,options?.expectedSection);
         // Do not copy full configuration payloads, tokens or passwords into audit logs.
         void auditService.log({acao:options?.auditAcao||`ALTERAR_CONFIG_${key.toUpperCase()}`,entidade:'system_config',entidadeId:'default',modulo:'configuracoes',user:{id:user.id,nome:user.nome,role:user.role,unidadeId:user.unidadeId},detalhes:{chave_configuracao:key,gravacao_confirmada:true}});
         if(!options?.silent)toast.success('Configuração salva com sucesso');

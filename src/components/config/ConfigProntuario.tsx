@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useProntuarioSettings } from '@/hooks/useProntuarioSettings';
+import { configObject } from '@/lib/configSectionGuard';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -116,6 +117,10 @@ const ConfigProntuario: React.FC = () => {
   const [config, setConfig] = useState<ProntuarioConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const revision = useRef(0);
+  const { load, save } = useProntuarioSettings(CONFIG_KEY);
   const [tipoSelecionado, setTipoSelecionado] = useState('avaliacao_inicial');
   const [addFieldDialog, setAddFieldDialog] = useState(false);
   const [addAlertDialog, setAddAlertDialog] = useState(false);
@@ -171,17 +176,25 @@ const ConfigProntuario: React.FC = () => {
   };
 
   const loadConfig = useCallback(async () => {
+    setLoading(true);
+    setLoadFailed(false);
+    setSaveState('idle');
     try {
-      const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-      const cfg = data?.configuracoes as any;
-      if (cfg?.[CONFIG_KEY]) {
-        setConfig({ ...DEFAULT_CONFIG, ...cfg[CONFIG_KEY] });
+      const raw = await load();
+      if (raw === undefined) setConfig(DEFAULT_CONFIG);
+      else {
+        const cfg = configObject(raw) as Partial<ProntuarioConfig>;
+        if ((cfg.campos !== undefined && !Array.isArray(cfg.campos)) || (cfg.alertas !== undefined && !Array.isArray(cfg.alertas))) throw Error('Estrutura inválida.');
+        setConfig({ ...DEFAULT_CONFIG, ...cfg, soapLabels: { ...DEFAULT_CONFIG.soapLabels, ...cfg.soapLabels } });
       }
-    } catch { /* use defaults */ }
-    setLoading(false);
-  }, []);
+    } catch {
+      setLoadFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [load]);
 
-  useEffect(() => { loadConfig(); }, [loadConfig]);
+  useEffect(() => { void loadConfig(); }, [loadConfig]);
 
   const saveConfig = async (updated: ProntuarioConfig) => {
     // 🛡️ Retrocompatibilidade: garante que campos fixos / slugs imutáveis nunca sejam alterados
@@ -204,27 +217,22 @@ const ConfigProntuario: React.FC = () => {
       }),
     };
 
-    // ⚡ Atualização otimista — UI reflete imediatamente, sem esperar o round-trip
-    const previous = config;
+    // Preserve the latest draft even if an earlier request fails.
     setConfig(safeUpdated);
+    const sequence = ++revision.current;
     setSaving(true);
-
+    setSaveState('saving');
+    let ok = false;
     try {
-      const { data: existing } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-      const existingConfig = (existing?.configuracoes as any) || {};
-      const { error } = await supabase.from('system_config').upsert({
-        id: 'default',
-        configuracoes: { ...existingConfig, [CONFIG_KEY]: safeUpdated },
-        updated_at: new Date().toISOString(),
-      });
-      if (error) throw error;
-      toast.success('Configuração salva');
-    } catch {
-      // 🔄 Rollback em caso de falha de rede
-      setConfig(previous);
-      toast.error('Erro ao salvar — alterações revertidas');
+      ok = await save(() => safeUpdated);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Gravação não confirmada.');
     }
-    setSaving(false);
+    if (sequence === revision.current) {
+      setSaving(false);
+      setSaveState(ok ? 'saved' : 'error');
+      if (ok) toast.success('Configuração salva');
+    }
   };
 
   const isFixedField = (key: string) => CAMPOS_FIXOS.includes(key) || key.startsWith('evolucao.');
@@ -266,7 +274,7 @@ const ConfigProntuario: React.FC = () => {
   const moveCampo = (id: string, dir: -1 | 1) => {
     const filtered = camposFiltrados;
     const idx = filtered.findIndex(c => c.id === id);
-    if ((dir === -1 && idx === 0) || (dir === 1 && idx === filtered.length - 1)) return;
+    if (idx < 0 || idx + dir < 0 || idx + dir >= filtered.length) return;
     const swapWith = filtered[idx + dir];
     const updated = {
       ...config,
@@ -280,7 +288,9 @@ const ConfigProntuario: React.FC = () => {
   };
 
   const addCampo = () => {
-    if (!newField.label.trim()) return;
+    if (!newField.label.trim() || !newField.tiposProntuario.length) return;
+    const options = [...new Set(newField.opcoes.split(',').map(o => o.trim()).filter(Boolean))];
+    if (TIPOS_COM_OPCOES.includes(newField.tipo) && !options.length) { toast.error('Adicione ao menos uma opção'); return; }
     const campo: CampoConfig = {
       id: `custom_${Date.now()}`,
       key: `custom_${Date.now()}`,
@@ -291,7 +301,7 @@ const ConfigProntuario: React.FC = () => {
       isBuiltin: false,
       order: camposFiltrados.length + 1,
       tiposProntuario: newField.tiposProntuario,
-      opcoes: newField.tipo === 'select' ? newField.opcoes.split(',').map(o => o.trim()).filter(Boolean) : undefined,
+      opcoes: TIPOS_COM_OPCOES.includes(newField.tipo) ? options : undefined,
     };
     const updated = { ...config, campos: [...config.campos, campo] };
     saveConfig(updated);
@@ -301,7 +311,7 @@ const ConfigProntuario: React.FC = () => {
 
   const deleteCampo = (id: string) => {
     const campo = config.campos.find(c => c.id === id);
-    if (!campo || campo.isBuiltin) return;
+    if (!campo || campo.isBuiltin || isFixedField(campo.key)) return;
     const updated = { ...config, campos: config.campos.filter(c => c.id !== id) };
     saveConfig(updated);
     setDeleteConfirm(null);
@@ -330,10 +340,16 @@ const ConfigProntuario: React.FC = () => {
     setNewAlert({ campo: '', operador: '>=', valor: '', mensagem: '' });
   };
 
+  if (loadFailed) return <Card><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível confirmar a configuração do prontuário. Edição bloqueada para evitar sobrescrita.</p><Button onClick={() => void loadConfig()}>Tentar novamente</Button></CardContent></Card>;
+
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      <div className="rounded-xl border bg-card px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+        <div><p className="font-semibold text-sm">Configuração administrativa do prontuário</p><p role="status" className="text-xs text-muted-foreground">{saveState === 'saving' ? 'Salvando…' : saveState === 'saved' ? 'Gravação confirmada' : saveState === 'error' ? 'Gravação não confirmada. Rascunho mantido nesta tela.' : 'Configuração carregada'}</p></div>
+        {saveState === 'error' && <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => void saveConfig(config)}>Tentar salvar novamente</Button><Button variant="outline" size="sm" onClick={() => { if (window.confirm('Recarregar os valores do banco e descartar o rascunho desta seção?')) void loadConfig(); }}>Recarregar</Button></div>}
+      </div>
       {/* Modelos de Prontuário — abre o construtor visual em modal */}
       <Card className="shadow-card border-0">
         <CardContent className="p-5">
@@ -569,7 +585,7 @@ const ConfigProntuario: React.FC = () => {
                 <SelectContent>{FIELD_TYPES.map(ft => <SelectItem key={ft.value} value={ft.value}>{ft.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            {newField.tipo === 'select' && (
+            {TIPOS_COM_OPCOES.includes(newField.tipo) && (
               <div><Label>Opções (separadas por vírgula)</Label><Input value={newField.opcoes} onChange={e => setNewField(p => ({ ...p, opcoes: e.target.value }))} placeholder="Opção 1, Opção 2, Opção 3" /></div>
             )}
             <div className="flex items-center gap-2"><Switch checked={newField.obrigatorio} onCheckedChange={v => setNewField(p => ({ ...p, obrigatorio: v }))} /><Label>Obrigatório</Label></div>
@@ -591,7 +607,7 @@ const ConfigProntuario: React.FC = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddFieldDialog(false)}>Cancelar</Button>
-            <Button onClick={addCampo} disabled={!newField.label.trim()}>Adicionar</Button>
+            <Button onClick={addCampo} disabled={!newField.label.trim() || !newField.tiposProntuario.length}>Adicionar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

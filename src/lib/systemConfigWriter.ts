@@ -1,13 +1,15 @@
 import {supabase} from '@/integrations/supabase/client';
 import type {Json} from '@/integrations/supabase/types';
 import {createConfigQueue,snapshotConfigPatch,commitConfigPatch,type ConfigValues} from './configWriteQueue';
+import {assertExpectedConfigSection,type ExpectedConfigSection} from './configSectionGuard';
 const enqueue=createConfigQueue();
 async function confirmSession(expected:string){
  const {data:{session},error}=await supabase.auth.getSession();
  if(error||!session||session.user.id!==expected)throw Error('Sessão alterada ou não confirmada.');
 }
-export async function saveSystemConfigPatch(patch:ConfigValues,expectedAuthId?:string){
+export async function saveSystemConfigPatch(patch:ConfigValues,expectedAuthId?:string,expectedSection?:ExpectedConfigSection){
  const copy=snapshotConfigPatch(patch);
+ const expected=expectedSection?{key:expectedSection.key,value:snapshotConfigPatch({value:expectedSection.value}).value}:undefined;
  // Enqueue synchronously before any awaited session lookup, preserving invocation order.
  return enqueue(async()=>{
   if(!expectedAuthId)throw Error('Identidade da sessão não confirmada.');
@@ -16,8 +18,9 @@ export async function saveSystemConfigPatch(patch:ConfigValues,expectedAuthId?:s
   return commitConfigPatch(copy,async()=>{
    const {data,error}=await supabase.from('system_config').select('configuracoes,updated_at').eq('id','default').maybeSingle();
    if(error)throw Error('Não foi possível ler a configuração atual.');
-   if(!data)return null;
+   if(!data){assertExpectedConfigSection(null,expected);return null;}
    if(!data.configuracoes||typeof data.configuracoes!=='object'||Array.isArray(data.configuracoes)||!Number.isFinite(Date.parse(data.updated_at)))throw Error('Versão de configuração inválida.');
+   assertExpectedConfigSection(data.configuracoes as ConfigValues,expected);
    return {values:data.configuracoes as ConfigValues,version:data.updated_at};
   },async(values,version)=>{
    await confirmSession(identity);

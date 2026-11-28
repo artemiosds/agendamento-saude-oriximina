@@ -12,7 +12,8 @@ import {
   Trash2, ChevronUp, ChevronDown, Loader2, Save, X, Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
+import { useProntuarioSettings } from '@/hooks/useProntuarioSettings';
+import { configObject, configVersion } from '@/lib/configSectionGuard';
 
 export type BuilderFieldType = 'text' | 'textarea' | 'checkbox' | 'select' | 'date';
 
@@ -54,28 +55,23 @@ const ConstrutorProntuarioModal: React.FC<ConstrutorProntuarioModalProps> = ({
   const [fields, setFields] = useState<BuilderField[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const { load: loadSettings, save } = useProntuarioSettings(configKeyFor(tipoKey));
 
   const load = useCallback(async () => {
-    setLoading(true);
+    setLoading(true); setLoadFailed(false); setSaveFailed(false);
     try {
-      const { data } = await supabase
-        .from('system_config')
-        .select('configuracoes')
-        .eq('id', 'default')
-        .maybeSingle();
-      const cfg = (data?.configuracoes as any) || {};
-      const stored = cfg[configKeyFor(tipoKey)] as BuilderSchema | undefined;
-      const loadedFields = (stored?.fields ?? []).map((f: any) => ({
-        ...f,
-        key: f.key || `custom_${f.id}`
-      }));
-      setFields(loadedFields);
-    } catch {
-      setFields([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [tipoKey]);
+      const raw = await loadSettings();
+      if (raw === undefined) setFields([]);
+      else {
+        const stored = configObject(raw);
+        if (!Array.isArray(stored.fields)) throw Error('Modelo inválido.');
+        setFields((stored.fields as BuilderField[]).map(f => ({ ...f, key: f.key || `custom_${f.id}` })));
+      }
+    } catch { setLoadFailed(true); }
+    finally { setLoading(false); }
+  }, [loadSettings]);
 
   useEffect(() => {
     if (open) load();
@@ -139,39 +135,26 @@ const ConstrutorProntuarioModal: React.FC<ConstrutorProntuarioModalProps> = ({
   };
 
   const handleSave = async () => {
-    setSaving(true);
+    if (saving || loading || loadFailed) return;
+    setSaving(true); setSaveFailed(false);
     try {
-      const { data: current } = await supabase
-        .from('system_config')
-        .select('configuracoes')
-        .eq('id', 'default')
-        .maybeSingle();
-      const existingConfig = (current?.configuracoes as any) || {};
-      const prev = existingConfig[configKeyFor(tipoKey)] as BuilderSchema | undefined;
-      const schema: BuilderSchema = {
+      const ok = await save(previous => ({
+        ...(previous === undefined ? {} : configObject(previous)),
         fields,
-        version: (prev?.version || 0) + 1,
+        version: configVersion(previous) + 1,
         updatedAt: new Date().toISOString(),
-      };
-      const { error } = await supabase
-        .from('system_config')
-        .upsert({
-          id: 'default',
-          configuracoes: { ...existingConfig, [configKeyFor(tipoKey)]: schema },
-          updated_at: new Date().toISOString(),
-        });
-      if (error) throw error;
+      }));
+      if (!ok) { setSaveFailed(true); return; }
       toast.success(`Modelo "${tipoLabel}" salvo com sucesso`);
       onOpenChange(false);
-    } catch (err: any) {
-      toast.error(`Erro ao salvar: ${err.message ?? 'desconhecido'}`);
-    } finally {
-      setSaving(false);
-    }
+    } catch (error) {
+      setSaveFailed(true);
+      toast.error(error instanceof Error ? error.message : 'Gravação não confirmada.');
+    } finally { setSaving(false); }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={next => { if (!saving) onOpenChange(next); }}>
       <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] p-0 gap-0 flex flex-col">
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <DialogTitle className="text-base font-display">
@@ -182,7 +165,8 @@ const ConstrutorProntuarioModal: React.FC<ConstrutorProntuarioModalProps> = ({
           </p>
         </DialogHeader>
 
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-[220px_1fr] overflow-hidden">
+        {saveFailed && <div className="px-6 py-2 flex flex-wrap items-center gap-2" role="alert"><span className="text-sm text-destructive">Gravação não confirmada. O modelo continua nesta tela.</span><Button variant="outline" size="sm" onClick={() => { if (window.confirm('Descartar o rascunho e recarregar o modelo atual?')) void load(); }}>Recarregar modelo</Button></div>}
+        <fieldset disabled={saving || loadFailed || loading} className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-[220px_1fr] overflow-hidden">
           {/* Painel Esquerdo - Ferramentas */}
           <div className="border-b md:border-b-0 md:border-r bg-muted/30 p-4">
             <Label className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">
@@ -221,6 +205,8 @@ const ConstrutorProntuarioModal: React.FC<ConstrutorProntuarioModalProps> = ({
                 <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
                   <Loader2 className="w-5 h-5 animate-spin" /> Carregando modelo…
                 </div>
+              ) : loadFailed ? (
+                <p role="alert" className="text-sm text-destructive">Não foi possível confirmar o modelo atual. Edição bloqueada.</p>
               ) : fields.length === 0 ? (
                 <div className="border-2 border-dashed border-border rounded-xl py-16 text-center">
                   <p className="text-sm text-muted-foreground">
@@ -343,13 +329,14 @@ const ConstrutorProntuarioModal: React.FC<ConstrutorProntuarioModalProps> = ({
               )}
             </div>
           </ScrollArea>
-        </div>
+        </fieldset>
+        {loadFailed && <div className="px-6"><Button variant="outline" size="sm" onClick={() => void load()}>Tentar carregar novamente</Button></div>}
 
         <DialogFooter className="px-6 py-4 border-t bg-background">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancelar
           </Button>
-          <Button onClick={handleSave} disabled={saving || loading}>
+          <Button onClick={handleSave} disabled={saving || loading || loadFailed}>
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             Salvar Modelo
           </Button>

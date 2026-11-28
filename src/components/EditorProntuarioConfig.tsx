@@ -14,7 +14,8 @@ import {
   ChevronUp, ChevronDown, Loader2, RotateCcw, Settings2, Layers
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
+import { useProntuarioSettings } from '@/hooks/useProntuarioSettings';
+import { configObject, configVersion } from '@/lib/configSectionGuard';
 
 export interface ProntuarioField {
   id: string;
@@ -123,6 +124,9 @@ const EditorProntuarioConfig: React.FC = () => {
   const [sections, setSections] = useState<ProntuarioSection[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const { load, save } = useProntuarioSettings(CONFIG_KEY);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [addFieldSection, setAddFieldSection] = useState<string | null>(null);
   const [newField, setNewField] = useState({ label: '', type: 'textarea' as string, required: false, options: '' });
@@ -131,63 +135,38 @@ const EditorProntuarioConfig: React.FC = () => {
   const [editingField, setEditingField] = useState<{ sectionId: string; fieldId: string } | null>(null);
   const [editFieldData, setEditFieldData] = useState({ label: '', type: 'textarea', required: false, options: '' });
 
-  useEffect(() => {
-    loadStructure();
-  }, []);
-
-  const loadStructure = async () => {
-    setLoading(true);
+  const loadStructure = useCallback(async () => {
+    setLoading(true); setLoadFailed(false); setSaveState('idle');
     try {
-      const { data } = await supabase
-        .from('system_config')
-        .select('configuracoes')
-        .eq('id', 'default')
-        .single();
-
-      const config = data?.configuracoes as any;
-      if (config?.[CONFIG_KEY]?.sections) {
-        setSections(config[CONFIG_KEY].sections);
-      } else {
-        setSections(JSON.parse(JSON.stringify(DEFAULT_SECTIONS)));
+      const raw = await load();
+      if (raw === undefined) setSections(JSON.parse(JSON.stringify(DEFAULT_SECTIONS)));
+      else {
+        const stored = configObject(raw);
+        if (!Array.isArray(stored.sections)) throw Error('Estrutura inválida.');
+        setSections(stored.sections as ProntuarioSection[]);
       }
-    } catch {
-      setSections(JSON.parse(JSON.stringify(DEFAULT_SECTIONS)));
-    } finally {
-      setLoading(false);
-    }
-  };
+    } catch { setLoadFailed(true); }
+    finally { setLoading(false); }
+  }, [load]);
+
+  useEffect(() => { void loadStructure(); }, [loadStructure]);
 
   const handleSave = async () => {
-    setSaving(true);
+    if (saving || loading || loadFailed) return;
+    setSaving(true); setSaveState('saving');
     try {
-      const { data: current } = await supabase
-        .from('system_config')
-        .select('configuracoes')
-        .eq('id', 'default')
-        .single();
-
-      const existingConfig = (current?.configuracoes as any) || {};
-      const structure: ProntuarioStructure = {
+      const ok = await save(previous => ({
+        ...(previous === undefined ? {} : configObject(previous)),
         sections,
-        version: (existingConfig[CONFIG_KEY]?.version || 0) + 1,
+        version: configVersion(previous) + 1,
         updatedAt: new Date().toISOString(),
-      };
-
-      const { error } = await supabase
-        .from('system_config')
-        .update({
-          configuracoes: { ...existingConfig, [CONFIG_KEY]: structure },
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', 'default');
-
-      if (error) throw error;
-      toast.success('Estrutura do prontuário salva com sucesso! As alterações já estão ativas.');
-    } catch (err: any) {
-      toast.error(`Erro ao salvar: ${err.message}`);
-    } finally {
-      setSaving(false);
-    }
+      }));
+      setSaveState(ok ? 'saved' : 'error');
+      if (ok) toast.success('Estrutura do prontuário salva com sucesso!');
+    } catch (error) {
+      setSaveState('error');
+      toast.error(error instanceof Error ? error.message : 'Gravação não confirmada.');
+    } finally { setSaving(false); }
   };
 
   const resetToDefault = () => {
@@ -346,6 +325,8 @@ const EditorProntuarioConfig: React.FC = () => {
   const totalFields = sections.reduce((a, s) => a + s.fields.length, 0);
   const enabledFields = sections.reduce((a, s) => a + s.fields.filter(f => f.enabled && s.enabled).length, 0);
 
+  if (loadFailed) return <Card><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível confirmar a estrutura atual. Edição bloqueada.</p><Button onClick={() => void loadStructure()}>Tentar novamente</Button></CardContent></Card>;
+
   if (loading) {
     return (
       <Card className="shadow-card border border-border/50">
@@ -375,6 +356,8 @@ const EditorProntuarioConfig: React.FC = () => {
             </div>
           </div>
 
+          <p role="status" className="mb-3 text-xs text-muted-foreground">{saveState === 'saving' ? 'Salvando estrutura…' : saveState === 'saved' ? 'Gravação confirmada' : saveState === 'error' ? 'Gravação não confirmada. Alterações mantidas nesta tela.' : 'As alterações são aplicadas ao salvar a estrutura.'}</p>
+          {saveState === 'error' && <Button variant="outline" size="sm" className="mb-3" onClick={() => { if (window.confirm('Descartar o rascunho e recarregar a estrutura atual?')) void loadStructure(); }}>Recarregar estrutura</Button>}
           {/* Actions */}
           <div className="flex flex-wrap gap-2 mb-4">
             <Button variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
