@@ -144,6 +144,9 @@ const ConfigFluxoAtendimento: React.FC = () => {
   const save=async(updated:FluxoConfig):Promise<boolean>=>{
     if(lock.current||failed||loading)return false;
     if(sameConfigSection(updated,confirmed.current))return true;
+    const check=(value:number,old:number,min:number,max=Number.MAX_SAFE_INTEGER)=>value===old||(Number.isSafeInteger(value)&&value>=min&&value<=max);
+    const a=updated.regrasAgendamento,o=confirmed.current.regrasAgendamento,n=updated.ptsCiclo,prev=confirmed.current.ptsCiclo;
+    if(![check(a.tempoConsulta,o.tempoConsulta,5),check(a.tempoSessao,o.tempoSessao,5),check(a.intervalo,o.intervalo,0),check(a.maxPacientesDia,o.maxPacientesDia,1),check(a.antecedenciaMinima,o.antecedenciaMinima,0),check(a.antecedenciaMaxima,o.antecedenciaMaxima,1),check(n.sessoesPadrao,prev.sessoesPadrao,1),check(n.prazoAlertaPts,prev.prazoAlertaPts,1),check(updated.alerta_minutos_em_atendimento??60,confirmed.current.alerta_minutos_em_atendimento??60,5,600)].every(Boolean)){toast.error('Confira os limites numéricos da configuração.');return false;}
     lock.current=true;setSaving(true);setStatus('Salvando…');draft.current=updated;setConfig(updated);
     try{
       const ok=await writeSection(previous=>mergeFlowSettings(previous===undefined?{}:configObject(previous),{...updated}));
@@ -448,6 +451,7 @@ const FALTAS_KEY = 'config_fluxo_faltas';
 
 const ControleFaltasCard: React.FC = () => {
   const [cfg, setCfg] = useState({ limite_alerta: 2, limite_bloqueio: 4, canal_sistema: true, canal_whatsapp: false });
+  const confirmedFaltas=useRef(cfg);
   const {load,save:writeSection}=useAdministrativeConfigSection(FALTAS_KEY);
   const [failed,setFailed]=useState(false);
   const [status,setStatus]=useState('');
@@ -457,7 +461,7 @@ const ControleFaltasCard: React.FC = () => {
 
   const reload=useCallback(async()=>{
     setLoading(true);setFailed(false);setStatus('');
-    try{const raw=await load();setCfg(p=>({...p,...(raw===undefined?{}:configObject(raw))}));}
+    try{const raw=await load();const next={limite_alerta:2,limite_bloqueio:4,canal_sistema:true,canal_whatsapp:false,...(raw===undefined?{}:configObject(raw))};confirmedFaltas.current=next;setCfg(next);}
     catch{setFailed(true);setStatus('Leitura não confirmada.');}finally{setLoading(false);}
   },[load]);
   useEffect(()=>{void reload();},[reload]);
@@ -466,13 +470,13 @@ const ControleFaltasCard: React.FC = () => {
     if(error||!data){toast.error('Reavaliação não confirmada.');return null;}return data;
   };
   const save=async(next:typeof cfg)=>{
-    if(lock.current||failed||loading)return;
+    if(lock.current||failed||loading||sameConfigSection(next,confirmedFaltas.current))return;
     if(![next.limite_alerta,next.limite_bloqueio].every(v=>Number.isInteger(v)&&v>=1&&v<=20)){toast.error('Informe limites inteiros entre 1 e 20.');return;}
     if(!window.confirm('Salvar regras de faltas e reavaliar todos os pacientes?'))return;
     lock.current=true;setSaving(true);
     try{
       if(!await writeSection(previous=>mergeFlowSettings(previous===undefined?{}:configObject(previous),next))){setFailed(true);setStatus('Gravação não confirmada.');return;}
-      setCfg(next);setStatus('Configuração confirmada; reavaliando pacientes…');
+      confirmedFaltas.current=next;setCfg(next);setStatus('Configuração confirmada; reavaliando pacientes…');
       const r=await reavaliar();setStatus(r?'Configuração e reavaliação confirmadas':'Configuração salva; reavaliação não confirmada.');
       if(r)toast.success('Configuração e reavaliação confirmadas.');
     }catch{setFailed(true);setStatus('Operação não confirmada. Recarregue.');}

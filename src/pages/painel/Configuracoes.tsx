@@ -1,5 +1,5 @@
 import PortalQrCodeCard from '@/components/PortalQrCodeCard';
-import React, { lazy, Suspense, useEffect, useState, useCallback } from 'react';
+import React, { lazy, Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import ConfigNavigation from '@/components/config/ConfigNavigation';
 import { CONFIG_SECTIONS, CONFIG_GROUPS, resolveConfigTab, type ConfigTabId } from '@/lib/configNavigation';
 import { useOperacional } from '@/contexts/OperacionalContext';
@@ -73,6 +73,9 @@ const Configuracoes: React.FC = () => {
   const [triageEnabled, setTriageEnabled] = useState(false);
   const [triageLoading, setTriageLoading] = useState(true);
   const [triageSettingId, setTriageSettingId] = useState<string | null>(null);
+  const [triageFailed,setTriageFailed]=useState(false);
+  const [triageScope,setTriageScope]=useState<string|null>(null);
+  const triageRaw=useRef<boolean|null>(null),triageLock=useRef(false),triageRequest=useRef(0);
 
   const [requestedTab, setActiveTab] = useState<ConfigTabId>('prontuario');
 
@@ -240,26 +243,40 @@ const Configuracoes: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const unitId = user?.unidadeId || '';
-        const { data } = await supabase
-          .from('triage_settings')
-          .select('*')
-          .is('profissional_id',null)
-          .or(`unidade_id.eq.${unitId},unidade_id.is.null`)
-          .order('unidade_id', { ascending: false, nullsFirst: false })
-          .limit(1)
-          .maybeSingle();
-        if (data) {
-          setTriageEnabled(data.enabled || false);
-          setTriageSettingId(data.id);
-        }
-      } catch { }
-      setTriageLoading(false);
-    })();
-  }, [user?.unidadeId]);
+  const readUnitTriage=useCallback(async()=>{
+    const unitId=user?.unidadeId;
+    const unit=unitId?await supabase.from('triage_settings').select('*').is('profissional_id',null).eq('unidade_id',unitId).maybeSingle():null;
+    if(unit?.error)throw unit.error;
+    if(unit?.data)return unit.data;
+    const {data,error}=await supabase.from('triage_settings').select('*').is('profissional_id',null).is('unidade_id',null).maybeSingle();
+    if(error)throw error;return data;
+  },[user?.unidadeId]);
+  const loadUnitTriage=useCallback(async()=>{
+    const request=++triageRequest.current;
+    setTriageLoading(true);setTriageFailed(false);
+    try{
+      const data=await readUnitTriage();
+      if(request!==triageRequest.current)return;
+      setTriageEnabled(data?.enabled??false);setTriageSettingId(data?.id??null);setTriageScope(data?.unidade_id??null);triageRaw.current=data?.enabled??null;
+    }catch{if(request===triageRequest.current)setTriageFailed(true);}
+    finally{if(request===triageRequest.current)setTriageLoading(false);}
+  },[readUnitTriage]);
+  useEffect(()=>{void loadUnitTriage();return()=>{triageRequest.current++;};},[loadUnitTriage]);
+  const saveUnitTriage=async(v:boolean)=>{
+    if(triageLock.current||triageLoading||triageFailed||!window.confirm(triageSettingId&&!triageScope?'A unidade utiliza a regra global. Alterar essa regra global?':'Alterar a regra de triagem da unidade?'))return;
+    triageLock.current=true;setTriageLoading(true);
+    try{
+      const {data:auth,error:authError}=await supabase.auth.getSession();
+      if(authError||!user?.authUserId||user.role!=='master'||user.ativo!==true||auth.session?.user.id!==user.authUserId)throw Error('Sessão não confirmada.');
+      const current=await readUnitTriage();
+      if((current?.id??null)!==triageSettingId||(current?.enabled??null)!==triageRaw.current)throw Error('Regra alterada. Recarregue antes de repetir.');
+      const payload={enabled:v,updated_at:new Date().toISOString()};
+      const result=current?await (current.enabled===null?supabase.from('triage_settings').update(payload).eq('id',current.id).is('enabled',null):supabase.from('triage_settings').update(payload).eq('id',current.id).eq('enabled',current.enabled)).is('profissional_id',null).select('id,enabled').maybeSingle():await supabase.from('triage_settings').insert({...payload,unidade_id:user.unidadeId||null,profissional_id:null}).select('id,enabled').single();
+      if(result.error||!result.data||result.data.enabled!==v)throw Error('Gravação não confirmada.');
+      toast.success('Regra de triagem confirmada.');await loadUnitTriage();
+    }catch(error){setTriageFailed(true);toast.error(error instanceof Error?error.message:'Gravação não confirmada.');}
+    finally{triageLock.current=false;setTriageLoading(false);}
+  };
 
   useEffect(() => {
     const code = searchParams.get('code');
@@ -523,42 +540,13 @@ const Configuracoes: React.FC = () => {
                     <HeartPulse className="w-5 h-5 text-primary" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-semibold font-display text-foreground">Triagem de Enfermagem</h3>
-                    <p className="text-sm text-muted-foreground">Regra efetiva da unidade ou fallback global</p>
+                    <h3 className="font-semibold font-display text-foreground">Triagem de Enfermagem — unidade</h3>
+                    <p className="text-sm text-muted-foreground">{triageSettingId?(triageScope?"Regra específica da unidade":"Regra global utilizada como fallback"):"Sem regra cadastrada"}</p>
                   </div>
                   {triageLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Switch
-                      checked={triageEnabled}
-                      onCheckedChange={async (v) => {
-                        if(!window.confirm('Alterar a regra efetiva de triagem (unidade ou global)?'))return;
-                        setTriageEnabled(v);
-                        try {
-                          const unitId = user?.unidadeId || null;
-                          if (triageSettingId) {
-                            const { data,error } = await supabase
-                              .from('triage_settings')
-                              .update({ enabled: v, updated_at: new Date().toISOString() })
-                              .eq('id', triageSettingId).is('profissional_id',null).select('id,enabled').maybeSingle();
-                            if (error||!data||data.enabled!==v) throw Error('Gravação não confirmada.');
-                          } else {
-                            const { data: inserted, error } = await supabase
-                              .from('triage_settings')
-                              .insert({ enabled: v, unidade_id: unitId, profissional_id: null })
-                              .select('id')
-                              .single();
-                            if (error) throw error;
-                            if (inserted) setTriageSettingId(inserted.id);
-                          }
-                          toast.success(v ? 'Triagem habilitada!' : 'Triagem desabilitada.');
-                        } catch (err) {
-                          console.error('Erro ao salvar triagem:', err);
-                          setTriageEnabled(!v);
-                          toast.error('Erro ao salvar configuração de triagem.');
-                        }
-                      }}
-                    />
+                  ) : triageFailed ? <Button variant="outline" size="sm" onClick={()=>void loadUnitTriage()}>Recarregar regra</Button> : (
+                    <Switch checked={triageEnabled} onCheckedChange={saveUnitTriage}/>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">

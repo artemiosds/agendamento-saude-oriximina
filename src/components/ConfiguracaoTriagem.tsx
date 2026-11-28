@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { UserCog, Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useOperacional } from '@/contexts/OperacionalContext';
+import {useAuth} from '@/contexts/AuthContext';
 
 interface TriageSetting {
   id: string;
@@ -21,6 +22,9 @@ interface TriageSetting {
 
 const ConfiguracaoTriagem: React.FC = () => {
   const { funcionarios } = useOperacional();
+  const {user}=useAuth();
+  const lock=useRef(false);
+  const [failed,setFailed]=useState(false);
   const [settings, setSettings] = useState<TriageSetting[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProf, setSelectedProf] = useState('');
@@ -32,12 +36,14 @@ const ConfiguracaoTriagem: React.FC = () => {
   );
 
   const loadSettings = useCallback(async () => {
+    setLoading(true);setFailed(false);
     try {
-      const { data } = await supabase
+      const { data,error } = await supabase
         .from('triage_settings')
         .select('*')
         .not('profissional_id', 'is', null);
 
+      if(error||!data)throw Error('Consulta não confirmada.');
       if (data) {
         const mapped: TriageSetting[] = data.map(d => {
           const prof = funcionarios.find(f => f.id === d.profissional_id);
@@ -52,7 +58,7 @@ const ConfiguracaoTriagem: React.FC = () => {
         setSettings(mapped);
       }
     } catch (err) {
-      console.error('Erro ao carregar config triagem:', err);
+      setFailed(true);
     } finally {
       setLoading(false);
     }
@@ -62,54 +68,26 @@ const ConfiguracaoTriagem: React.FC = () => {
     loadSettings();
   }, [loadSettings]);
 
-  const handleSave = async () => {
-    if (!selectedProf) {
-      toast.error('Selecione um profissional.');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const existing = settings.find(s => s.profissional_id === selectedProf);
-      if (existing) {
-        const { error } = await supabase
-          .from('triage_settings')
-          .update({ enabled: newEnabled, updated_at: new Date().toISOString() })
-          .eq('id', existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('triage_settings')
-          .insert({ profissional_id: selectedProf, enabled: newEnabled, unidade_id: null });
-        if (error) throw error;
-      }
-
-      toast.success(`Triagem ${newEnabled ? 'habilitada' : 'desabilitada'} para o profissional.`);
-      setSelectedProf('');
-      setNewEnabled(true);
-      await loadSettings();
-    } catch (err) {
-      console.error('Erro ao salvar:', err);
-      toast.error('Erro ao salvar configuração.');
-    } finally {
-      setSaving(false);
-    }
+  const confirmSession=async()=>{
+    const {data,error}=await supabase.auth.getSession();
+    if(error||!user?.authUserId||data.session?.user.id!==user.authUserId)throw Error('Sessão não confirmada.');
   };
-
-  const toggleSetting = async (setting: TriageSetting) => {
-    const newVal = !setting.enabled;
-    try {
-      const { error } = await supabase
-        .from('triage_settings')
-        .update({ enabled: newVal, updated_at: new Date().toISOString() })
-        .eq('id', setting.id);
-      if (error) throw error;
-      toast.success(`Triagem ${newVal ? 'habilitada' : 'desabilitada'} para ${setting.profissional_nome}.`);
-      await loadSettings();
-    } catch {
-      toast.error('Erro ao atualizar.');
-    }
+  const write=async(prof:string,value:boolean,existing?:TriageSetting)=>{
+    if(lock.current||failed||loading||!window.confirm('Alterar a regra de triagem deste profissional?'))return;
+    lock.current=true;setSaving(true);
+    try{
+      await confirmSession();
+      const {data:current,error:readError}=await supabase.from('triage_settings').select('id,enabled').eq('profissional_id',prof).maybeSingle();
+      if(readError||current?.id!==existing?.id||(current&&!!current.enabled!==existing?.enabled))throw Error('Regra alterada ou ambígua. Recarregue antes de repetir.');
+      const payload={enabled:value,updated_at:new Date().toISOString()};
+      const result=current?await (current.enabled===null?supabase.from('triage_settings').update(payload).eq('id',current.id).is('enabled',null):supabase.from('triage_settings').update(payload).eq('id',current.id).eq('enabled',current.enabled)).eq('profissional_id',prof).select('id,enabled').maybeSingle():await supabase.from('triage_settings').insert({...payload,profissional_id:prof,unidade_id:null}).select('id,enabled').single();
+      if(result.error||!result.data||result.data.enabled!==value)throw Error('Gravação não confirmada.');
+      toast.success('Regra de triagem confirmada.');setSelectedProf('');setNewEnabled(true);await loadSettings();
+    }catch(error){setFailed(true);toast.error(error instanceof Error?error.message:'Gravação não confirmada.');}
+    finally{lock.current=false;setSaving(false);}
   };
+  const handleSave=()=>{if(selectedProf)void write(selectedProf,newEnabled,settings.find(s=>s.profissional_id===selectedProf));};
+  const toggleSetting=(setting:TriageSetting)=>void write(setting.profissional_id,!setting.enabled,setting);
 
   return (
     <Card className="shadow-card border-0">
@@ -127,6 +105,8 @@ const ConfiguracaoTriagem: React.FC = () => {
           </div>
         </div>
 
+        {failed&&<div role="alert" className="mb-3 text-sm text-destructive">Consulta ou gravação não confirmada. <Button variant="outline" size="sm" onClick={()=>void loadSettings()}>Recarregar</Button></div>}
+        <fieldset disabled={saving||failed||loading} className="min-w-0">
         <div className="flex flex-wrap items-end gap-3 mb-5 p-4 bg-muted/50 rounded-lg">
           <div className="flex-1 min-w-[200px]">
             <Label className="text-xs">Profissional</Label>
@@ -148,7 +128,7 @@ const ConfiguracaoTriagem: React.FC = () => {
             <Switch checked={newEnabled} onCheckedChange={setNewEnabled} />
             <span className="text-xs text-muted-foreground">{newEnabled ? 'Habilitada' : 'Desabilitada'}</span>
           </div>
-          <Button onClick={handleSave} disabled={saving || !selectedProf} className="gradient-primary text-primary-foreground h-9">
+          <Button onClick={handleSave} disabled={saving || failed || loading || !selectedProf} className="gradient-primary text-primary-foreground h-9">
             {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
             Salvar
           </Button>
@@ -156,7 +136,7 @@ const ConfiguracaoTriagem: React.FC = () => {
 
         {loading ? (
           <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-        ) : settings.length === 0 ? (
+        ) : failed ? <p className="text-sm text-muted-foreground">Dados não confirmados.</p> : settings.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">
             Nenhuma configuração individual salva. Todos os profissionais seguem a regra geral acima.
           </p>
@@ -197,6 +177,7 @@ const ConfiguracaoTriagem: React.FC = () => {
             </div>
           </>
         )}
+      </fieldset>
       </CardContent>
     </Card>
   );
