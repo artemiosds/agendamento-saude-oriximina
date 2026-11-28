@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,10 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import {safeIntegrationUrl} from '@/lib/adminIntegrations';
+import {nextVersion} from '@/lib/adminWhatsApp';
+import {readCompleteCatalog} from '@/lib/adminCatalog';
+import type {TablesInsert,TablesUpdate} from '@/integrations/supabase/types';
 
 interface Sistema {
   id: string;
@@ -31,6 +35,7 @@ interface Sistema {
   ultimo_teste_em: string | null;
   ultimo_teste_status: string;
   created_at: string;
+  updated_at: string;
 }
 
 const empty: Partial<Sistema> = {
@@ -42,6 +47,10 @@ const ConfigSistemasIntegrados: React.FC = () => {
   const { user } = useAuth();
   const [sistemas, setSistemas] = useState<Sistema[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed,setFailed]=useState(false);
+  const lock=useRef(false);
+  const [busy,setBusy]=useState(false);
+  const confirmSession=async()=>{const {data,error}=await supabase.auth.getSession();if(error||!user?.authUserId||user.role!=='master'||user.ativo!==true||data.session?.user.id!==user.authUserId)throw Error('Sessão não confirmada.');return data.session.access_token;};
   const [editing, setEditing] = useState<Partial<Sistema> | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
@@ -52,136 +61,74 @@ const ConfigSistemasIntegrados: React.FC = () => {
   const isGlobal = user?.usuario === 'admin.sms';
   const userUnidade = user?.unidadeId || '';
 
-  const carregar = useCallback(async () => {
-    setLoading(true);
-    let q = supabase.from('sistemas_integrados').select('*').order('nome');
-    if (!isGlobal && userUnidade) q = q.eq('unidade_id', userUnidade);
-    const { data, error } = await q;
-    if (error) toast.error('Erro ao carregar sistemas: ' + error.message);
-    setSistemas((data || []) as Sistema[]);
-    setLoading(false);
-  }, [isGlobal, userUnidade]);
-
-  useEffect(() => { carregar(); }, [carregar]);
-
-  const salvar = async () => {
-    if (!editing) return;
-    if (!editing.nome || !editing.identificador) {
-      toast.error('Nome e Identificador são obrigatórios.');
-      return;
-    }
+  const carregar=useCallback(async()=>{
+    setLoading(true);setFailed(false);
+    try{
+      if(!isMaster||(!isGlobal&&!userUnidade))throw Error('Escopo não confirmado.');
+      const rows=await readCompleteCatalog(async(from,to)=>{
+        let q=supabase.from('sistemas_integrados').select('*',{count:'exact'}).order('id').range(from,to);
+        if(!isGlobal)q=q.eq('unidade_id',userUnidade);
+        const {data,error,count}=await q;if(error||!data)throw Error('Consulta não confirmada.');return {rows:data,count};
+      });
+      setSistemas(rows.sort((a,b)=>a.nome.localeCompare(b.nome)));
+    }catch{setFailed(true);toast.error('Sistemas integrados não confirmados.');}
+    finally{setLoading(false);}
+  },[isMaster,isGlobal,userUnidade]);
+  useEffect(()=>{void carregar();},[carregar]);
+  const run=async(fn:()=>Promise<void>)=>{
+    if(lock.current||loading||failed)return;lock.current=true;setBusy(true);
+    try{await confirmSession();await fn();}
+    catch{setFailed(true);toast.error('Operação não confirmada. Atualize os sistemas antes de repetir.');}
+    finally{lock.current=false;setBusy(false);}
+  };
+  const current=async(id:string)=>{
+    const old=sistemas.find(s=>s.id===id);
+    if(!old||(!isGlobal&&old.unidade_id!==userUnidade))throw Error('Escopo não confirmado.');
+    const {data,error}=await supabase.from('sistemas_integrados').select('id,updated_at,unidade_id').eq('id',id).maybeSingle();
+    if(error||!data||data.updated_at!==old.updated_at||data.unidade_id!==old.unidade_id)throw Error('Sistema alterado.');
+    return old;
+  };
+  const salvar=()=>run(async()=>{
+    if(!editing?.nome?.trim()||!editing.identificador?.trim()){toast.error('Nome e identificador obrigatórios.');return;}
+    if(editing.url_base&&!safeIntegrationUrl(editing.url_base)){toast.error('Confira a URL HTTP/HTTPS sem credenciais embutidas.');return;}
+    if(!isGlobal&&!userUnidade)return;
+    const old=editing.id?await current(editing.id):null;
+    if(old&&editing.updated_at!==old.updated_at)throw Error('Rascunho desatualizado.');
+    if(!window.confirm('Salvar esta configuração de integração?'))return;
     setSaving(true);
-    const payload: any = {
-      nome: editing.nome,
-      identificador: editing.identificador.trim().toLowerCase().replace(/\s+/g, '-'),
-      url_base: editing.url_base || '',
-      token_saida: editing.token_saida || '',
-      ativo: editing.ativo ?? true,
-      pode_enviar: editing.pode_enviar ?? true,
-      pode_receber: editing.pode_receber ?? true,
-      unidade_id: editing.unidade_id ?? userUnidade,
-      criado_por: user?.usuario || '',
-    };
-    
-    let result;
-    if (editing.id) {
-      result = await supabase.from('sistemas_integrados').update(payload).eq('id', editing.id).select().single();
-    } else {
-      result = await supabase.from('sistemas_integrados').insert(payload).select().single();
-    }
-    
-    setSaving(false);
-    if (result.error) { 
-      toast.error('Erro ao salvar: ' + result.error.message); 
-      return; 
-    }
-    
-    toast.success('Sistema salvo.');
-    // Atualiza o estado de edição com os dados salvos (incluindo o ID novo se for o caso)
-    setEditing(result.data);
-    carregar();
+    try{
+      const payload:TablesInsert<'sistemas_integrados'>={nome:editing.nome.trim(),identificador:editing.identificador.trim().toLowerCase().replace(/\s+/g,'-'),url_base:editing.url_base||'',token_saida:editing.token_saida||old?.token_saida||'',ativo:editing.ativo??true,pode_enviar:editing.pode_enviar??true,pode_receber:editing.pode_receber??true,unidade_id:editing.unidade_id??userUnidade};
+      if(!isGlobal&&payload.unidade_id!==userUnidade)throw Error('Unidade inválida.');
+      const result=old?await supabase.from('sistemas_integrados').update({...payload,updated_at:nextVersion(old.updated_at)} as TablesUpdate<'sistemas_integrados'>).eq('id',old.id).eq('unidade_id',old.unidade_id).eq('updated_at',old.updated_at).select('*').maybeSingle():await supabase.from('sistemas_integrados').insert({...payload,criado_por:user?.usuario||''}).select('*').single();
+      if(result.error||!result.data)throw Error('Gravação não confirmada.');
+      setEditing({...result.data,token_saida:''});toast.success('Sistema salvo.');await carregar();
+    }finally{setSaving(false);}
+  });
+  const excluir=(id:string)=>run(async()=>{
+    const old=await current(id);
+    if(!window.confirm('Excluir este sistema integrado? A conexão deixará de funcionar.'))return;
+    const {data,error}=await supabase.from('sistemas_integrados').delete().eq('id',id).eq('unidade_id',old.unidade_id).eq('updated_at',old.updated_at).select('id').maybeSingle();
+    if(error||data?.id!==id)throw Error('Exclusão não confirmada.');toast.success('Remoção confirmada.');await carregar();
+  });
+  const callAdmin=async(action:string,body:Record<string,unknown>)=>{
+    const jwt=await confirmSession();
+    const resp=await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/integracao-admin?action=${action}`,{method:'POST',headers:{Authorization:`Bearer ${jwt}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const result=await resp.json();if(!resp.ok||result?.ok!==true)throw Error('Resposta não confirmada.');return result;
   };
-
-  const excluir = async (id: string) => {
-    if (!confirm('Excluir este sistema integrado? Esta ação não pode ser desfeita.')) return;
-    const { error } = await supabase.from('sistemas_integrados').delete().eq('id', id);
-    if (error) { toast.error(error.message); return; }
-    toast.success('Removido.');
-    carregar();
-  };
-
-  const gerarToken = async (sistemaId: string) => {
-    setGenerating(sistemaId);
-    const { data, error } = await supabase.functions.invoke('integracao-admin', {
-      body: { sistema_id: sistemaId },
-      headers: {},
-      // action via query string não é suportado por invoke -> usamos fetch direto:
-    });
-    setGenerating(null);
-    // fallback usando fetch direto pois precisamos de ?action=gerar-token
-    if (!data || error) {
-      // try direct fetch
-    }
-    if (data?.ok) {
-      setGeneratedToken({ id: sistemaId, token: data.token });
-      carregar();
-    } else if (error) {
-      toast.error('Erro: ' + (error.message || 'falha'));
-    }
-  };
-
-  // Direct fetch helper (para edge functions com ?action=...)
-  const callAdmin = async (action: string, body: Record<string, unknown>) => {
-    const { data: sess } = await supabase.auth.getSession();
-    const jwt = sess.session?.access_token;
-    if (!jwt) { toast.error('Sessão expirada.'); return null; }
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/integracao-admin?action=${action}`;
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${jwt}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-    try { return await resp.json(); } catch { return null; }
-  };
-
-  const gerarTokenV2 = async (sistemaId: string) => {
-    setGenerating(sistemaId);
-    const r = await callAdmin('gerar-token', { sistema_id: sistemaId });
-    setGenerating(null);
-    if (r?.ok) {
-      setGeneratedToken({ id: sistemaId, token: r.token });
-      
-      // Atualiza o prefixo no estado local de edição se for o mesmo sistema
-      if (editing?.id === sistemaId) {
-        setEditing(prev => prev ? { ...prev, token_entrada_prefix: r.prefix } : null);
-      }
-      
-      carregar();
-      toast.success('Token gerado.');
-    } else {
-      toast.error('Erro ao gerar token: ' + (r?.error || 'desconhecido'));
-    }
-  };
-
-  const testar = async (sistemaId: string) => {
-    setTesting(sistemaId);
-    const r = await callAdmin('testar', { sistema_id: sistemaId });
-    setTesting(null);
-    if (r?.ok) {
-      toast.success(r.message || 'Conectado!');
-    } else {
-      toast.error(r?.message || r?.error || 'Falha na conexão.');
-    }
-    carregar();
-  };
-
-  const copy = (s: string) => {
-    navigator.clipboard.writeText(s);
-    toast.success('Copiado.');
-  };
+  const gerarTokenV2=(id:string)=>run(async()=>{
+    await current(id);
+    if(!window.confirm('Gerar novo token de entrada? O token anterior poderá deixar de funcionar.'))return;
+    setGenerating(id);
+    try{const r=await callAdmin('gerar-token',{sistema_id:id});if(typeof r.token!=='string'||!r.token||typeof r.prefix!=='string')throw Error('Token não confirmado.');
+      setGeneratedToken({id,token:r.token});setEditing(null);toast.success('Token gerado.');await carregar();}
+    finally{setGenerating(null);}
+  });
+  const testar=(id:string)=>run(async()=>{
+    await current(id);if(!window.confirm('Executar teste real da integração salva?'))return;setTesting(id);
+    try{await callAdmin('testar',{sistema_id:id});toast.success('Teste confirmado pelo serviço.');await carregar();}
+    finally{setTesting(null);}
+  });
+  const copy=async(s:string)=>{try{await navigator.clipboard.writeText(s);toast.success('Copiado.');}catch{toast.error('Não foi possível copiar.');}};
 
   if (!isMaster) {
     return (
@@ -224,7 +171,7 @@ const ConfigSistemasIntegrados: React.FC = () => {
               Conecte este sistema a outros sistemas (CER II, CAPS II, etc.) para enviar e receber encaminhamentos com segurança.
             </p>
           </div>
-          <Button onClick={() => setEditing({ ...empty, unidade_id: userUnidade })} size="sm">
+          <Button disabled={busy||failed||loading} onClick={() => setEditing({ ...empty, unidade_id: userUnidade })} size="sm">
             <Plus className="w-4 h-4 mr-1" /> Novo Sistema
           </Button>
         </CardHeader>
@@ -233,7 +180,7 @@ const ConfigSistemasIntegrados: React.FC = () => {
             <div className="flex items-center justify-center py-8 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin mr-2" /> Carregando...
             </div>
-          ) : sistemas.length === 0 ? (
+          ) : failed ? <div role="alert" className="p-4 space-y-2"><p>Consulta ou operação não confirmada.</p><Button onClick={()=>void carregar()}>Atualizar sistemas</Button></div> : sistemas.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
               Nenhum sistema integrado cadastrado.
             </div>
@@ -275,22 +222,22 @@ const ConfigSistemasIntegrados: React.FC = () => {
                       ) : <span className="text-muted-foreground">nunca</span>}
                     </TableCell>
                     <TableCell className="text-right space-x-1">
-                      <Button size="sm" variant="outline" onClick={() => testar(s.id)} disabled={testing === s.id}>
+                      <Button size="sm" variant="outline" onClick={() => testar(s.id)} disabled={busy||failed}>
                         {testing === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
                       </Button>
                       <Button 
                         size="sm" 
                         variant="outline" 
                         onClick={() => gerarTokenV2(s.id)} 
-                        disabled={generating === s.id}
+                        disabled={busy||failed}
                         title={s.token_entrada_prefix ? "Regenerar Token de Entrada" : "Gerar Token de Entrada"}
                       >
                         {generating === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => setEditing(s)}>
+                      <Button size="sm" variant="outline" disabled={busy||failed} onClick={() => setEditing({...s,token_saida:''})}>
                         <Edit className="w-4 h-4" />
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => excluir(s.id)}>
+                      <Button size="sm" variant="outline" disabled={busy||failed} onClick={() => excluir(s.id)}>
                         <Trash2 className="w-4 h-4 text-red-600" />
                       </Button>
                     </TableCell>
@@ -303,7 +250,7 @@ const ConfigSistemasIntegrados: React.FC = () => {
       </Card>
 
       {/* Dialog de edição */}
-      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+      <Dialog open={!!editing} onOpenChange={o=>{if(!o&&!lock.current)setEditing(null);}}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editing?.id ? 'Editar Sistema Integrado' : 'Novo Sistema Integrado'}</DialogTitle>
@@ -359,6 +306,7 @@ const ConfigSistemasIntegrados: React.FC = () => {
                 </Label>
                 <Input
                   type="password"
+                  placeholder={editing.id?'Em branco mantém o token salvo':'Informe o token'}
                   value={editing.token_saida || ''}
                   onChange={(e) => setEditing({ ...editing, token_saida: e.target.value })}
                   placeholder="Cole aqui o Token de ENTRADA do sistema externo"
@@ -384,7 +332,7 @@ const ConfigSistemasIntegrados: React.FC = () => {
                     <Button
                       type="button" size="sm" variant="outline"
                       onClick={() => gerarTokenV2(editing.id!)}
-                      disabled={generating === editing.id}
+                      disabled={busy||failed}
                       className="whitespace-nowrap bg-white hover:bg-emerald-50"
                     >
                       {generating === editing.id
@@ -424,8 +372,8 @@ const ConfigSistemasIntegrados: React.FC = () => {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>Cancelar</Button>
-            <Button onClick={salvar} disabled={saving}>
+            <Button variant="outline" disabled={busy} onClick={() => setEditing(null)}>Cancelar</Button>
+            <Button onClick={salvar} disabled={busy||failed||saving}>
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-1" />} Salvar
             </Button>
           </DialogFooter>

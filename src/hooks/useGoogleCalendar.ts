@@ -4,18 +4,17 @@ import { supabase } from '@/integrations/supabase/client';
 export function useGoogleCalendar() {
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [statusConfirmed,setStatusConfirmed]=useState(false);
 
   const checkStatus = useCallback(async () => {
     try {
       const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
         body: { action: 'check_status' },
       });
-      if (!error && data) {
-        setConnected(data.connected);
-      }
-      return data?.connected ?? false;
+      if(error||typeof data?.connected!=='boolean'){setStatusConfirmed(false);return null;}
+      setConnected(data.connected);setStatusConfirmed(true);return data.connected;
     } catch {
-      return false;
+      setStatusConfirmed(false);return null;
     }
   }, []);
 
@@ -46,10 +45,8 @@ export function useGoogleCalendar() {
         body: { action: 'exchange_code', code, redirect_uri: redirectUri },
       });
       if (error) throw error;
-      if (data?.connected) {
-        setConnected(true);
-      }
-      return data;
+      if(data?.success!==true||data.connected!==true)throw Error('Conexão não confirmada.');
+      setConnected(true);setStatusConfirmed(true);return data;
     } finally {
       setLoading(false);
     }
@@ -58,10 +55,11 @@ export function useGoogleCalendar() {
   const disconnect = useCallback(async () => {
     setLoading(true);
     try {
-      await supabase.functions.invoke('google-calendar-auth', {
+      const {data,error}=await supabase.functions.invoke('google-calendar-auth', {
         body: { action: 'disconnect' },
       });
-      setConnected(false);
+      if(error||data?.success!==true||data.connected!==false)throw Error('Desconexão não confirmada.');
+      setConnected(false);setStatusConfirmed(true);
     } finally {
       setLoading(false);
     }
@@ -108,6 +106,7 @@ export function useGoogleCalendar() {
   return {
     loading,
     connected,
+    statusConfirmed,
     checkStatus,
     connect,
     exchangeCode,

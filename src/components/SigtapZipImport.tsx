@@ -343,6 +343,12 @@ const SigtapZipImport: React.FC = () => {
     // ============= Save to database (upsert in batches) =============
     if(!validCompetencia(competencia)||!procedures.length)throw Error('Competência ou catálogo não confirmado.');
     if(!window.confirm(`Importar competência ${competencia}: ${procedures.length} procedimentos e ${cidLinks.length} vínculos CID? A importação ocorre por lotes e pode ficar parcial em caso de falha.`))throw Error('Importação cancelada antes da gravação.');
+    // Do not overwrite custom procedures whose identifiers happen to match official codes.
+    for(let i=0;i<procedures.length;i+=200){
+      const {data,error}=await supabase.from('sigtap_procedimentos').select('codigo').in('codigo',procedures.slice(i,i+200).map(p=>p.codigo)).eq('origem','PERSONALIZADO');
+      if(error||!data)throw Error('Colisões com procedimentos personalizados não confirmadas.');
+      if(data.length)throw Error('Há códigos personalizados em conflito. Nenhum lote foi iniciado.');
+    }
     writesStarted.current=true;
     setStep('saving');
     addLog('info', 'Salvando no banco de dados...');

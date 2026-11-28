@@ -1,0 +1,7 @@
+# Configurações — Fase 10: SIGTAP e sistemas integrados
+Risco alto. Nenhuma importação, atualização de catálogo, vinculação, teste externo, exclusão, troca de token ou alteração de banco executada durante implantação.
+- Consultas administrativas paginadas com contagem; falha distinta de vazio. Vínculos e códigos confirmados; disponibilidade global/unidade usa gravador protegido.
+- Importação exige competência explícita, confirmação de lotes e histórico. Colisão com código personalizado impede início. Importação segue incremental, não transacional; não altera parser, fontes nem regras de classificação. Não constitui atualização integral de tabelas oficiais ou validação de CBO/CNES/BPA.
+- Sistemas integrados: versão, escopo, confirmação de operações, token de saída mascarado em edição; em branco preserva token salvo. Testes e rotação explícitos. Sem mudança nos endpoints.
+- Google Agenda: distingue falha de consulta de desconexão; confirmação de troca e desconexão. Webhook, Gmail, canal e templates com gravação confirmada, rascunhos locais e testes separados. Salvar Gmail não troca automaticamente canal; usuário escolhe canal no seletor existente. Nenhum conteúdo de templates alterado.
+- Limites: checagem de colisão e operações em múltiplos lotes não são atômicas; credenciais continuam armazenadas no modelo legado; proteção OAuth no servidor e validação de URLs no backend não alteradas. CRUD de procedimentos personalizados requer auditoria adicional; não modifica serviço de produção. Homologação autenticada pendente.
