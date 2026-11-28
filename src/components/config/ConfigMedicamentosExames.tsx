@@ -1,4 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import type { Tables } from '@/integrations/supabase/types';
+import { configObject } from '@/lib/configSectionGuard';
+import { readCompleteCatalog, missingCatalogSeeds, catalogEdit, matchesCatalogSearch } from '@/lib/adminCatalog';
 import { supabase } from '@/integrations/supabase/client';
 import { useConfiguracao } from '@/hooks/useConfiguracao';
 import { Card, CardContent } from '@/components/ui/card';
@@ -16,34 +20,11 @@ import { Search, Plus, Pencil, Trash2, Loader2, Pill, FlaskConical, Eye, Downloa
 import { toast } from 'sonner';
 import { RENAME_MEDICAMENTOS, REME_MEDICAMENTOS, type MedicamentoSeed, type TipoMedicamento, type OrigemMedicamento } from '@/data/medicamentosRename';
 
-interface Medication {
-  id: string;
-  nome: string;
-  nome_comercial: string;
-  principio_ativo: string;
-  classe_terapeutica: string;
-  apresentacao: string;
-  dosagem_padrao: string;
-  via_padrao: string;
-  forma_farmaceutica: string;
-  concentracao: string;
-  codigo_rename: string | null;
-  tipo: TipoMedicamento;
-  origem: OrigemMedicamento;
-  estoque_quantidade: number;
-  estoque_minimo: number;
-  estoque_unidade: string;
-  estoque_localizacao: string;
-  estoque_controlado: boolean;
-  is_global: boolean;
-  profissional_id: string | null;
-  ativo: boolean;
-}
-
-interface ExamType {
-  id: string; nome: string; codigo_sus: string; categoria: string;
-  is_global: boolean; profissional_id: string | null; ativo: boolean;
-}
+type Medication = Tables<'medications'>;
+type ExamType = Tables<'exam_types'>;
+const MED_EDIT_KEYS = ['nome','nome_comercial','principio_ativo','classe_terapeutica','apresentacao','dosagem_padrao','via_padrao','forma_farmaceutica','concentracao','tipo','is_global','estoque_controlado','estoque_quantidade','estoque_minimo','estoque_unidade','estoque_localizacao'] as const;
+const EXAM_EDIT_KEYS = ['nome','codigo_sus','categoria','is_global'] as const;
+const compareText = (a: string, b: string) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' });
 
 const PROFISSOES_PRESCRICAO = [
   { key: 'medicina', label: 'Médico / Médica' },
@@ -73,9 +54,20 @@ function stockBadge(m: Medication) {
 }
 
 const ConfigMedicamentosExames: React.FC = () => {
+  const { user } = useAuth();
+  const identity = user?.role === 'master' && user.ativo === true ? user.authUserId : undefined;
   const [meds, setMeds] = useState<Medication[]>([]);
   const [exams, setExams] = useState<ExamType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [catalogReady, setCatalogReady] = useState(false);
+  const [catalogError, setCatalogError] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
+  const loadSequence = useRef(0);
+  const [importReport, setImportReport] = useState('');
+  const prescricaoBaseline = useRef<{identity: string; raw: unknown} | null>(null);
+  const [prescricaoError, setPrescricaoError] = useState(false);
+  const [examStatus, setExamStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [search, setSearch] = useState('');
   const [examSearch, setExamSearch] = useState('');
   const [classFilter, setClassFilter] = useState<string>('all');
@@ -98,40 +90,72 @@ const ConfigMedicamentosExames: React.FC = () => {
   const [prescricaoReady,setPrescricaoReady]=useState(false);
   const [prescricaoSaving,setPrescricaoSaving]=useState(false);
 
-  const loadData = useCallback(async () => {
-    const [medsRes, examsRes, cfgRes] = await Promise.all([
-      supabase.from('medications').select('*').order('classe_terapeutica').order('nome'),
-      supabase.from('exam_types').select('*').order('categoria').order('nome'),
-      supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle(),
-    ]);
-    if (medsRes.data) setMeds(medsRes.data as any);
-    if (examsRes.data) setExams(examsRes.data as any);
-    const cfg = cfgRes.data?.configuracoes as any;
-    setPrescricaoReady(!cfgRes.error&&!!cfgRes.data);
-    if(!cfgRes.error&&cfgRes.data){if (cfg?.[CONFIG_KEY]) setPrescricaoConfig(cfg[CONFIG_KEY]);
-    else setPrescricaoConfig({ medicina: true, odontologia: true });}
-    setLoading(false);
-  }, []);
+  const confirmSession = useCallback(async () => {
+    const { data, error } = await supabase.auth.getSession();
+    if (!identity || error || data.session?.user.id !== identity) throw Error('Sessão administrativa não confirmada.');
+  }, [identity]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  const readMeds = () => readCompleteCatalog<Medication>(async (from, to) => {
+    const { data, error } = await supabase.from('medications').select('*').order('id').range(from,to);
+    if (error || !data) throw Error('Não foi possível consultar os medicamentos.');
+    return data;
+  });
+  const readExams = () => readCompleteCatalog<ExamType>(async (from, to) => {
+    const { data, error } = await supabase.from('exam_types').select('*').order('id').range(from,to);
+    if (error || !data) throw Error('Não foi possível consultar os exames.');
+    return data;
+  });
+
+  const loadData = useCallback(async () => {
+    const sequence = ++loadSequence.current;
+    setLoading(true); setCatalogReady(false); setCatalogError(false);
+    setPrescricaoReady(false); setPrescricaoError(false); prescricaoBaseline.current = null;
+    try {
+      await confirmSession();
+      const [medsRes, examsRes, cfgRes] = await Promise.allSettled([
+        readMeds(), readExams(),
+        supabase.from('system_config').select('configuracoes').eq('id','default').maybeSingle(),
+      ]);
+      await confirmSession();
+      if (sequence !== loadSequence.current) return;
+      if (medsRes.status === 'fulfilled' && examsRes.status === 'fulfilled') {
+        setMeds(medsRes.value.sort((a,b)=>compareText(a.classe_terapeutica,b.classe_terapeutica)||compareText(a.nome,b.nome)||a.id.localeCompare(b.id)));
+        setExams(examsRes.value.sort((a,b)=>compareText(a.categoria,b.categoria)||compareText(a.nome,b.nome)||a.id.localeCompare(b.id)));
+        setCatalogReady(true);
+      } else setCatalogError(true);
+      try {
+        if (cfgRes.status !== 'fulfilled' || cfgRes.value.error || !cfgRes.value.data || !identity) throw Error('Leitura não confirmada.');
+        const raw = configObject(cfgRes.value.data.configuracoes)[CONFIG_KEY];
+        const cfg = raw === undefined ? { medicina: true, odontologia: true } : configObject(raw);
+        if (!Object.values(cfg).every(v=>typeof v === 'boolean')) throw Error('Permissões inválidas.');
+        setPrescricaoConfig(cfg as Record<string,boolean>);
+        prescricaoBaseline.current = { identity, raw };
+        setPrescricaoReady(true);
+      } catch { setPrescricaoError(true); }
+    } catch {
+      if (sequence === loadSequence.current) { setCatalogError(true); setPrescricaoError(true); }
+    } finally {
+      if (sequence === loadSequence.current) setLoading(false);
+    }
+  }, [confirmSession, identity]);
+
+  useEffect(() => { void loadData(); return () => { loadSequence.current++; }; }, [loadData]);
+
+  const runMutation = async (work: () => Promise<void>, requiresCatalog = true) => {
+    if (lock.current || (requiresCatalog && !catalogReady)) return;
+    lock.current = true; setBusy(true);
+    try { await confirmSession(); await work(); }
+    catch (error) { toast.error(error instanceof Error ? error.message : 'Operação não confirmada.'); }
+    finally { lock.current = false; setBusy(false); }
+  };
 
   const filteredMeds = useMemo(() => {
-    const s = search.trim().toLowerCase();
     return meds.filter(m => {
       if (!m.ativo) return false;
       if (classFilter !== 'all' && (m.classe_terapeutica || 'Sem classificação') !== classFilter) return false;
       if (tipoFilter !== 'all' && m.tipo !== tipoFilter) return false;
       if (origemFilter !== 'all' && m.origem !== origemFilter) return false;
-      if (!s) return true;
-      return (
-        m.nome.toLowerCase().includes(s) ||
-        (m.nome_comercial || '').toLowerCase().includes(s) ||
-        (m.principio_ativo || '').toLowerCase().includes(s) ||
-        (m.classe_terapeutica || '').toLowerCase().includes(s) ||
-        (m.codigo_rename || '').toLowerCase().includes(s) ||
-        (m.forma_farmaceutica || '').toLowerCase().includes(s) ||
-        (m.tipo || '').toLowerCase().includes(s)
-      );
+      return matchesCatalogSearch(search, [m.nome,m.nome_comercial,m.principio_ativo,m.classe_terapeutica,m.codigo_rename,m.forma_farmaceutica,m.tipo,m.concentracao]);
     });
   }, [meds, search, classFilter, tipoFilter, origemFilter]);
 
@@ -145,10 +169,8 @@ const ConfigMedicamentosExames: React.FC = () => {
   }, [meds]);
 
   const filteredExams = useMemo(() => {
-    if (!examSearch) return exams;
-    const s = examSearch.toLowerCase();
-    return exams.filter(e => e.nome.toLowerCase().includes(s) || e.codigo_sus.includes(s) || e.categoria.toLowerCase().includes(s));
-  }, [exams, examSearch]);
+    return exams.filter(e => (examStatus === 'all' || e.ativo === (examStatus === 'active')) && matchesCatalogSearch(examSearch, [e.nome,e.codigo_sus,e.categoria]));
+  }, [exams, examSearch, examStatus]);
 
   const medsByClass = useMemo(() => {
     const map = new Map<string, Medication[]>();
@@ -170,167 +192,149 @@ const ConfigMedicamentosExames: React.FC = () => {
     return map;
   }, [filteredExams]);
 
-  const toggleMedAtivo = async (id: string) => {
+  const changeMed = async (med: Medication, patch: Partial<Medication>, expected: Partial<Medication>, message: string) => {
+    const { data, error } = await supabase.from('medications').update(patch).eq('id',med.id).match(expected).select('*').maybeSingle();
+    if (error || !data) throw Error('Alteração não confirmada. Recarregue o catálogo e confira o registro.');
+    await confirmSession();
+    setMeds(prev => prev.map(m => m.id === data.id ? data : m));
+    toast.success(message);
+  };
+  const changeExam = async (exam: ExamType, patch: Partial<ExamType>, expected: Partial<ExamType>, message: string) => {
+    const { data, error } = await supabase.from('exam_types').update(patch).eq('id',exam.id).match(expected).select('*').maybeSingle();
+    if (error || !data) throw Error('Alteração não confirmada. Recarregue o catálogo e confira o registro.');
+    await confirmSession();
+    setExams(prev => prev.map(e => e.id === data.id ? data : e));
+    toast.success(message);
+  };
+  const toggleMedAtivo = (id: string) => runMutation(async () => {
     const med = meds.find(m => m.id === id);
-    if (!med) return;
-    const { error } = await supabase.from('medications').update({ ativo: !med.ativo }).eq('id', id);
-    if (error) { toast.error('Erro ao atualizar'); return; }
-    setMeds(prev => prev.map(m => m.id === id ? { ...m, ativo: !m.ativo } : m));
-    toast.success(med.ativo ? 'Desabilitado' : 'Habilitado');
-  };
-
-  const toggleExamAtivo = async (id: string) => {
+    if (med) await changeMed(med,{ativo:!med.ativo},{ativo:med.ativo},med.ativo?'Desabilitado':'Habilitado');
+  });
+  const toggleExamAtivo = (id: string) => runMutation(async () => {
     const exam = exams.find(e => e.id === id);
-    if (!exam) return;
-    const { error } = await supabase.from('exam_types').update({ ativo: !exam.ativo }).eq('id', id);
-    if (error) { toast.error('Erro ao atualizar'); return; }
-    setExams(prev => prev.map(e => e.id === id ? { ...e, ativo: !e.ativo } : e));
-    toast.success(exam.ativo ? 'Desabilitado' : 'Habilitado');
-  };
-
-  const saveEditMed = async () => {
+    if (exam) await changeExam(exam,{ativo:!exam.ativo},{ativo:exam.ativo},exam.ativo?'Desabilitado':'Habilitado');
+  });
+  const saveEditMed = () => runMutation(async () => {
     if (!editMed) return;
-    const { error } = await supabase.from('medications').update({
-      nome: editMed.nome, nome_comercial: editMed.nome_comercial,
-      principio_ativo: editMed.principio_ativo, classe_terapeutica: editMed.classe_terapeutica,
-      apresentacao: editMed.apresentacao, dosagem_padrao: editMed.dosagem_padrao,
-      via_padrao: editMed.via_padrao, forma_farmaceutica: editMed.forma_farmaceutica,
-      concentracao: editMed.concentracao, tipo: editMed.tipo, is_global: editMed.is_global,
-      estoque_controlado: editMed.estoque_controlado,
-      estoque_quantidade: editMed.estoque_quantidade, estoque_minimo: editMed.estoque_minimo,
-      estoque_unidade: editMed.estoque_unidade, estoque_localizacao: editMed.estoque_localizacao,
-    } as any).eq('id', editMed.id);
-    if (error) { toast.error('Erro ao salvar'); return; }
-    setMeds(prev => prev.map(m => m.id === editMed.id ? editMed : m));
+    const original = meds.find(m=>m.id===editMed.id);
+    if (!original) throw Error('Registro não encontrado. Recarregue o catálogo.');
+    const draft = {...editMed,nome:editMed.nome.trim()};
+    if (!draft.nome) throw Error('Informe o nome do medicamento.');
+    const {patch,expected} = catalogEdit(original,draft,MED_EDIT_KEYS);
+    for (const value of [patch.estoque_quantidade,patch.estoque_minimo]) {
+      if (value !== undefined && (!Number.isInteger(value)||value<0)) throw Error('Informe uma quantidade de estoque inteira e não negativa.');
+    }
+    if (Object.keys(patch).length) await changeMed(original,patch,expected,'Medicamento atualizado');
     setEditMed(null);
-    toast.success('Medicamento atualizado');
-  };
-
-  const saveEditExam = async () => {
+  });
+  const saveEditExam = () => runMutation(async () => {
     if (!editExam) return;
-    const { error } = await supabase.from('exam_types').update({
-      nome: editExam.nome, codigo_sus: editExam.codigo_sus,
-      categoria: editExam.categoria, is_global: editExam.is_global,
-    }).eq('id', editExam.id);
-    if (error) { toast.error('Erro ao salvar'); return; }
-    setExams(prev => prev.map(e => e.id === editExam.id ? editExam : e));
+    const original = exams.find(e=>e.id===editExam.id);
+    if (!original) throw Error('Registro não encontrado. Recarregue o catálogo.');
+    const draft = {...editExam,nome:editExam.nome.trim()};
+    if (!draft.nome) throw Error('Informe o nome do exame.');
+    const {patch,expected} = catalogEdit(original,draft,EXAM_EDIT_KEYS);
+    if (Object.keys(patch).length) await changeExam(original,patch,expected,'Exame atualizado');
     setEditExam(null);
-    toast.success('Exame atualizado');
-  };
-
-  const addNewMed = async () => {
+  });
+  const addNewMed = () => runMutation(async () => {
     if (!newMed.nome?.trim()) return;
-    const payload: any = {
-      ...newMed,
-      nome: newMed.nome!.trim(),
-      apresentacao: newMed.apresentacao || `${newMed.forma_farmaceutica || ''} ${newMed.concentracao || ''}`.trim(),
-      dosagem_padrao: newMed.dosagem_padrao || newMed.concentracao || '',
-      is_global: true, ativo: true, origem: 'manual',
+    const payload = {
+      ...newMed, nome:newMed.nome.trim(),
+      apresentacao:newMed.apresentacao || `${newMed.forma_farmaceutica || ''} ${newMed.concentracao || ''}`.trim(),
+      dosagem_padrao:newMed.dosagem_padrao || newMed.concentracao || '',
+      is_global:true, ativo:true, origem:'manual',
     };
-    const { data, error } = await supabase.from('medications').insert(payload).select().single();
-    if (error) { toast.error('Erro ao criar: ' + error.message); return; }
-    if (data) setMeds(prev => [...prev, data as any]);
-    setAddMedDialog(false);
-    setNewMed({ nome: '', nome_comercial: '', principio_ativo: '', classe_terapeutica: '', apresentacao: '', dosagem_padrao: '', via_padrao: 'oral', forma_farmaceutica: '', concentracao: '', tipo: 'comum' });
+    const {data,error} = await supabase.from('medications').insert(payload).select('*').single();
+    if (error || !data) throw Error('Cadastro não confirmado. Confira o catálogo antes de repetir.');
+    await confirmSession();
+    setMeds(prev=>[...prev,data]); setAddMedDialog(false);
+    setNewMed({ nome:'',nome_comercial:'',principio_ativo:'',classe_terapeutica:'',apresentacao:'',dosagem_padrao:'',via_padrao:'oral',forma_farmaceutica:'',concentracao:'',tipo:'comum' });
     toast.success('Medicamento criado');
-  };
-
-  const addNewExam = async () => {
+  });
+  const addNewExam = () => runMutation(async () => {
     if (!newExam.nome.trim()) return;
-    const { data, error } = await supabase.from('exam_types').insert({ ...newExam, is_global: true, ativo: true }).select().single();
-    if (error) { toast.error('Erro ao criar'); return; }
-    if (data) setExams(prev => [...prev, data]);
-    setAddExamDialog(false);
-    setNewExam({ nome: '', codigo_sus: '', categoria: '' });
-    toast.success('Exame criado');
-  };
-
-  const handleDelete = async () => {
+    const {data,error} = await supabase.from('exam_types').insert({...newExam,nome:newExam.nome.trim(),is_global:true,ativo:true}).select('*').single();
+    if (error || !data) throw Error('Cadastro não confirmado. Confira o catálogo antes de repetir.');
+    await confirmSession();
+    setExams(prev=>[...prev,data]); setAddExamDialog(false);
+    setNewExam({nome:'',codigo_sus:'',categoria:''}); toast.success('Exame criado');
+  });
+  const handleDelete = () => runMutation(async () => {
     if (!deleteItem) return;
     if (deleteItem.type === 'med') {
-      const {data,error}=await supabase.from('medications').update({ ativo: false }).eq('id', deleteItem.id).select('id').maybeSingle();
-      if(error||!data){toast.error('Alteração não confirmada.');return;}
-      setMeds(prev => prev.map(m => m.id === deleteItem.id ? { ...m, ativo: false } : m));
+      const med = meds.find(m=>m.id===deleteItem.id);
+      if (!med) throw Error('Medicamento não encontrado.');
+      await changeMed(med,{ativo:false},{ativo:med.ativo},'Medicamento desativado');
     } else {
-      const {data,error}=await supabase.from('exam_types').update({ ativo: false }).eq('id', deleteItem.id).select('id').maybeSingle();
-      if(error||!data){toast.error('Alteração não confirmada.');return;}
-      setExams(prev => prev.map(e => e.id === deleteItem.id ? { ...e, ativo: false } : e));
+      const exam = exams.find(e=>e.id===deleteItem.id);
+      if (!exam) throw Error('Exame não encontrado.');
+      await changeExam(exam,{ativo:false},{ativo:exam.ativo},'Exame desativado');
     }
     setDeleteItem(null);
-    toast.success('Item desativado (movido para Inativos)');
-  };
-
-  const reactivateMed = async (id: string) => {
-    const {data,error}=await supabase.from('medications').update({ ativo: true }).eq('id', id).select('id').maybeSingle();
-      if(error||!data){toast.error('Alteração não confirmada.');return;}
-    setMeds(prev => prev.map(m => m.id === id ? { ...m, ativo: true } : m));
-    toast.success('Reativado');
-  };
-
-  const makeMedGlobal = async (id: string) => {
-    const {data,error}=await supabase.from('medications').update({ is_global: true }).eq('id', id).select('id').maybeSingle();
-      if(error||!data){toast.error('Alteração não confirmada.');return;}
-    setMeds(prev => prev.map(m => m.id === id ? { ...m, is_global: true } : m));
-    toast.success('Medicamento tornado global');
-  };
-
-  const savePrescricaoConfig=async(updated:Record<string,boolean>)=>{
-    if(!prescricaoReady||prescricaoSaving)return;
+  });
+  const reactivateMed = (id:string) => runMutation(async () => {
+    const med = meds.find(m=>m.id===id);
+    if (med) await changeMed(med,{ativo:true},{ativo:med.ativo},'Medicamento reativado');
+  });
+  const makeMedGlobal = (id:string) => runMutation(async () => {
+    const med = meds.find(m=>m.id===id);
+    if (med) await changeMed(med,{is_global:true},{is_global:med.is_global},'Medicamento tornado global');
+  });
+  const savePrescricaoConfig = (updated:Record<string,boolean>) => runMutation(async () => {
+    const baseline = prescricaoBaseline.current;
+    if (!prescricaoReady || !baseline || baseline.identity !== identity) return;
     setPrescricaoSaving(true);
-    try{if(await atualizarConfiguracao(CONFIG_KEY,updated,{auditAcao:'ALTERAR_CONFIG_PRESCRICAO'}))setPrescricaoConfig(updated);}
-    finally{setPrescricaoSaving(false);}
-  };
-
-  const importarSeed = async (lista: MedicamentoSeed[], origem: OrigemMedicamento) => {
-    setImporting(origem === 'rename' ? 'rename' : 'reme');
     try {
-      // Fetch existing codigo_rename to avoid duplicates
-      const { data: existing } = await supabase
-        .from('medications')
-        .select('codigo_rename')
-        .not('codigo_rename', 'is', null);
-      const existingCodes = new Set((existing || []).map((r: any) => r.codigo_rename).filter(Boolean));
-      const novos = lista.filter(item => !existingCodes.has(item.codigo_rename));
-      if (novos.length === 0) {
-        toast.info(`Nenhum item novo: a base ${origem.toUpperCase()} já está atualizada.`);
-        setImporting(null);
-        return;
+      const ok = await atualizarConfiguracao(CONFIG_KEY,updated,{auditAcao:'ALTERAR_CONFIG_PRESCRICAO',expectedSection:{key:CONFIG_KEY,value:baseline.raw}});
+      if (ok) { setPrescricaoConfig(updated); prescricaoBaseline.current = {identity:baseline.identity,raw:updated}; }
+      else { setPrescricaoReady(false); setPrescricaoError(true); }
+    } finally { setPrescricaoSaving(false); }
+  },false);
+
+  const importarSeed = (lista: MedicamentoSeed[], origem: OrigemMedicamento) => runMutation(async () => {
+    if (!window.confirm(`Importar os itens ausentes da base local ${origem.toUpperCase()}? Itens já existentes não serão substituídos.`)) return;
+    setImporting(origem==='rename'?'rename':'reme');
+    setImportReport('Consultando códigos existentes…');
+    let confirmed = 0;
+    try {
+      const existing = await readCompleteCatalog(async (from,to) => {
+        const {data,error} = await supabase.from('medications').select('id,codigo_rename').not('codigo_rename','is',null).order('id').range(from,to);
+        if (error||!data) throw Error('Consulta de códigos não confirmada.');
+        return data;
+      });
+      const novos = missingCatalogSeeds(lista,existing);
+      const payload = novos.map(item=>({...item,origem,is_global:true,ativo:true}));
+      for (let i=0;i<payload.length;i+=200) {
+        await confirmSession();
+        const chunk = payload.slice(i,i+200);
+        const {data,error} = await supabase.from('medications').insert(chunk).select('id,codigo_rename');
+        const received = new Set(data?.map(row=>row.codigo_rename)??[]);
+        if (error||!data||data.length!==chunk.length||chunk.some(row=>!received.has(row.codigo_rename))) throw Error('Lote não confirmado.');
+        confirmed += data.length;
+        setImportReport(`${confirmed} de ${payload.length} itens confirmados.`);
       }
-      const payload = novos.map(item => ({
-        nome: item.nome,
-        nome_comercial: item.nome_comercial,
-        principio_ativo: item.principio_ativo,
-        classe_terapeutica: item.classe_terapeutica,
-        apresentacao: item.apresentacao,
-        dosagem_padrao: item.dosagem_padrao,
-        via_padrao: item.via_padrao,
-        forma_farmaceutica: item.forma_farmaceutica,
-        concentracao: item.concentracao,
-        codigo_rename: item.codigo_rename,
-        tipo: item.tipo,
-        origem,
-        is_global: true,
-        ativo: true,
-      }));
-      // Insert in chunks of 200
-      for (let i = 0; i < payload.length; i += 200) {
-        const chunk = payload.slice(i, i + 200);
-        const { error } = await supabase.from('medications').insert(chunk as any);
-        if (error) throw error;
-      }
-      toast.success(`Base ${origem.toUpperCase()} carregada: ${novos.length} medicamentos importados (${lista.length - novos.length} já existiam).`);
-      await loadData();
-    } catch (err: any) {
-      toast.error(`Erro ao importar ${origem.toUpperCase()}: ${err?.message || err}`);
+      setImportReport(`${confirmed} itens confirmados; ${lista.length-novos.length} códigos já presentes ou repetidos na lista.`);
+      toast.success(`Importação concluída: ${confirmed} itens confirmados.`);
+    } catch {
+      setImportReport(`Importação interrompida: ${confirmed} itens confirmados. Um lote sem resposta pode ter sido gravado; confira o catálogo antes de repetir.`);
+      toast.error('Importação não concluída. Confira o resultado.');
     } finally {
+      await loadData();
       setImporting(null);
     }
-  };
+  });
 
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      <div className="rounded-xl border bg-card p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Catálogos assistenciais</h3><p className="text-xs text-muted-foreground">Gerencie medicamentos, exames, bases locais e configurações de prescrição.</p></div><Button size="sm" variant="outline" disabled={busy} onClick={() => void loadData()}>Atualizar catálogos</Button></div>
+        {catalogError ? <p role="alert" className="text-sm text-destructive">Consulta incompleta. Edição dos catálogos bloqueada até nova leitura confirmada.</p> : <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{[[meds.filter(m=>m.ativo).length,'Medicamentos ativos'],[exams.filter(e=>e.ativo).length,'Exames ativos'],[inactiveMeds.length,'Medicamentos inativos'],[exams.filter(e=>!e.ativo).length,'Exames inativos']].map(([value,label])=><div key={label} className="rounded-lg border p-3"><p className="text-xl font-semibold tabular-nums">{value}</p><p className="text-xs text-muted-foreground">{label}</p></div>)}</div>}
+        {busy && <p role="status" className="text-xs text-muted-foreground">Operação em andamento…</p>}
+      </div>
+      <fieldset disabled={busy} className="min-w-0">
       <Tabs defaultValue="medicamentos">
         <TabsList className="w-full flex-wrap h-auto">
           <TabsTrigger value="medicamentos" className="flex-1"><Pill className="w-4 h-4 mr-1.5" />Medicamentos <Badge variant="secondary" className="ml-1.5 text-[10px]">{meds.filter(m => m.ativo).length}</Badge></TabsTrigger>
@@ -375,10 +379,10 @@ const ConfigMedicamentosExames: React.FC = () => {
                 <SelectItem value="manual">Manual</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={() => setAddMedDialog(true)}><Plus className="w-4 h-4 mr-1" />Novo</Button>
+            <Button disabled={!catalogReady||busy} onClick={() => setAddMedDialog(true)}><Plus className="w-4 h-4 mr-1" />Novo</Button>
           </div>
 
-          <p className="text-xs text-muted-foreground">{filteredMeds.length} medicamento(s) encontrado(s)</p>
+          <p className="text-xs text-muted-foreground">{catalogReady ? `${filteredMeds.length} medicamento(s) encontrado(s)` : 'Resultado não confirmado'}</p>
 
           {Array.from(medsByClass.entries()).map(([classe, items]) => (
             <Card key={classe} className="shadow-card border-0">
@@ -388,10 +392,10 @@ const ConfigMedicamentosExames: React.FC = () => {
                 </h4>
                 <div className="space-y-1.5">
                   {items.map(m => {
-                    const tipoBadge = TIPO_COLORS[m.tipo] || TIPO_COLORS.comum;
+                    const tipoBadge = TIPO_COLORS[m.tipo as TipoMedicamento] || TIPO_COLORS.comum;
                     return (
                       <div key={m.id} className={`flex items-center flex-wrap gap-2 py-1.5 px-2 rounded ${!m.ativo ? 'opacity-50' : ''}`}>
-                        <Switch checked={m.ativo} onCheckedChange={() => toggleMedAtivo(m.id)} />
+                        <Switch disabled={!catalogReady||busy} checked={m.ativo} onCheckedChange={() => toggleMedAtivo(m.id)} />
                         <div className="flex-1 min-w-[150px]">
                           <span className="text-sm font-medium">{m.nome}</span>
                           {m.nome_comercial && <span className="text-xs text-muted-foreground"> ({m.nome_comercial})</span>}
@@ -400,11 +404,11 @@ const ConfigMedicamentosExames: React.FC = () => {
                           </div>
                         </div>
                         {m.tipo !== 'comum' && <Badge className={`text-[9px] ${tipoBadge.cls}`}>{tipoBadge.label}</Badge>}
-                        {m.origem !== 'manual' && <Badge variant="outline" className="text-[9px]">{m.origem.toUpperCase()}</Badge>}
+                        {m.origem !== 'manual' && <Badge variant="outline" className="text-[9px]">{(m.origem || 'manual').toUpperCase()}</Badge>}
                         {stockBadge(m)}
                         {!m.is_global && <Badge variant="secondary" className="text-[9px]">Personalizado</Badge>}
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditMed({ ...m })}><Pencil className="w-3.5 h-3.5" /></Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive/70" onClick={() => setDeleteItem({ type: 'med', id: m.id })}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" disabled={!catalogReady||busy} onClick={() => setEditMed({ ...m })}><Pencil className="w-3.5 h-3.5" /></Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive/70" disabled={!catalogReady||busy} onClick={() => setDeleteItem({ type: 'med', id: m.id })}><Trash2 className="w-3.5 h-3.5" /></Button>
                       </div>
                     );
                   })}
@@ -418,8 +422,10 @@ const ConfigMedicamentosExames: React.FC = () => {
         <TabsContent value="exames" className="space-y-4 mt-4">
           <div className="flex gap-2">
             <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" placeholder="Buscar por nome, código SUS ou categoria..." value={examSearch} onChange={e => setExamSearch(e.target.value)} /></div>
-            <Button onClick={() => setAddExamDialog(true)}><Plus className="w-4 h-4 mr-1" />Novo</Button>
+            <Select value={examStatus} onValueChange={v=>setExamStatus(v as typeof examStatus)}><SelectTrigger className="w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="active">Ativos</SelectItem><SelectItem value="inactive">Inativos</SelectItem></SelectContent></Select>
+            <Button disabled={!catalogReady||busy} onClick={() => setAddExamDialog(true)}><Plus className="w-4 h-4 mr-1" />Novo</Button>
           </div>
+          <p className="text-xs text-muted-foreground">{catalogReady ? `${filteredExams.length} exame(s) encontrado(s)` : 'Resultado não confirmado'}</p>
           {Array.from(examsByCategory.entries()).map(([cat, items]) => (
             <Card key={cat} className="shadow-card border-0">
               <CardContent className="p-4">
@@ -427,10 +433,10 @@ const ConfigMedicamentosExames: React.FC = () => {
                 <div className="space-y-1.5">
                   {items.map(e => (
                     <div key={e.id} className={`flex items-center gap-2 py-1.5 px-2 rounded ${!e.ativo ? 'opacity-50' : ''}`}>
-                      <Switch checked={e.ativo} onCheckedChange={() => toggleExamAtivo(e.id)} />
+                      <Switch disabled={!catalogReady||busy} checked={e.ativo} onCheckedChange={() => toggleExamAtivo(e.id)} />
                       <span className="text-sm flex-1">{e.nome} {e.codigo_sus && <span className="text-muted-foreground text-xs font-mono">({e.codigo_sus})</span>}</span>
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditExam({ ...e })}><Pencil className="w-3.5 h-3.5" /></Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive/70" onClick={() => setDeleteItem({ type: 'exam', id: e.id })}><Trash2 className="w-3.5 h-3.5" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" disabled={!catalogReady||busy} onClick={() => setEditExam({ ...e })}><Pencil className="w-3.5 h-3.5" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive/70" disabled={!catalogReady||busy} onClick={() => setDeleteItem({ type: 'exam', id: e.id })}><Trash2 className="w-3.5 h-3.5" /></Button>
                     </div>
                   ))}
                 </div>
@@ -466,8 +472,8 @@ const ConfigMedicamentosExames: React.FC = () => {
               <CardContent className="p-3 flex items-center gap-2">
                 <span className="text-sm flex-1">{m.nome} <span className="text-xs text-muted-foreground">— {m.dosagem_padrao}</span></span>
                 <Badge variant="outline" className="text-[10px]">Personalizado</Badge>
-                <Button size="sm" variant="outline" onClick={() => makeMedGlobal(m.id)}>Tornar global</Button>
-                <Button size="icon" variant="ghost" className="text-destructive" onClick={() => setDeleteItem({ type: 'med', id: m.id })}><Trash2 className="w-4 h-4" /></Button>
+                <Button size="sm" variant="outline" disabled={!catalogReady||busy} onClick={() => makeMedGlobal(m.id)}>Tornar global</Button>
+                <Button size="icon" variant="ghost" className="text-destructive" disabled={!catalogReady||busy} onClick={() => setDeleteItem({ type: 'med', id: m.id })}><Trash2 className="w-4 h-4" /></Button>
               </CardContent>
             </Card>
           ))}
@@ -481,7 +487,7 @@ const ConfigMedicamentosExames: React.FC = () => {
             <Card key={m.id} className="shadow-card border-0">
               <CardContent className="p-3 flex items-center gap-2">
                 <span className="text-sm flex-1 opacity-70">{m.nome} <span className="text-xs text-muted-foreground">— {m.classe_terapeutica}</span></span>
-                <Button size="sm" variant="outline" onClick={() => reactivateMed(m.id)}>Reativar</Button>
+                <Button size="sm" variant="outline" disabled={!catalogReady||busy} onClick={() => reactivateMed(m.id)}>Reativar</Button>
               </CardContent>
             </Card>
           ))}
@@ -489,14 +495,15 @@ const ConfigMedicamentosExames: React.FC = () => {
 
         {/* IMPORTAÇÃO */}
         <TabsContent value="importacao" className="mt-4 space-y-4">
+          {importReport && <p role="status" className="rounded-lg border p-3 text-sm">{importReport}</p>}
           <Card className="shadow-card border-0">
             <CardContent className="p-4 space-y-2">
               <h3 className="font-semibold">Base padrão de Medicamentos — RENAME</h3>
               <p className="text-sm text-muted-foreground">
                 Carrega <strong>{RENAME_MEDICAMENTOS.length}</strong> medicamentos da Relação Nacional de Medicamentos Essenciais.
-                Itens já existentes (mesmo código RENAME) <strong>não são duplicados</strong>.
+                A lista local é uma seleção curada, não a lista oficial completa. Códigos existentes na consulta são ignorados.
               </p>
-              <Button onClick={() => importarSeed(RENAME_MEDICAMENTOS, 'rename')} disabled={!!importing}>
+              <Button onClick={() => importarSeed(RENAME_MEDICAMENTOS, 'rename')} disabled={!!importing||busy||!catalogReady}>
                 {importing === 'rename' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
                 Carregar / Restaurar base RENAME
               </Button>
@@ -506,9 +513,9 @@ const ConfigMedicamentosExames: React.FC = () => {
             <CardContent className="p-4 space-y-2">
               <h3 className="font-semibold">Base padrão de Medicamentos — REME</h3>
               <p className="text-sm text-muted-foreground">
-                Carrega <strong>{REME_MEDICAMENTOS.length}</strong> medicamentos da Relação Municipal (complementa a RENAME). Itens já existentes não são duplicados.
+                Carrega <strong>{REME_MEDICAMENTOS.length}</strong> medicamentos da lista municipal genérica disponível no sistema. Não representa uma validação oficial da REME local. Códigos existentes na consulta são ignorados.
               </p>
-              <Button onClick={() => importarSeed(REME_MEDICAMENTOS, 'reme')} disabled={!!importing} variant="secondary">
+              <Button onClick={() => importarSeed(REME_MEDICAMENTOS, 'reme')} disabled={!!importing||busy||!catalogReady} variant="secondary">
                 {importing === 'reme' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
                 Carregar / Restaurar base REME
               </Button>
@@ -521,12 +528,13 @@ const ConfigMedicamentosExames: React.FC = () => {
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
               <h3 className="font-semibold mb-1">Prescrição de Medicamentos</h3>
-              <p className="text-xs text-muted-foreground mb-3">Quais profissões podem prescrever medicamentos:</p>
+              <p className="text-xs text-muted-foreground mb-3">Configuração de acesso à prescrição no sistema. Não substitui as normas profissionais vigentes.</p>
+              {prescricaoError && <p role="alert" className="mb-3 text-sm text-destructive">Permissões não confirmadas. Atualize os catálogos antes de editar novamente.</p>}
               <div className="space-y-2">
                 {PROFISSOES_PRESCRICAO.map(p => (
                   <div key={p.key} className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
                     <Checkbox
-                      disabled={!prescricaoReady||prescricaoSaving} checked={prescricaoConfig[p.key] ?? false}
+                      disabled={!prescricaoReady||prescricaoSaving||busy} checked={prescricaoConfig[p.key] ?? false}
                       onCheckedChange={v => savePrescricaoConfig({ ...prescricaoConfig, [p.key]: !!v })}
                     />
                     <span className="text-sm">{p.label}</span>
@@ -537,9 +545,10 @@ const ConfigMedicamentosExames: React.FC = () => {
           </Card>
         </TabsContent>
       </Tabs>
+      </fieldset>
 
       {/* EDIT MED DIALOG */}
-      <Dialog open={!!editMed} onOpenChange={() => setEditMed(null)}>
+      <Dialog open={!!editMed} onOpenChange={open => {if(!open&&!busy)setEditMed(null);}}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Editar Medicamento</DialogTitle></DialogHeader>
           {editMed && (
@@ -558,7 +567,7 @@ const ConfigMedicamentosExames: React.FC = () => {
                 <div><Label>Classe Terapêutica</Label><Input value={editMed.classe_terapeutica} onChange={e => setEditMed({ ...editMed, classe_terapeutica: e.target.value })} /></div>
                 <div>
                   <Label>Tipo</Label>
-                  <Select value={editMed.tipo} onValueChange={(v: any) => setEditMed({ ...editMed, tipo: v })}>
+                  <Select value={editMed.tipo} onValueChange={(v: string) => setEditMed({ ...editMed, tipo: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="comum">Comum</SelectItem>
@@ -577,8 +586,8 @@ const ConfigMedicamentosExames: React.FC = () => {
                 </div>
                 {editMed.estoque_controlado && (
                   <div className="grid grid-cols-4 gap-2">
-                    <div><Label>Quantidade</Label><Input type="number" value={editMed.estoque_quantidade} onChange={e => setEditMed({ ...editMed, estoque_quantidade: parseInt(e.target.value) || 0 })} /></div>
-                    <div><Label>Mínimo</Label><Input type="number" value={editMed.estoque_minimo} onChange={e => setEditMed({ ...editMed, estoque_minimo: parseInt(e.target.value) || 0 })} /></div>
+                    <div><Label>Quantidade</Label><Input type="number" min={0} step={1} value={editMed.estoque_quantidade} onChange={e => setEditMed({ ...editMed, estoque_quantidade: parseInt(e.target.value) || 0 })} /></div>
+                    <div><Label>Mínimo</Label><Input type="number" min={0} step={1} value={editMed.estoque_minimo} onChange={e => setEditMed({ ...editMed, estoque_minimo: parseInt(e.target.value) || 0 })} /></div>
                     <div><Label>Unidade</Label><Input value={editMed.estoque_unidade} placeholder="comprimidos" onChange={e => setEditMed({ ...editMed, estoque_unidade: e.target.value })} /></div>
                     <div><Label>Local</Label><Input value={editMed.estoque_localizacao} placeholder="Farmácia" onChange={e => setEditMed({ ...editMed, estoque_localizacao: e.target.value })} /></div>
                   </div>
@@ -590,13 +599,13 @@ const ConfigMedicamentosExames: React.FC = () => {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditMed(null)}>Cancelar</Button>
-            <Button onClick={saveEditMed}>Salvar</Button>
+            <Button disabled={!catalogReady||busy} onClick={saveEditMed}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* EDIT EXAM */}
-      <Dialog open={!!editExam} onOpenChange={() => setEditExam(null)}>
+      <Dialog open={!!editExam} onOpenChange={open => {if(!open&&!busy)setEditExam(null);}}>
         <DialogContent>
           <DialogHeader><DialogTitle>Editar Exame</DialogTitle></DialogHeader>
           {editExam && (
@@ -609,13 +618,13 @@ const ConfigMedicamentosExames: React.FC = () => {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditExam(null)}>Cancelar</Button>
-            <Button onClick={saveEditExam}>Salvar</Button>
+            <Button disabled={!catalogReady||busy} onClick={saveEditExam}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ADD MED */}
-      <Dialog open={addMedDialog} onOpenChange={setAddMedDialog}>
+      <Dialog open={addMedDialog} onOpenChange={open=>{if(!busy)setAddMedDialog(open);}}>
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>Novo Medicamento</DialogTitle></DialogHeader>
           <div className="space-y-3">
@@ -633,7 +642,7 @@ const ConfigMedicamentosExames: React.FC = () => {
               <div><Label>Classe Terapêutica</Label><Input value={newMed.classe_terapeutica || ''} onChange={e => setNewMed(p => ({ ...p, classe_terapeutica: e.target.value }))} /></div>
               <div>
                 <Label>Tipo</Label>
-                <Select value={newMed.tipo || 'comum'} onValueChange={(v: any) => setNewMed(p => ({ ...p, tipo: v }))}>
+                <Select value={newMed.tipo || 'comum'} onValueChange={(v: string) => setNewMed(p => ({ ...p, tipo: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="comum">Comum</SelectItem>
@@ -647,13 +656,13 @@ const ConfigMedicamentosExames: React.FC = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddMedDialog(false)}>Cancelar</Button>
-            <Button onClick={addNewMed} disabled={!newMed.nome?.trim()}>Criar</Button>
+            <Button onClick={addNewMed} disabled={!catalogReady||busy||!newMed.nome?.trim()}>Criar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ADD EXAM */}
-      <Dialog open={addExamDialog} onOpenChange={setAddExamDialog}>
+      <Dialog open={addExamDialog} onOpenChange={open=>{if(!busy)setAddExamDialog(open);}}>
         <DialogContent>
           <DialogHeader><DialogTitle>Novo Exame</DialogTitle></DialogHeader>
           <div className="space-y-3">
@@ -663,20 +672,20 @@ const ConfigMedicamentosExames: React.FC = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddExamDialog(false)}>Cancelar</Button>
-            <Button onClick={addNewExam} disabled={!newExam.nome.trim()}>Criar</Button>
+            <Button onClick={addNewExam} disabled={!catalogReady||busy||!newExam.nome.trim()}>Criar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deleteItem} onOpenChange={() => setDeleteItem(null)}>
+      <AlertDialog open={!!deleteItem} onOpenChange={open=>{if(!open&&!busy)setDeleteItem(null);}}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Desativar {deleteItem?.type === 'med' ? 'medicamento' : 'exame'}?</AlertDialogTitle>
-            <AlertDialogDescription>O item será movido para a aba "Inativos" e pode ser reativado depois. Prontuários já salvos não são afetados.</AlertDialogDescription>
+            <AlertDialogDescription>O item será desativado, sem exclusão física. Medicamentos podem ser reativados em Inativos; exames na aba Exames.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Confirmar</AlertDialogAction>
+            <AlertDialogAction disabled={!catalogReady||busy} onClick={e=>{e.preventDefault();void handleDelete();}}>Confirmar</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
