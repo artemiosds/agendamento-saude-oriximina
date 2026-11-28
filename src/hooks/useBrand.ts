@@ -97,14 +97,15 @@ export function useBrand(): Brand {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const { data: sess } = await supabase.auth.getSession();
-      if (!sess.session) return;
-      const { data } = await supabase
+      const { data: sess,error:sessionError } = await supabase.auth.getSession();
+      if (sessionError||!sess.session) return;
+      const { data,error } = await supabase
         .from('system_config')
         .select('configuracoes')
         .eq('id', 'default')
         .maybeSingle();
-      const resolved = resolveBrand((data?.configuracoes as any)?.config_sistema?.instituicao);
+      if(error||!data||!data.configuracoes||typeof data.configuracoes!=='object'||Array.isArray(data.configuracoes))return;
+      const resolved = resolveBrand((data.configuracoes as any)?.config_sistema?.instituicao);
       if (!alive) return;
       setBrand(resolved);
       try {
@@ -112,7 +113,7 @@ export function useBrand(): Brand {
       } catch {
         // Branding remains available in memory when storage is disabled.
       }
-    })();
+    })().catch(()=>{ /* Preserve the last confirmed brand if the read fails. */ });
     return () => {
       alive = false;
     };

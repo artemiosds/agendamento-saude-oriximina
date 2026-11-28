@@ -102,6 +102,9 @@ const Configuracoes: React.FC = () => {
   const triageRaw=useRef<boolean|null>(null),triageLock=useRef(false),triageRequest=useRef(0);
 
   const [requestedTab, setActiveTab] = useState<ConfigTabId>('prontuario');
+  const institutionalDirty=useRef(false);
+  const reportInstitutionalDirty=useCallback((dirty:boolean)=>{institutionalDirty.current=dirty;},[]);
+  const selectConfigTab=(next:ConfigTabId)=>{if(requestedTab==='sistema'&&next!==requestedTab&&institutionalDirty.current&&!window.confirm('Sair das configurações institucionais sem salvar as alterações?'))return;setActiveTab(next);};
 
   const [reativarProfId, setReativarProfId] = useState('');
   const [reativarAgendamentos, setReativarAgendamentos] = useState<AdminAppointment[]>([]);
@@ -966,7 +969,7 @@ const Configuracoes: React.FC = () => {
         return <ConfigSistemasIntegrados />;
 
       case 'sistema':
-        return <ConfigSistema />;
+        return <ConfigSistema onDirtyChange={reportInstitutionalDirty} />;
 
       default:
         return null;
@@ -991,7 +994,7 @@ const Configuracoes: React.FC = () => {
 
       <div className="flex flex-col lg:flex-row gap-4 items-start min-h-[70vh]">
         <div className="w-full lg:w-auto lg:shrink-0 lg:self-stretch">
-          <ConfigNavigation activeTab={activeTab} onSelect={setActiveTab} isGlobalMaster={_isGlobalMaster} />
+          <ConfigNavigation activeTab={activeTab} onSelect={selectConfigTab} isGlobalMaster={_isGlobalMaster} />
         </div>
 
         <main className="w-full flex-1 min-w-0 space-y-4" aria-labelledby="config-active-title">

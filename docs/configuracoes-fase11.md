@@ -1,0 +1,7 @@
+# Configurações — Fase 11: configurações institucionais
+- Risco alto (marca pública, notificações e políticas de dados). Nenhum registro institucional, logo, modelo de documento, tema, política, backup, dados clínicos ou banco alterado durante implantação. Sem migrations, RLS, Storage ou Edge Functions.
+- Editor institucional restrito ao Master global já previsto na navegação. Leitura confirmada, rascunho local, validação dos novos valores, gravação explícita via seção/versionamento e auditoria sem payload. Preserva propriedades desconhecidas e grupos não editados; não reenvia defaults de grupos intactos.
+- Mantidos todos os campos e chaves existentes, incluindo marca dos documentos. Não muda fonte de marca, layouts de impressão ou textos padrão. Falha de consulta de marca preserva cache existente. Não aplica tema global: preferência pessoal é separada. Prévia de cor é amostra local, não simulação do sistema.
+- Mudança deliberada de UX: troca autosave a cada blur/controle por botão explícito de salvar; aviso ao mudar de seção e fechar/recarregar a janela com rascunho. Navegação externa via SPA não é integralmente interceptada. Falha mantém rascunho e exige consulta antes de nova gravação.
+- LGPD: parâmetros administrativos, não implementação de descarte, anonimização ou comprovação de conformidade. Notificações não são disparadas pelo editor. Central de dados existente mantida, sem criar exportador alternativo nem executar backup/restauração.
+- Seis testes unitários de preservação de dados, formato e validação; homologação autenticada pendente.
