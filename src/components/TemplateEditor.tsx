@@ -261,12 +261,13 @@ const TableHeader = BaseTableHeader.extend({
 
 // -------- Editor Panel --------
 interface EditorPanelProps {
+  adminAppearance?: boolean;
   templateId?: string | null;
   seed?: { nome: string; tipo: string; conteudo: string; blocos_clinicos?: any } | null;
   onDone: () => void;
 }
 
-const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onDone }) => {
+const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onDone, adminAppearance = false }) => {
   const { user } = useAuth();
   const [nome, setNome] = useState('');
   const [categoria, setCategoria] = useState<Categoria>('Clínico');
@@ -1135,9 +1136,9 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
       </fieldset>
       {/* Add manual field dialog */}
       <Dialog open={!!addFieldOpen} onOpenChange={(o) => { if (!o) setAddFieldOpen(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Novo campo — {FIELD_TYPES.find(f => f.type === addFieldOpen)?.label || addFieldOpen}</DialogTitle>
+        <DialogContent className={adminAppearance ? "config-admin-modal" : undefined}>
+          <DialogHeader className={adminAppearance ? "config-admin-modal-header" : undefined}>
+            <DialogTitle className={adminAppearance ? "config-admin-modal-title" : undefined}>Novo campo — {FIELD_TYPES.find(f => f.type === addFieldOpen)?.label || addFieldOpen}</DialogTitle>
             <DialogDescription>Defina o rótulo que aparecerá na hora de gerar o documento.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -1152,7 +1153,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className={adminAppearance ? "config-admin-modal-footer" : undefined}>
             <Button variant="outline" onClick={() => setAddFieldOpen(null)}>Cancelar</Button>
             <Button onClick={() => addFieldOpen && addManualField(addFieldOpen)}>Adicionar</Button>
           </DialogFooter>
@@ -1161,9 +1162,9 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
 
       {/* Preview dialog */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Preview — {nome || 'Sem nome'}</DialogTitle>
+        <DialogContent className={adminAppearance ? "config-admin-modal max-w-3xl max-h-[85vh] overflow-y-auto" : "max-w-3xl max-h-[85vh] overflow-y-auto"}>
+          <DialogHeader className={adminAppearance ? "config-admin-modal-header" : undefined}>
+            <DialogTitle className={adminAppearance ? "config-admin-modal-title" : undefined}>Preview — {nome || 'Sem nome'}</DialogTitle>
             <DialogDescription>Visualização com dados fictícios de exemplo.</DialogDescription>
           </DialogHeader>
           <style>{`.preview-doc .tpl-cond { border: 1px dashed hsl(340 70% 55%); padding: 2px 4px; border-radius: 4px; }`}</style>
@@ -1178,7 +1179,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
 };
 
 // -------- List (default export) --------
-const TemplateEditor: React.FC = () => {
+const TemplateEditor: React.FC<{adminAppearance?: boolean}> = ({adminAppearance = false}) => {
   const { hasPermission,user } = useAuth();
   const canManage = useMemo(() => hasPermission(['master', 'coordenador']), [hasPermission]);
 
@@ -1257,7 +1258,7 @@ const TemplateEditor: React.FC = () => {
             {editingId ? 'Editar template' : (seed ? `Novo template — ${seed.nome}` : 'Novo template')}
           </h3>
         </div>
-        <TemplateEditorPanel templateId={editingId} seed={seed} onDone={() => { setEditingId(undefined); setSeed(null); load(); }} />
+        <TemplateEditorPanel adminAppearance={adminAppearance} templateId={editingId} seed={seed} onDone={() => { setEditingId(undefined); setSeed(null); load(); }} />
       </div>
     );
   }

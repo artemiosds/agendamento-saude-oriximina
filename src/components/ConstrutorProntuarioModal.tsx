@@ -41,6 +41,7 @@ const FIELD_TOOLS: { type: BuilderFieldType; label: string; icon: React.ElementT
 ];
 
 interface ConstrutorProntuarioModalProps {
+  adminAppearance?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tipoKey: string;       // ex: 'primeira_consulta'
@@ -50,7 +51,7 @@ interface ConstrutorProntuarioModalProps {
 const configKeyFor = (tipoKey: string) => `estrutura_prontuario_${tipoKey}`;
 
 const ConstrutorProntuarioModal: React.FC<ConstrutorProntuarioModalProps> = ({
-  open, onOpenChange, tipoKey, tipoLabel,
+  open, onOpenChange, tipoKey, tipoLabel, adminAppearance = false,
 }) => {
   const [fields, setFields] = useState<BuilderField[]>([]);
   const [loading, setLoading] = useState(true);
@@ -155,9 +156,9 @@ const ConstrutorProntuarioModal: React.FC<ConstrutorProntuarioModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={next => { if (!saving) onOpenChange(next); }}>
-      <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] p-0 gap-0 flex flex-col">
-        <DialogHeader className="px-6 pt-6 pb-4 border-b">
-          <DialogTitle className="text-base font-display">
+      <DialogContent className={adminAppearance ? "config-admin-modal max-w-5xl w-[95vw] max-h-[92vh] p-0 gap-0 flex flex-col" : "max-w-5xl w-[95vw] max-h-[92vh] p-0 gap-0 flex flex-col"}>
+        <DialogHeader className={adminAppearance ? "config-admin-modal-header px-6 pt-6 pb-4 border-b" : "px-6 pt-6 pb-4 border-b"}>
+          <DialogTitle className={adminAppearance ? "config-admin-modal-title text-base font-display" : "text-base font-display"}>
             Editar Modelo de Prontuário · <span className="text-primary">{tipoLabel}</span>
           </DialogTitle>
           <p className="text-xs text-muted-foreground mt-1">
@@ -332,7 +333,7 @@ const ConstrutorProntuarioModal: React.FC<ConstrutorProntuarioModalProps> = ({
         </fieldset>
         {loadFailed && <div className="px-6"><Button variant="outline" size="sm" onClick={() => void load()}>Tentar carregar novamente</Button></div>}
 
-        <DialogFooter className="px-6 py-4 border-t bg-background">
+        <DialogFooter className={adminAppearance ? "config-admin-modal-footer px-6 py-4 border-t bg-background" : "px-6 py-4 border-t bg-background"}>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancelar
           </Button>

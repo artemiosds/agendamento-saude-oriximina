@@ -554,7 +554,7 @@ const ConfigImpressaoDocumentos: React.FC = () => {
 
         {/* ============== MODELOS ============== */}
         <TabsContent value="modelos" className="mt-5">
-          <TemplateEditor />
+          <TemplateEditor adminAppearance />
         </TabsContent>
 
         {/* ============== CARIMBO PROFISSIONAL ============== */}

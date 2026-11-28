@@ -120,7 +120,7 @@ const FIELD_TYPES = [
 
 const CONFIG_KEY = 'estrutura_prontuario';
 
-const EditorProntuarioConfig: React.FC = () => {
+const EditorProntuarioConfig: React.FC<{adminAppearance?: boolean}> = ({adminAppearance = false}) => {
   const [sections, setSections] = useState<ProntuarioSection[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -494,9 +494,9 @@ const EditorProntuarioConfig: React.FC = () => {
 
       {/* Edit field dialog */}
       <Dialog open={!!editingField} onOpenChange={() => setEditingField(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Editar Campo</DialogTitle>
+        <DialogContent className={adminAppearance ? "config-admin-modal max-w-md" : "max-w-md"}>
+          <DialogHeader className={adminAppearance ? "config-admin-modal-header" : undefined}>
+            <DialogTitle className={adminAppearance ? "config-admin-modal-title" : undefined}>Editar Campo</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -532,9 +532,9 @@ const EditorProntuarioConfig: React.FC = () => {
 
       {/* Add section dialog */}
       <Dialog open={addSectionOpen} onOpenChange={setAddSectionOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nova Seção</DialogTitle>
+        <DialogContent className={adminAppearance ? "config-admin-modal max-w-md" : "max-w-md"}>
+          <DialogHeader className={adminAppearance ? "config-admin-modal-header" : undefined}>
+            <DialogTitle className={adminAppearance ? "config-admin-modal-title" : undefined}>Nova Seção</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -551,9 +551,9 @@ const EditorProntuarioConfig: React.FC = () => {
 
       {/* Preview dialog */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Pré-visualização do Prontuário</DialogTitle>
+        <DialogContent className={adminAppearance ? "config-admin-modal max-w-2xl max-h-[80vh] overflow-y-auto" : "max-w-2xl max-h-[80vh] overflow-y-auto"}>
+          <DialogHeader className={adminAppearance ? "config-admin-modal-header" : undefined}>
+            <DialogTitle className={adminAppearance ? "config-admin-modal-title flex items-center gap-2" : "flex items-center gap-2"}><FileText className="w-5 h-5" /> Pré-visualização do Prontuário</DialogTitle>
           </DialogHeader>
           <div className="space-y-6">
             {sections.filter(s => s.enabled).map(section => (

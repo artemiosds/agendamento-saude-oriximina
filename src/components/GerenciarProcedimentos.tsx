@@ -78,7 +78,7 @@ const emptyForm: CustomForm = {
   cidInput: "",
 };
 
-const GerenciarProcedimentos: React.FC = () => {
+const GerenciarProcedimentos: React.FC<{adminAppearance?: boolean}> = ({adminAppearance = false}) => {
   const { funcionarios } = useOperacional();
   const { user } = useAuth();
   const isMaster = user?.role === "master";
@@ -527,9 +527,9 @@ const GerenciarProcedimentos: React.FC = () => {
 
         {/* Modal de vínculos */}
         <Dialog open={!!manageProc} onOpenChange={o=>{if(!o&&!linkLock.current)setManageProc(null);}}>
-          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Vincular Profissionais</DialogTitle>
+          <DialogContent className={adminAppearance ? "config-admin-modal sm:max-w-lg max-h-[90vh] overflow-y-auto" : "sm:max-w-lg max-h-[90vh] overflow-y-auto"}>
+            <DialogHeader className={adminAppearance ? "config-admin-modal-header" : undefined}>
+              <DialogTitle className={adminAppearance ? "config-admin-modal-title" : undefined}>Vincular Profissionais</DialogTitle>
             </DialogHeader>
             {manageProc && (
               <div className="space-y-4">
@@ -601,7 +601,7 @@ const GerenciarProcedimentos: React.FC = () => {
                 </div>
               </div>
             )}
-            <DialogFooter>
+            <DialogFooter className={adminAppearance ? "config-admin-modal-footer" : undefined}>
               <Button variant="outline" disabled={savingLinks} onClick={() => setManageProc(null)}>
                 Cancelar
               </Button>
@@ -615,9 +615,9 @@ const GerenciarProcedimentos: React.FC = () => {
 
         {/* Modal de cadastro/edição custom */}
         <Dialog open={customOpen} onOpenChange={o=>{if(!customLock.current){if(!o)editSeq.current++;setCustomOpen(o);}}}>
-          <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
+          <DialogContent className={adminAppearance ? "config-admin-modal sm:max-w-xl max-h-[90vh] overflow-y-auto" : "sm:max-w-xl max-h-[90vh] overflow-y-auto"}>
+            <DialogHeader className={adminAppearance ? "config-admin-modal-header" : undefined}>
+              <DialogTitle className={adminAppearance ? "config-admin-modal-title" : undefined}>
                 {editingCodigo ? "Editar Procedimento" : "Novo Procedimento Personalizado"}
               </DialogTitle>
             </DialogHeader>
@@ -712,7 +712,7 @@ const GerenciarProcedimentos: React.FC = () => {
                 </div>
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className={adminAppearance ? "config-admin-modal-footer" : undefined}>
               <Button variant="outline" disabled={savingCustom} onClick={()=>{editSeq.current++;setCustomOpen(false);}}>
                 Cancelar
               </Button>

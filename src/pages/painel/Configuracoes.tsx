@@ -839,7 +839,7 @@ const Configuracoes: React.FC = () => {
         return (
           <div className="space-y-6">
             <SigtapSyncPanel />
-            <GerenciarProcedimentos />
+            <GerenciarProcedimentos adminAppearance />
             <VincularSigtapProcedimentos />
             <Separator />
             <h2 className="text-lg font-semibold font-display text-foreground">Integrações</h2>

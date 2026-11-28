@@ -387,7 +387,7 @@ const ConfigProntuario: React.FC = () => {
         </CardContent>
       </Card>
 
-      <EditorProntuarioConfig />
+      <EditorProntuarioConfig adminAppearance />
 
       <Separator />
 
@@ -758,6 +758,7 @@ const ConfigProntuario: React.FC = () => {
 
       {builderOpen && (
         <ConstrutorProntuarioModal
+          adminAppearance
           open={!!builderOpen}
           onOpenChange={(o) => { if (!o) setBuilderOpen(null); }}
           tipoKey={builderOpen.key}
