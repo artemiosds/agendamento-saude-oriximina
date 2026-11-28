@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Link as LinkIcon, Search, Check, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import {readCompleteCatalog} from "@/lib/adminCatalog";
+import {validSigtapCode} from "@/lib/adminIntegrations";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface ProcInterno {
@@ -35,36 +37,31 @@ const VincularSigtapProcedimentos: React.FC = () => {
   const [procs, setProcs] = useState<ProcInterno[]>([]);
   const [sigtap, setSigtap] = useState<SigtapOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed,setFailed]=useState(false);
+  const lock=useRef(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Record<string, string>>({});
   const [searchSigtap, setSearchSigtap] = useState<Record<string, string>>({});
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [procsRes, sigtapRes] = await Promise.all([
-        (supabase as any)
-          .from("procedimentos")
-          .select("id, nome, especialidade, codigo_sigtap, ativo")
-          .eq("ativo", true)
-          .order("especialidade")
-          .order("nome"),
-        (supabase as any)
-          .from("sigtap_procedimentos")
-          .select("codigo, nome, especialidade")
-          .eq("ativo", true)
-          .order("nome")
-          .limit(15000),
+  const load=async()=>{
+    setLoading(true);setFailed(false);
+    try{
+      const [internal,official]=await Promise.all([
+        readCompleteCatalog<ProcInterno>(async(from,to)=>{
+          const {data,error,count}=await supabase.from('procedimentos').select('id,nome,especialidade,codigo_sigtap,ativo',{count:'exact'}).eq('ativo',true).order('id').range(from,to);
+          if(error||!data)throw Error('Consulta não confirmada.');
+          return {rows:data as ProcInterno[],count};
+        },500),
+        readCompleteCatalog<SigtapOption&{id:string}>(async(from,to)=>{
+          const {data,error,count}=await supabase.from('sigtap_procedimentos').select('codigo,nome,especialidade',{count:'exact'}).eq('ativo',true).order('codigo').range(from,to);
+          if(error||!data)throw Error('Consulta SIGTAP não confirmada.');
+          return {rows:data.map(r=>({...r,id:r.codigo})) as (SigtapOption&{id:string})[],count};
+        },500)
       ]);
-      setProcs(procsRes.data || []);
-      setSigtap(sigtapRes.data || []);
-    } catch (err) {
-      console.error(err);
-      toast.error("Erro ao carregar procedimentos");
-    } finally {
-      setLoading(false);
-    }
+      setProcs(internal.sort((a,b)=>a.especialidade.localeCompare(b.especialidade)||a.nome.localeCompare(b.nome)));setSigtap(official);
+    }catch{setFailed(true);toast.error('Consulta não confirmada. Edição bloqueada.');}
+    finally{setLoading(false);}
   };
 
   useEffect(() => {
@@ -92,17 +89,21 @@ const VincularSigtapProcedimentos: React.FC = () => {
 
   const handleSave = async (proc: ProcInterno) => {
     const novoCodigo = (editing[proc.id] ?? proc.codigo_sigtap ?? "").trim();
-    if (novoCodigo && novoCodigo.length !== 10) {
+    if(lock.current||failed||loading||!isMaster)return;
+    if (novoCodigo && !validSigtapCode(novoCodigo)) {
       toast.error("Código SIGTAP deve ter 10 dígitos");
       return;
     }
-    setSaving(proc.id);
+    if(!window.confirm(novoCodigo?`Vincular este procedimento ao código ${novoCodigo}?`:"Remover o vínculo SIGTAP deste procedimento?"))return;
+    lock.current=true;setSaving(proc.id);
     try {
-      const { error } = await (supabase as any)
-        .from("procedimentos")
-        .update({ codigo_sigtap: novoCodigo })
-        .eq("id", proc.id);
-      if (error) throw error;
+      const {data:auth,error:authError}=await supabase.auth.getSession();
+      if(authError||!user?.authUserId||user.ativo!==true||auth.session?.user.id!==user.authUserId)throw Error("Sessão não confirmada.");
+      if(novoCodigo){const {data:code,error}=await supabase.from("sigtap_procedimentos").select("codigo").eq("codigo",novoCodigo).eq("ativo",true).maybeSingle();if(error||!code)throw Error("Código ativo não confirmado no catálogo local.");}
+      let query=supabase.from("procedimentos").update({codigo_sigtap:novoCodigo}).eq("id",proc.id).eq("ativo",true);
+      query=proc.codigo_sigtap==null?query.is("codigo_sigtap",null):query.eq("codigo_sigtap",proc.codigo_sigtap);
+      const {data,error}=await query.select("id,codigo_sigtap").maybeSingle();
+      if(error||data?.codigo_sigtap!==novoCodigo)throw Error("Gravação não confirmada. Recarregue antes de repetir.");
       setProcs((prev) =>
         prev.map((p) => (p.id === proc.id ? { ...p, codigo_sigtap: novoCodigo } : p)),
       );
@@ -113,9 +114,9 @@ const VincularSigtapProcedimentos: React.FC = () => {
       });
       toast.success("Vínculo SIGTAP atualizado");
     } catch (err: any) {
-      toast.error("Erro ao salvar: " + (err?.message || "desconhecido"));
+      setFailed(true);toast.error("Gravação não confirmada. Atualize a consulta.");
     } finally {
-      setSaving(null);
+      lock.current=false;setSaving(null);
     }
   };
 
@@ -165,7 +166,7 @@ const VincularSigtapProcedimentos: React.FC = () => {
           <div className="flex justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : failed ? <div role="alert" className="p-3 space-y-2"><p>Consulta ou gravação não confirmada.</p><Button variant="outline" onClick={()=>void load()}>Atualizar catálogo</Button></div> : filtered.length === 0 ? (
           <div className="text-center py-8 text-sm text-muted-foreground">
             Nenhum procedimento encontrado.
           </div>
@@ -219,7 +220,7 @@ const VincularSigtapProcedimentos: React.FC = () => {
                         <Button
                           size="sm"
                           onClick={() => handleSave(proc)}
-                          disabled={!editado || saving === proc.id}
+                          disabled={!editado || !!saving||failed}
                           className="mt-4 h-8"
                         >
                           {saving === proc.id ? (

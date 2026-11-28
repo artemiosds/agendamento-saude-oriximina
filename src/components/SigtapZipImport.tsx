@@ -12,6 +12,7 @@ import {
   Loader2, ExternalLink, Upload, Cloud, Info
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import {validCompetencia,confirmKeys} from '@/lib/adminIntegrations';
 import { toast } from 'sonner';
 
 // Mapeamento grupo+subgrupo SIGTAP → especialidade interna
@@ -114,6 +115,8 @@ function decodeLatin1(bytes: Uint8Array): string {
 }
 
 const SigtapZipImport: React.FC = () => {
+  const importLock=useRef(false);
+  const writesStarted=useRef(false);
   const [source, setSource] = useState<Source>('github');
   const [selected, setSelected] = useState<Set<string>>(new Set(SPECIALTY_OPTIONS.map(s => s.key)));
   const [file, setFile] = useState<File | null>(null);
@@ -338,6 +341,9 @@ const SigtapZipImport: React.FC = () => {
     const cidLinks = Array.from(cidLinkMap.values());
 
     // ============= Save to database (upsert in batches) =============
+    if(!validCompetencia(competencia)||!procedures.length)throw Error('Competência ou catálogo não confirmado.');
+    if(!window.confirm(`Importar competência ${competencia}: ${procedures.length} procedimentos e ${cidLinks.length} vínculos CID? A importação ocorre por lotes e pode ficar parcial em caso de falha.`))throw Error('Importação cancelada antes da gravação.');
+    writesStarted.current=true;
     setStep('saving');
     addLog('info', 'Salvando no banco de dados...');
 
@@ -345,11 +351,11 @@ const SigtapZipImport: React.FC = () => {
     let done = 0;
 
     // Procedures: batch 1000 (increased to avoid overhead)
-    const PROC_BATCH = 1000;
+    const PROC_BATCH = 500;
     let procUpserts = 0;
     for (let i = 0; i < procedures.length; i += PROC_BATCH) {
       const batch = procedures.slice(i, i + PROC_BATCH);
-      const { error } = await supabase.from('sigtap_procedimentos').upsert(
+      const { data,error } = await supabase.from('sigtap_procedimentos').upsert(
         batch.map(p => ({
           codigo: p.codigo,
           nome: p.nome,
@@ -358,10 +364,10 @@ const SigtapZipImport: React.FC = () => {
           updated_at: new Date().toISOString(),
         })),
         { onConflict: 'codigo' }
-      );
-      if (error) {
+      ).select('codigo');
+      if (error||!confirmKeys(batch.map(p=>p.codigo),data?.map(p=>p.codigo)??null)) {
         console.error('[SIGTAP] proc upsert error:', error);
-        throw new Error(`Erro ao salvar lote de procedimentos: ${error.message}`);
+        throw new Error(`Erro ao salvar lote de procedimentos: ${error?.message||'lote não confirmado'}`);
       }
       procUpserts += batch.length;
       done += batch.length;
@@ -371,17 +377,17 @@ const SigtapZipImport: React.FC = () => {
 
     // CID links: batch 2000 (increased to avoid overhead)
     if (cidLinks.length > 0) {
-      const CID_BATCH = 2000;
+      const CID_BATCH = 500;
       let cidUpserts = 0;
       for (let i = 0; i < cidLinks.length; i += CID_BATCH) {
         const batch = cidLinks.slice(i, i + CID_BATCH);
-        const { error } = await supabase.from('sigtap_procedimento_cids').upsert(
+        const { data,error } = await supabase.from('sigtap_procedimento_cids').upsert(
           batch,
           { onConflict: 'procedimento_codigo,cid_codigo' }
-        );
-        if (error) {
+        ).select('procedimento_codigo,cid_codigo');
+        if (error||!confirmKeys(batch.map(p=>p.procedimento_codigo+'|'+p.cid_codigo),data?.map(p=>p.procedimento_codigo+'|'+p.cid_codigo)??null)) {
           console.error('[SIGTAP] cid upsert error:', error);
-          throw new Error(`Erro ao salvar lote de vínculos CID: ${error.message}`);
+          throw new Error(`Erro ao salvar lote de vínculos CID: ${error?.message||'lote não confirmado'}`);
         }
         cidUpserts += batch.length;
         done += batch.length;
@@ -397,11 +403,12 @@ const SigtapZipImport: React.FC = () => {
     }
     // Fire-and-forget per procedure (limited subset only — those with CIDs)
     const updatePromises = Array.from(cidCountMap.entries()).map(([codigo, count]) =>
-      supabase.from('sigtap_procedimentos').update({ total_cids: count }).eq('codigo', codigo)
+      supabase.from('sigtap_procedimentos').update({ total_cids: count }).eq('codigo', codigo).select('codigo').maybeSingle()
     );
     // Run in chunks to avoid flooding
     for (let i = 0; i < updatePromises.length; i += 50) {
-      await Promise.all(updatePromises.slice(i, i + 50));
+      const results=await Promise.all(updatePromises.slice(i, i + 50));
+      if(results.some(r=>r.error||!r.data))throw Error('Total de CIDs não confirmado. Importação pode estar parcial.');
     }
 
     // Build per-specialty results
@@ -428,14 +435,15 @@ const SigtapZipImport: React.FC = () => {
     setSpecResults(finalResults);
 
     // Log import
-    await (supabase as any).from('pts_import_log').insert({
+    const {data:log,error:logError}=await (supabase as any).from('pts_import_log').insert({
       tipo: source === 'github' ? 'import_github' : 'import_zip_upload',
       especialidade: finalResults.map(r => r.especialidade).join(', '),
       total_procedimentos: procedures.length,
       total_cids: cidLinks.length,
       competencia,
       detalhes: finalResults,
-    });
+    }).select('id').maybeSingle();
+    if(logError||!log)throw Error('Dados importados, mas histórico não confirmado. Confira antes de repetir.');
 
     setProgressPct(100);
     setStep('done');
@@ -443,6 +451,8 @@ const SigtapZipImport: React.FC = () => {
   };
 
   const handleStart = async () => {
+    if(importLock.current)return;
+    importLock.current=true;writesStarted.current=false;
     // Agora não há mais necessidade de validar selected.size pois importamos tudo
     // O filtro de especialidades foi mantido na UI apenas para visualização/associação opcional futura.
 
@@ -477,17 +487,18 @@ const SigtapZipImport: React.FC = () => {
         zipBytes = new Uint8Array(buf);
         // Try to extract competencia from filename
         const m = file.name.match(/(\d{6})/);
-        competencia = m ? m[1] : `${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+        if(!m||!validCompetencia(m[1]))throw Error('Informe a competência AAAAMM no nome do ZIP antes de importar.');
+        competencia=m[1];
       }
 
       await runImport(zipBytes, competencia);
     } catch (err: any) {
       console.error('[SIGTAP IMPORT]', err);
-      setErrorMsg(err.message || 'Erro desconhecido');
+      setErrorMsg((writesStarted.current?'Importação possivelmente parcial. Confira os lotes antes de repetir. ':'')+(err.message || 'Erro desconhecido'));
       setStep('error');
       addLog('error', err.message || 'Erro desconhecido');
       toast.error(err.message || 'Erro ao processar arquivo');
-    }
+    }finally{importLock.current=false;}
   };
 
   const reset = () => {

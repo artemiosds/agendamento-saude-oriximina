@@ -37,14 +37,16 @@ const tipoLabel = (tipo: string) => {
 
 const SigtapSyncPanel: React.FC = () => {
   const [history, setHistory] = useState<SyncHistory[]>([]);
+  const [historyReady,setHistoryReady]=useState(false);
 
   const loadHistory = useCallback(async () => {
-    const { data } = await (supabase as any)
+    setHistoryReady(false);
+    const { data,error } = await (supabase as any)
       .from('pts_import_log')
       .select('*')
       .order('importado_em', { ascending: false })
       .limit(15);
-    if (data) setHistory(data);
+    if (!error&&Array.isArray(data)){setHistory(data);setHistoryReady(true);}
   }, []);
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
@@ -55,7 +57,7 @@ const SigtapSyncPanel: React.FC = () => {
     return () => clearInterval(interval);
   }, [loadHistory]);
 
-  const lastSync = history[0];
+  const lastSync = historyReady?history[0]:undefined;
 
   return (
     <div className="space-y-4">
@@ -77,7 +79,7 @@ const SigtapSyncPanel: React.FC = () => {
             <div>
               <span className="text-muted-foreground">Última importação: </span>
               <span className="font-medium">
-                {lastSync ? new Date(lastSync.importado_em).toLocaleString('pt-BR') : 'Nunca'}
+                {lastSync ? new Date(lastSync.importado_em).toLocaleString('pt-BR') : historyReady?'Nenhuma registrada':'Consulta não confirmada'}
               </span>
             </div>
             {lastSync ? (
@@ -92,7 +94,7 @@ const SigtapSyncPanel: React.FC = () => {
               </>
             ) : (
               <Badge variant="outline" className="text-amber-600 border-amber-300">
-                <AlertCircle className="w-3 h-3 mr-1" /> Aguardando importação
+                <AlertCircle className="w-3 h-3 mr-1" /> {historyReady?"Aguardando importação":"Histórico não confirmado"}
               </Badge>
             )}
           </div>
@@ -103,7 +105,7 @@ const SigtapSyncPanel: React.FC = () => {
       <SigtapZipImport />
 
       {/* History */}
-      {history.length > 0 && (
+      {historyReady&&history.length > 0 && (
         <Card className="shadow-card border-0">
           <CardContent className="p-5">
             <h4 className="font-semibold text-sm mb-3">Histórico de importações</h4>

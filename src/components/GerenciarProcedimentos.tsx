@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Search, Stethoscope, Users, ChevronDown, Tag, Loader2, Plus, Pencil, Trash2, X, Globe, Lock } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import {useAdministrativeConfigSection} from "@/hooks/useProntuarioSettings";
+import {configObject} from "@/lib/configSectionGuard";
+import {readCompleteCatalog} from "@/lib/adminCatalog";
+import {confirmKeys} from "@/lib/adminIntegrations";
 import { supabase } from "@/integrations/supabase/client";
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from "@/contexts/AuthContext";
@@ -103,79 +107,55 @@ const GerenciarProcedimentos: React.FC = () => {
   const isGlobalAdmin = user?.usuario === 'admin.sms' || (user?.role === 'master' && !user?.unidadeId);
   const [sigtapDisponibilizarTodos, setSigtapDisponibilizarTodos] = useState<boolean>(false);
   const [savingSigtapCfg, setSavingSigtapCfg] = useState(false);
+  const [configReady,setConfigReady]=useState(false);
+  const [catalogFailed,setCatalogFailed]=useState(false);
+  const cfgLock=useRef(false),linkLock=useRef(false);
+  const {load:loadSection,save:writeSection}=useAdministrativeConfigSection("config_sigtap");
   // Escopo do toggle: global (admin global) ou da unidade do master atual
   const sigtapScope: 'global' | 'unidade' = isGlobalAdmin ? 'global' : 'unidade';
 
-  const loadSigtapConfig = async () => {
-    try {
-      const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-      const cfg = ((data?.configuracoes as any) || {}) as Record<string, any>;
-      const sig = (cfg.config_sigtap || {}) as Record<string, any>;
-      const porUnidade = (sig.por_unidade || {}) as Record<string, { disponibilizarTodos?: boolean }>;
-      if (sigtapScope === 'unidade' && userUnidadeId && porUnidade[userUnidadeId] && typeof porUnidade[userUnidadeId].disponibilizarTodos === 'boolean') {
-        setSigtapDisponibilizarTodos(!!porUnidade[userUnidadeId].disponibilizarTodos);
-      } else {
-        setSigtapDisponibilizarTodos(!!sig.disponibilizarTodos);
-      }
-    } catch (e) {
-      console.error('Erro ao carregar config SIGTAP', e);
-    }
+  const loadSigtapConfig=async()=>{
+    setConfigReady(false);
+    try{const raw=await loadSection(),sig=raw===undefined?{}:configObject(raw);
+      const per=sig.por_unidade===undefined?{}:configObject(sig.por_unidade);
+      const unit=per[userUnidadeId]===undefined?{}:configObject(per[userUnidadeId]);
+      setSigtapDisponibilizarTodos(sigtapScope==='unidade'&&typeof unit.disponibilizarTodos==='boolean'?unit.disponibilizarTodos:!!sig.disponibilizarTodos);setConfigReady(true);
+    }catch{toast.error('Configuração SIGTAP não confirmada.');}
   };
-
-  const toggleSigtapDisponibilizarTodos = async (next: boolean) => {
-    if (!isMaster) {
-      toast.error('Apenas o perfil Master pode alterar esta configuração');
-      return;
-    }
-    setSavingSigtapCfg(true);
-    const previous = sigtapDisponibilizarTodos;
-    setSigtapDisponibilizarTodos(next); // otimista
-    try {
-      const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-      const cfg = ((data?.configuracoes as any) || {}) as Record<string, any>;
-      const sig = { ...(cfg.config_sigtap || {}) } as Record<string, any>;
-      if (sigtapScope === 'unidade' && userUnidadeId) {
-        const porUnidade = { ...(sig.por_unidade || {}) } as Record<string, { disponibilizarTodos?: boolean }>;
-        porUnidade[userUnidadeId] = { ...(porUnidade[userUnidadeId] || {}), disponibilizarTodos: next };
-        sig.por_unidade = porUnidade;
-      } else {
-        sig.disponibilizarTodos = next;
-      }
-      const newCfg = { ...cfg, config_sigtap: sig };
-      const { error } = await supabase.from('system_config').upsert({ id: 'default', configuracoes: newCfg as any, updated_at: new Date().toISOString() });
-      if (error) throw error;
-      toast.success(next ? 'Modo geral ativado: procedimentos liberados para todos.' : 'Modo por especialidade ativado.');
-    } catch (e) {
-      console.error(e);
-      setSigtapDisponibilizarTodos(previous);
-      toast.error('Erro ao salvar configuração. Tente novamente.');
-    } finally {
-      setSavingSigtapCfg(false);
-    }
+  const toggleSigtapDisponibilizarTodos=async(next:boolean)=>{
+    if(!isMaster||!configReady||cfgLock.current||(sigtapScope==='unidade'&&!userUnidadeId))return;
+    if(!window.confirm('Alterar a disponibilidade de procedimentos neste escopo?'))return;
+    cfgLock.current=true;setSavingSigtapCfg(true);
+    try{
+      const ok=await writeSection(previous=>{
+        const sig=previous===undefined?{}:configObject(previous);
+        if(sigtapScope==='global')return {...sig,disponibilizarTodos:next};
+        const per=sig.por_unidade===undefined?{}:configObject(sig.por_unidade);
+        return {...sig,por_unidade:{...per,[userUnidadeId]:{...(per[userUnidadeId]===undefined?{}:configObject(per[userUnidadeId])),disponibilizarTodos:next}}};
+      });
+      if(!ok)throw Error('Gravação não confirmada.');setSigtapDisponibilizarTodos(next);toast.success('Disponibilidade SIGTAP confirmada.');
+    }catch{setConfigReady(false);toast.error('Gravação não confirmada. Atualize a configuração.');}
+    finally{cfgLock.current=false;setSavingSigtapCfg(false);}
   };
+  useEffect(()=>{void loadSigtapConfig();},[userUnidadeId,sigtapScope,loadSection]);
 
-  useEffect(() => { loadSigtapConfig(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [userUnidadeId, sigtapScope]);
-
-  const load = async () => {
-    setLoading(true);
-    const [procsRes, vincRes] = await Promise.all([
-      (supabase as any)
-        .from("sigtap_procedimentos")
-        .select("codigo, nome, descricao, especialidade, total_cids, origem, valor, ativo")
-        .eq("ativo", true)
-        .order("especialidade")
-        .order("nome"),
-      (supabase as any).from("procedimento_profissionais").select("procedimento_codigo, profissional_id"),
-    ]);
-
-    setProcs(procsRes.data || []);
-    const map = new Map<string, Set<string>>();
-    (vincRes.data || []).forEach((v: any) => {
-      if (!map.has(v.procedimento_codigo)) map.set(v.procedimento_codigo, new Set());
-      map.get(v.procedimento_codigo)!.add(v.profissional_id);
-    });
-    setLinks(map);
-    setLoading(false);
+  const load=async()=>{
+    setLoading(true);setCatalogFailed(false);
+    try{
+      const [catalog,bindings]=await Promise.all([
+        readCompleteCatalog<SigtapProc&{id:string}>(async(from,to)=>{
+          const {data,error,count}=await supabase.from('sigtap_procedimentos').select('codigo,nome,descricao,especialidade,total_cids,origem,valor,ativo',{count:'exact'}).eq('ativo',true).order('codigo').range(from,to);
+          if(error||!data)throw Error('Catálogo não confirmado.');return {rows:data.map(r=>({...r,id:r.codigo})) as (SigtapProc&{id:string})[],count};
+        },500),
+        readCompleteCatalog<{id:string;procedimento_codigo:string;profissional_id:string}>(async(from,to)=>{
+          const {data,error,count}=await supabase.from('procedimento_profissionais').select('procedimento_codigo,profissional_id',{count:'exact'}).order('procedimento_codigo').order('profissional_id').range(from,to);
+          if(error||!data)throw Error('Vínculos não confirmados.');return {rows:data.map(r=>({...r,id:r.procedimento_codigo+'|'+r.profissional_id})),count};
+        },500)
+      ]);
+      setProcs(catalog.sort((a,b)=>a.especialidade.localeCompare(b.especialidade)||a.nome.localeCompare(b.nome)));
+      const map=new Map<string,Set<string>>();for(const row of bindings){if(!map.has(row.procedimento_codigo))map.set(row.procedimento_codigo,new Set());map.get(row.procedimento_codigo)!.add(row.profissional_id);}setLinks(map);
+    }catch{setCatalogFailed(true);toast.error('Catálogo ou vínculos não confirmados.');}
+    finally{setLoading(false);}
   };
 
   useEffect(() => {
@@ -236,27 +216,32 @@ const GerenciarProcedimentos: React.FC = () => {
   };
 
   const saveLinks = async () => {
-    if (!manageProc) return;
-    setSavingLinks(true);
+    if (!manageProc||catalogFailed||loading||linkLock.current||!isMaster) return;
+    if(!window.confirm("Salvar os vínculos deste procedimento?"))return;
+    linkLock.current=true;setSavingLinks(true);
     try {
       const current = links.get(manageProc.codigo) || new Set();
+      const actual=await readCompleteCatalog<{id:string}>(async(from,to)=>{const {data,error,count}=await supabase.from("procedimento_profissionais").select("profissional_id",{count:"exact"}).eq("procedimento_codigo",manageProc.codigo).order("profissional_id").range(from,to);if(error||!data)throw Error("Vínculos não confirmados.");return {rows:data.map(r=>({id:r.profissional_id})),count};});
+      if(!confirmKeys([...current],actual.map(r=>r.id)))throw Error("Vínculos alterados. Atualize a consulta.");
       const toAdd = [...selectedProfs].filter((id) => !current.has(id));
       const toRemove = [...current].filter((id) => !selectedProfs.has(id));
 
       if (toRemove.length > 0) {
-        await (supabase as any)
+        const {data,error}=await supabase
           .from("procedimento_profissionais")
           .delete()
           .eq("procedimento_codigo", manageProc.codigo)
-          .in("profissional_id", toRemove);
+          .in("profissional_id", toRemove).select("profissional_id");
+        if(error||!confirmKeys(toRemove,data?.map(r=>r.profissional_id)??null))throw Error("Remoção não confirmada.");
       }
       if (toAdd.length > 0) {
-        await (supabase as any).from("procedimento_profissionais").insert(
+        const {data,error}=await supabase.from("procedimento_profissionais").insert(
           toAdd.map((profissional_id) => ({
             procedimento_codigo: manageProc.codigo,
             profissional_id,
           })),
-        );
+        ).select("profissional_id");
+        if(error||!confirmKeys(toAdd,data?.map(r=>r.profissional_id)??null))throw Error("Inclusão não confirmada.");
       }
 
       const newMap = new Map(links);
@@ -266,9 +251,9 @@ const GerenciarProcedimentos: React.FC = () => {
       toast.success("Vínculos atualizados.");
       setManageProc(null);
     } catch (e: any) {
-      toast.error("Erro ao salvar: " + (e.message || ""));
+      setCatalogFailed(true);toast.error("Operação não confirmada; vínculos podem estar parcialmente alterados. Recarregue.");
     } finally {
-      setSavingLinks(false);
+      linkLock.current=false;setSavingLinks(false);
     }
   };
 
@@ -316,6 +301,7 @@ const GerenciarProcedimentos: React.FC = () => {
   };
 
   const saveCustom = async () => {
+    if(catalogFailed||loading||savingCustom)return;
     if (form.nome.trim().length < 3) return toast.error("Nome deve ter ao menos 3 caracteres.");
     if (!form.especialidade) return toast.error("Selecione a especialidade.");
     setSavingCustom(true);
@@ -366,6 +352,7 @@ const GerenciarProcedimentos: React.FC = () => {
   };
 
   const handleDelete = async (p: SigtapProc) => {
+    if(catalogFailed||loading||savingCustom)return;
     if (!confirm(`Excluir o procedimento "${p.nome}"?`)) return;
     try {
       await procedureService.deleteCustom(p.codigo);
@@ -376,9 +363,11 @@ const GerenciarProcedimentos: React.FC = () => {
     }
   };
 
+  if(catalogFailed)return <Card><CardContent className="p-4 space-y-2"><p role="alert">Catálogo ou vínculos não confirmados. Atualize antes de editar.</p><Button onClick={()=>void load()}>Atualizar procedimentos</Button></CardContent></Card>;
   return (
     <Card className="shadow-card border-0">
       <CardContent className="p-5">
+        {!configReady&&<Button variant="outline" size="sm" disabled={savingSigtapCfg} onClick={()=>void loadSigtapConfig()}>Atualizar disponibilidade SIGTAP</Button>}
         <div className="flex items-center gap-3 mb-4 flex-wrap">
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
             <Stethoscope className="w-5 h-5 text-primary" />
