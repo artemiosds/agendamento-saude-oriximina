@@ -28,8 +28,6 @@ import {
   Stethoscope, Activity, Monitor, Network
 } from 'lucide-react';
 import EditorProntuarioConfig from '@/components/EditorProntuarioConfig';
-import TemplateEditor from '@/components/TemplateEditor';
-import CarimboConfig from '@/components/CarimboConfig';
 import { Stamp } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSearchParams, Navigate } from 'react-router-dom';
@@ -498,15 +496,7 @@ const Configuracoes: React.FC = () => {
         return <ConfigMedicamentosExames />;
 
       case 'impressao':
-        return (
-          <div className="space-y-6">
-            <ConfigImpressaoDocumentos />
-            <Separator />
-            <TemplateEditor />
-            <Separator />
-            <CarimboConfig />
-          </div>
-        );
+        return <ConfigImpressaoDocumentos />;
 
       case 'especialidades':
         return <ConfigEspecialidades />;

@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type {Json} from '@/integrations/supabase/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,6 +50,12 @@ const CarimboConfig: React.FC = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadFailed,setLoadFailed]=useState(false);
+  const [saveFailed,setSaveFailed]=useState(false);
+  const [status,setStatus]=useState('');
+  const writeLock=useRef(false);
+  const baseline=useRef<{id:string;version:string;owner:string}|null>(null);
+  const generation=useRef(0);
   const [uploading, setUploading] = useState<'carimbo' | 'assinatura' | null>(null);
   const [carimbo, setCarimbo] = useState<CarimboRecord>({
     profissional_id: '', tipo: 'digital', nome: '', conselho: 'CREFITO',
@@ -56,68 +63,84 @@ const CarimboConfig: React.FC = () => {
     custom_data: { ...DEFAULT_CD },
   });
 
-  useEffect(() => { if (user?.id) loadCarimbo(); }, [user?.id]);
-
-  const loadCarimbo = async () => {
-    setLoading(true);
+  const confirmSession=useCallback(async()=>{
+    const {data,error}=await supabase.auth.getSession();
+    if(!user?.id||!user.authUserId||error||data.session?.user.id!==user.authUserId)throw Error('Sessão profissional não confirmada.');
+  },[user?.id,user?.authUserId]);
+  const loadCarimbo = useCallback(async () => {
+    const request=++generation.current;
+    baseline.current=null;setLoading(true);setLoadFailed(false);setSaveFailed(false);setStatus('');
     try {
-      const { data } = await supabase.from('profissionais_carimbo').select('*').eq('profissional_id', user!.id).maybeSingle();
-      if (data) {
-        const rec = data as any;
-        setCarimbo({ ...rec, custom_data: { ...DEFAULT_CD, ...(rec.custom_data || {}) } });
-      } else {
-        setCarimbo(prev => ({ ...prev, profissional_id: user!.id, nome: user!.nome || '' }));
+      await confirmSession();
+      const { data,error } = await supabase.from('profissionais_carimbo').select('*').eq('profissional_id', user!.id).maybeSingle();
+      if(error)throw Error('Consulta não confirmada.');
+      await confirmSession();
+      if(request!==generation.current)return;
+      if(data){
+        baseline.current={id:data.id,version:data.updated_at,owner:data.profissional_id};
+        setCarimbo({...data,tipo:data.tipo as CarimboRecord['tipo'],custom_data:{...DEFAULT_CD,...(data.custom_data as CarimboCustomData)}});
+      }else{
+        setCarimbo({profissional_id:user!.id,tipo:'digital',nome:user!.nome||'',conselho:'CREFITO',numero_registro:'',uf:'PA',especialidade:'',cargo:'',imagem_url:'',custom_data:{...DEFAULT_CD}});
       }
-    } catch (e) { console.error(e); }
-    setLoading(false);
-  };
-
+      setStatus('Carimbo carregado');
+    }catch{if(request===generation.current)setLoadFailed(true);}
+    finally{if(request===generation.current)setLoading(false);}
+  },[confirmSession,user?.id,user?.nome]);
+  useEffect(()=>{void loadCarimbo();return()=>{generation.current++;};},[loadCarimbo]);
   const handleSave = async () => {
-    setSaving(true);
+    if(writeLock.current||loading||loadFailed||saveFailed||uploading)return;
+    writeLock.current=true;setSaving(true);setStatus('Salvando…');
     try {
+      await confirmSession();
+      if(carimbo.profissional_id!==user!.id)throw Error('Carimbo de outra sessão.');
+      const current=baseline.current;
       const payload = {
         profissional_id: user!.id, tipo: carimbo.tipo, nome: carimbo.nome,
         conselho: carimbo.conselho, numero_registro: carimbo.numero_registro, uf: carimbo.uf,
         especialidade: carimbo.especialidade, cargo: carimbo.cargo, imagem_url: carimbo.imagem_url,
-        custom_data: carimbo.custom_data as any,
+        custom_data: carimbo.custom_data as Json,
+        updated_at:new Date(Math.max(Date.now(),current?Date.parse(current.version)+1:0)).toISOString(),
       };
-      if (carimbo.id) {
-        await supabase.from('profissionais_carimbo').update(payload as any).eq('id', carimbo.id);
-      } else {
-        await supabase.from('profissionais_carimbo').insert(payload as any);
-      }
-      toast.success('✅ Carimbo salvo com sucesso!');
-      loadCarimbo();
-    } catch (e: any) {
-      toast.error('Erro ao salvar: ' + e.message);
-    }
-    setSaving(false);
+      if(current&&current.owner!==user!.id)throw Error('Carimbo de outra sessão.');
+      const {data,error}=current
+        ?await supabase.from('profissionais_carimbo').update(payload).eq('id',current.id).eq('profissional_id',user!.id).eq('updated_at',current.version).select('id,updated_at,profissional_id').maybeSingle()
+        :await supabase.from('profissionais_carimbo').insert(payload).select('id,updated_at,profissional_id').single();
+      if(error||!data||data.profissional_id!==user!.id)throw Error('Gravação não confirmada. Confira o registro antes de repetir.');
+      await confirmSession();
+      baseline.current={id:data.id,version:data.updated_at,owner:data.profissional_id};
+      setCarimbo(prev=>({...prev,id:data.id}));setStatus('Gravação confirmada');toast.success('Carimbo salvo com sucesso!');
+    }catch(error){setSaveFailed(true);setStatus('Gravação não confirmada. Alterações mantidas nesta tela.');toast.error(error instanceof Error?error.message:'Gravação não confirmada.');}
+    finally{writeLock.current=false;setSaving(false);}
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, kind: 'carimbo' | 'assinatura') => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file||writeLock.current||loading||loadFailed||saveFailed||uploading) return;
     if (file.size > 2 * 1024 * 1024) { toast.error('Imagem deve ter no máximo 2MB'); return; }
     if (!['image/jpeg', 'image/png'].includes(file.type)) { toast.error('Apenas JPG ou PNG'); return; }
-    setUploading(kind);
+    writeLock.current=true;setUploading(kind);
     try {
-      const ext = file.name.split('.').pop();
-      const path = `${user!.id}/${kind}-${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from('carimbos').upload(path, file, { upsert: true });
+      await confirmSession();
+      const ext = file.type==='image/png'?'png':'jpg';
+      const path = `${user!.id}/${kind}-${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage.from('carimbos').upload(path, file, { upsert: false });
       if (error) throw error;
+      await confirmSession();
       const { data: urlData } = supabase.storage.from('carimbos').getPublicUrl(path);
       if (kind === 'carimbo') setCarimbo(prev => ({ ...prev, imagem_url: urlData.publicUrl }));
       else setCarimbo(prev => ({ ...prev, custom_data: { ...prev.custom_data, assinatura_url: urlData.publicUrl } }));
-      toast.success('Imagem enviada!');
+      setStatus('Imagem enviada. Salve o carimbo para confirmar o vínculo.');
+      toast.success('Imagem enviada. Salve o carimbo para aplicar.');
     } catch (e: any) {
       toast.error('Erro no upload: ' + e.message);
     }
-    setUploading(null);
+    writeLock.current=false;setUploading(null);
   };
 
   const update = (field: keyof CarimboRecord, value: any) => setCarimbo(prev => ({ ...prev, [field]: value }));
   const updateCD = (field: keyof CarimboCustomData, value: any) => setCarimbo(prev => ({ ...prev, custom_data: { ...prev.custom_data, [field]: value } }));
 
+  if(loadFailed)return <Card><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível consultar seu carimbo. Edição bloqueada.</p><Button onClick={()=>void loadCarimbo()}>Tentar novamente</Button></CardContent></Card>;
   if (loading) return <div className="flex items-center gap-2 p-4"><Loader2 className="animate-spin w-4 h-4" /> Carregando...</div>;
 
   const cd = carimbo.custom_data;
@@ -131,6 +154,9 @@ const CarimboConfig: React.FC = () => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
+        <p role="status" className="text-xs text-muted-foreground">{status}</p>
+        {saveFailed&&<Button size="sm" variant="outline" onClick={()=>{if(window.confirm('Descartar rascunho e consultar novamente?'))void loadCarimbo();}}>Recarregar carimbo</Button>}
+        <fieldset disabled={saving||!!uploading||saveFailed} className="space-y-5 min-w-0">
         <RadioGroup value={carimbo.tipo} onValueChange={v => update('tipo', v)} className="flex flex-wrap gap-6">
           <div className="flex items-center gap-2"><RadioGroupItem value="digital" id="tipo-digital" /><Label htmlFor="tipo-digital">Carimbo digital (gerado pelo sistema)</Label></div>
           <div className="flex items-center gap-2"><RadioGroupItem value="imagem" id="tipo-imagem" /><Label htmlFor="tipo-imagem">Imagem do carimbo físico</Label></div>
@@ -230,7 +256,8 @@ const CarimboConfig: React.FC = () => {
           </div>
         </div>
 
-        <Button onClick={handleSave} disabled={saving} className="gap-1.5">
+        </fieldset>
+        <Button onClick={handleSave} disabled={saving||!!uploading||saveFailed} className="gap-1.5">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Stamp className="w-4 h-4" />}
           Salvar Carimbo
         </Button>

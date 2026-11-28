@@ -7,7 +7,7 @@ import { createConfigQueue, snapshotConfigPatch } from '@/lib/configWriteQueue';
 
 type Baseline = { key: string; identity: string; raw: unknown };
 /** Scoped to administrative editors, not clinical records or professional preferences. */
-export function useProntuarioSettings(key: string) {
+export function useAdministrativeConfigSection(key: string) {
   const { user } = useAuth();
   const { atualizarConfiguracao } = useConfiguracao();
   const identity = user?.role === 'master' && user.ativo === true ? user.authUserId : undefined;
@@ -35,3 +35,6 @@ export function useProntuarioSettings(key: string) {
   }), [identity, key, atualizarConfiguracao]);
   return { load, save };
 }
+
+// Existing clinical configuration editor API remains compatible.
+export const useProntuarioSettings = useAdministrativeConfigSection;

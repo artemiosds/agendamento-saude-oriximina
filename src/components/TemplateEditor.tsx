@@ -272,6 +272,9 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
   const [categoria, setCategoria] = useState<Categoria>('Clínico');
   const [camposManuais, setCamposManuais] = useState<ManualField[]>([]);
   const [loading, setLoading] = useState(!!templateId);
+  const [loadFailed,setLoadFailed]=useState(false);
+  const [loadAttempt,setLoadAttempt]=useState(0);
+  const saveLock=useRef(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -328,16 +331,15 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
   useEffect(() => {
     if (!templateId) return;
     (async () => {
-      setLoading(true);
+      setLoading(true);setLoadFailed(false);
+      try {
       const { data, error } = await supabase
         .from('document_templates')
         .select('id, nome, tipo, conteudo, blocos_clinicos, ativo')
         .eq('id', templateId)
         .maybeSingle();
       if (error || !data) {
-        toast.error('Erro ao carregar template');
-        setLoading(false);
-        return;
+        throw Error('Leitura do modelo não confirmada.');
       }
       setNome(data.nome || '');
       setCategoria((CATEGORIAS.includes(data.tipo as Categoria) ? data.tipo : 'Clínico') as Categoria);
@@ -356,9 +358,10 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
         editor.commands.setContent(normalizeTemplateAliases(data.conteudo || '<p></p>'));
         setDirty(false);
       }
-      setLoading(false);
+      } catch {setLoadFailed(true);toast.error('Não foi possível carregar o modelo. Edição bloqueada.');}
+      finally {setLoading(false);}
     })();
-  }, [templateId, editor]);
+  }, [templateId, editor,loadAttempt]);
 
   // Apply seed (ready template) when creating new
   useEffect(() => {
@@ -464,8 +467,11 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
   // -------- Save --------
   const handleSave = async () => {
     if (!nome.trim()) { toast.error('Informe o nome do documento'); return; }
-    if (!editor || editor.isDestroyed) return;
-    setSaving(true);
+    if (!editor || editor.isDestroyed || loading || loadFailed || saveLock.current) return;
+    saveLock.current=true;setSaving(true);
+    try {
+    const {data:auth,error:authError}=await supabase.auth.getSession();
+    if(authError||!user?.authUserId||auth.session?.user.id!==user.authUserId)throw Error('Sessão não confirmada.');
     const html = normalizeTemplateAliases(safeHTML(editor));
     const { data, error } = await (supabase as any).rpc('save_document_template', {
       p_template_id: templateId || null,
@@ -510,11 +516,13 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
     toast.success(templateId ? 'Template atualizado' : 'Template criado');
 
     setDirty(false);
-    setSaving(false);
     onDone();
+    } catch(error){toast.error(error instanceof Error?error.message:'Gravação não confirmada.');}
+    finally{saveLock.current=false;setSaving(false);}
   };
 
   const handleCancel = () => {
+    if(saveLock.current)return;
     if (dirty && !window.confirm('Descartar alterações não salvas?')) return;
     onDone();
   };
@@ -545,6 +553,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
     return html;
   };
 
+  if(loadFailed)return <div className="rounded-lg border p-4 space-y-3"><p role="alert">Modelo não carregado. Edição indisponível para evitar sobrescrita.</p><div className="flex gap-2"><Button onClick={()=>setLoadAttempt(n=>n+1)}>Tentar novamente</Button><Button variant="outline" onClick={handleCancel}>Voltar</Button></div></div>;
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
@@ -1113,7 +1122,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
 
       {/* Actions */}
       <div className="flex justify-end gap-2 pt-2 border-t">
-        <Button variant="outline" onClick={handleCancel}>Cancelar</Button>
+        <Button variant="outline" disabled={saving} onClick={handleCancel}>Cancelar</Button>
         <Button variant="outline" onClick={() => setPreviewOpen(true)} className="gap-1.5"><Eye className="w-4 h-4" /> Preview</Button>
         <Button onClick={handleSave} disabled={saving} className="gap-1.5">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar Template
@@ -1166,11 +1175,14 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
 
 // -------- List (default export) --------
 const TemplateEditor: React.FC = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission,user } = useAuth();
   const canManage = useMemo(() => hasPermission(['master', 'coordenador']), [hasPermission]);
 
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [listFailed,setListFailed]=useState(false);
+  const [deleting,setDeleting]=useState(false);
+  const deleteLock=useRef(false);
   const [editingId, setEditingId] = useState<string | null | undefined>(undefined); // undefined=lista, null=novo, string=id
   const [seed, setSeed] = useState<{ nome: string; tipo: string; conteudo: string; blocos_clinicos?: any } | null>(null);
 
@@ -1196,24 +1208,27 @@ const TemplateEditor: React.FC = () => {
   }, [templates, hiddenReady]);
 
   const load = async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from('document_templates')
-      .select('id, nome, tipo, conteudo, ativo, blocos_clinicos')
-      .order('nome');
-    setTemplates((data as any) || []);
-    setLoading(false);
+    setLoading(true);setListFailed(false);
+    try {
+      const {data,error}=await supabase.from('document_templates').select('id, nome, tipo, conteudo, ativo, blocos_clinicos').order('nome');
+      if(error||!data)throw Error('Consulta não confirmada.');
+      setTemplates(data as TemplateRow[]);
+    }catch{setListFailed(true);}
+    finally{setLoading(false);}
   };
-
   const handleDelete = async (t: TemplateRow) => {
-    if (!window.confirm(`Excluir o modelo "${t.nome}"? Esta ação não pode ser desfeita.`)) return;
-    const { error } = await supabase.from('document_templates').delete().eq('id', t.id);
-    if (error) { toast.error('Erro ao excluir: ' + error.message); return; }
-    toast.success('Modelo excluído');
-    load();
+    if(!canManage||listFailed||deleteLock.current||!window.confirm(`Excluir o modelo "${t.nome}"? Esta ação não pode ser desfeita.`))return;
+    deleteLock.current=true;setDeleting(true);
+    try{
+      const {data:auth,error:authError}=await supabase.auth.getSession();
+      if(authError||!user?.authUserId||auth.session?.user.id!==user.authUserId)throw Error('Sessão não confirmada.');
+      const {data,error}=await supabase.from('document_templates').delete().eq('id',t.id).select('id').maybeSingle();
+      if(error||data?.id!==t.id)throw Error('Exclusão não confirmada. Confira os modelos antes de repetir.');
+      toast.success('Modelo excluído');
+    }catch(error){toast.error(error instanceof Error?error.message:'Exclusão não confirmada.');}
+    finally{await load();deleteLock.current=false;setDeleting(false);}
   };
-
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if(canManage)void load(); }, [canManage]);
 
   // Auto-abrir modo criação quando URL contiver ?novo=1
   useEffect(() => {
@@ -1245,12 +1260,12 @@ const TemplateEditor: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-primary" />
           <h3 className="text-lg font-semibold">Modelos de Documentos</h3>
         </div>
-        <Button onClick={() => { setSeed(null); setEditingId(null); }} className="gap-1.5">
+        <Button disabled={loading||listFailed||deleting} onClick={() => { setSeed(null); setEditingId(null); }} className="gap-1.5">
           <Plus className="w-4 h-4" /> Criar novo tipo de documento
         </Button>
       </div>
@@ -1259,7 +1274,7 @@ const TemplateEditor: React.FC = () => {
         <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
           <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
         </div>
-      ) : templates.length === 0 && readyRows.length === 0 ? (
+      ) : listFailed ? (<div role="alert" className="rounded-lg border p-4 space-y-2"><p>Não foi possível consultar os modelos.</p><Button onClick={()=>void load()}>Tentar novamente</Button></div>) : templates.length === 0 && readyRows.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-8">Nenhum template cadastrado.</p>
       ) : (
         <div className="border rounded-lg overflow-hidden">
@@ -1280,10 +1295,10 @@ const TemplateEditor: React.FC = () => {
                   <td className="p-2">{t.ativo ? 'Ativo' : 'Inativo'}</td>
                   <td className="p-2 text-right">
                     <div className="flex justify-end gap-1.5">
-                      <Button size="sm" variant="outline" className="gap-1" onClick={() => { setSeed(null); setEditingId(t.id); }}>
+                      <Button size="sm" variant="outline" className="gap-1" disabled={deleting} onClick={() => { setSeed(null); setEditingId(t.id); }}>
                         <Pencil className="w-3.5 h-3.5" /> Editar
                       </Button>
-                      <Button size="sm" variant="outline" className="gap-1 text-destructive hover:text-destructive" onClick={() => handleDelete(t)}>
+                      <Button size="sm" variant="outline" className="gap-1 text-destructive hover:text-destructive" disabled={deleting} onClick={() => handleDelete(t)}>
                         <Trash2 className="w-3.5 h-3.5" /> Excluir
                       </Button>
                     </div>
