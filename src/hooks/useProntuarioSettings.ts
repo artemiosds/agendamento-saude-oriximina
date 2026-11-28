@@ -12,8 +12,12 @@ export function useAdministrativeConfigSection(key: string,auditAcao?:string) {
   const { atualizarConfiguracao } = useConfiguracao();
   const identity = user?.role === 'master' && user.ativo === true ? user.authUserId : undefined;
   const baseline = useRef<Baseline | null>(null);
+  const generation=useRef(0);
+  const scope=useRef({identity,key});
+  if(scope.current.identity!==identity||scope.current.key!==key){scope.current={identity,key};generation.current++;baseline.current=null;}
   const queue = useRef(createConfigQueue());
   const load = useCallback(async () => {
+    const request=++generation.current;
     baseline.current = null;
     if (!identity) throw Error('Sessão administrativa não confirmada.');
     const { data, error } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
@@ -21,10 +25,14 @@ export function useAdministrativeConfigSection(key: string,auditAcao?:string) {
     const raw = configObject(data.configuracoes)[key];
     const { data: auth, error: authError } = await supabase.auth.getSession();
     if (authError || auth.session?.user.id !== identity) throw Error('Sessão alterada.');
+    if(request!==generation.current||scope.current.key!==key||scope.current.identity!==identity)throw Error('Consulta substituída por uma leitura mais recente.');
     baseline.current = { key, identity, raw: snapshotConfigPatch({ raw }).raw };
     return raw;
   }, [identity, key]);
-  const save = useCallback((build: (previous: unknown) => unknown) => queue.current(async () => {
+  const save = useCallback((build: (previous: unknown) => unknown) => {
+    const request=generation.current;
+    return queue.current(async () => {
+    if(request!==generation.current||scope.current.key!==key||scope.current.identity!==identity)throw Error('Rascunho de consulta anterior. Confira os valores atuais.');
     const current = baseline.current;
     if (!identity || !current || current.identity !== identity || current.key !== key) throw Error('Leitura ou sessão não confirmada. Nenhuma gravação realizada.');
     const value = snapshotConfigPatch({ value: build(current.raw) }).value;
@@ -32,7 +40,8 @@ export function useAdministrativeConfigSection(key: string,auditAcao?:string) {
     if (!ok) return false;
     if (baseline.current === current) baseline.current = { ...current, raw: value };
     return true;
-  }), [identity, key, atualizarConfiguracao,auditAcao]);
+    });
+  }, [identity, key, atualizarConfiguracao,auditAcao]);
   return { load, save };
 }
 

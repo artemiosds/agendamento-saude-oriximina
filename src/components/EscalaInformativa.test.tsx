@@ -8,6 +8,8 @@ const f = vi.hoisted(() => ({
   staff: [{ id: 'p1', nome: 'Pessoa fictícia', unidadeId: 'u1', role: 'profissional', ativo: true }],
   units: [{ id: 'u1', nome: 'Unidade fictícia', ativo: true }],
 }));
+vi.mock('@/contexts/OperacionalContext',()=>({useOperacional:()=>({disponibilidades:[]})}));
+vi.mock('@/contexts/PermissionsContext',()=>({usePermissions:()=>({loading:false,can:(module:string,action:string)=>module==='disponibilidade'&&(action==='can_view'||(f.role==='gestao'&&['can_create','can_edit'].includes(action)))})}));
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { role: f.role } }) }));
 vi.mock('@/hooks/useUnidadeFilter', () => ({ useUnidadeFilter: () => ({
   isGlobalAdmin: false, userUnidadeId: 'u1', profissionaisVisiveis: f.staff, unidadesVisiveis: f.units,

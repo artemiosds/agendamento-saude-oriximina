@@ -18,6 +18,8 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { role: "master", usuario: mocks.userUnit ? 'gestao.unidade' : "admin.sms", unidadeId: mocks.userUnit } }),
 }));
 
+vi.mock('@/contexts/OperacionalContext',()=>({useOperacional:()=>({funcionarios:[]})}));
+
 // UI tests control the filtered index; the real request strategy is tested separately.
 vi.mock('@/services/triageHistorySearch', async importOriginal => {
   const original = await importOriginal<typeof import('@/services/triageHistorySearch')>();

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { webcrypto } from "node:crypto";
 import JSZip from "jszip";
 import { beforeAll, describe, expect, it, vi } from "vitest";

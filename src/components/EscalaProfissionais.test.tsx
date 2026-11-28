@@ -14,7 +14,9 @@ vi.mock('@/hooks/useUnidadeFilter', () => ({ useUnidadeFilter: () => ({
   unidadesVisiveis: [{ id: 'u1', nome: 'Unidade local' }, { id: 'u2', nome: 'OUTRA UNIDADE' }],
   salasVisiveis: [{ id: 's1', nome: 'Sala de teste' }],
 }) }));
+vi.mock('@/contexts/PermissionsContext',()=>({usePermissions:()=>({loading:false,can:(module:string,action:string)=>module==='disponibilidade'&&['can_view','can_edit','can_delete'].includes(action)})}));
 vi.mock('@/contexts/OperacionalContext', () => ({ useOperacional: () => ({
+  configuracoes:{},refreshDisponibilidades:vi.fn(),refreshBloqueios:vi.fn(),refreshFuncionarios:vi.fn(),refreshConfiguracoes:vi.fn(),
   funcionarios: [
     { id: 'p1', nome: 'Profissional local', ativo: true, role: 'profissional', unidadeId: 'u1', profissao: 'Fisioterapia', cbo: '223605' },
     { id: 'p2', nome: 'PESSOA DE OUTRA UNIDADE', ativo: true, role: 'profissional', unidadeId: 'u2' },

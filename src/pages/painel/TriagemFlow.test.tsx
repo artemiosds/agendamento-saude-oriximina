@@ -35,9 +35,8 @@ describe('Triagem: bloqueio de valores antes da requisição', () => {
     await open(); const calls = f.from.mock.calls.length; const rpcCalls = f.rpc.mock.calls.length;
     fireEvent.change(screen.getByLabelText('Peso (kg)'), { target: { value } });
     expect(screen.getByRole('alert')).toHaveTextContent('Peso inválido. Informe um valor entre 0,5 kg e 400 kg.');
-    const confirm = screen.getByRole('button', { name: 'Seguir sem Enfermagem' });
+    const confirm = screen.getByRole('button', { name: 'Finalizar Triagem' });
     expect(confirm).toBeDisabled(); expect(screen.getByRole('button', { name: 'Salvar Rascunho' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Finalizar Triagem' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Concluir e preparar próximo' })).toBeDisabled();
     fireEvent.click(confirm); expect(f.rpc).toHaveBeenCalledTimes(rpcCalls); expect(f.from).toHaveBeenCalledTimes(calls);
   });
@@ -46,7 +45,7 @@ describe('Triagem: bloqueio de valores antes da requisição', () => {
     fireEvent.change(screen.getByLabelText('Altura (cm ou m)'), { target: { value: '1,56' } });
     expect(screen.getByLabelText('Peso (kg)')).toHaveValue('63.0');
     expect(screen.getByLabelText('Altura (cm ou m)')).toHaveValue('1.56');
-    expect(screen.getByRole('button', { name: 'Seguir sem Enfermagem' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Finalizar Triagem' })).toBeEnabled();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
@@ -57,7 +56,7 @@ describe('Triagem: conclusão atômica e erros recuperáveis', () => {
     fireEvent.change(screen.getByLabelText('Peso (kg)'), { target: { value: '63,0' } });
     fireEvent.change(screen.getByLabelText('Altura (cm ou m)'), { target: { value: '1,56' } });
     f.rpc.mockResolvedValueOnce({ data: { already_processed: false, status: 'apto_atendimento', agendamento: { id: 'ag1', status: 'apto_atendimento' }, fila: { id: 'ag1' } }, error: null });
-    fireEvent.click(screen.getByRole('button', { name: 'Seguir sem Enfermagem' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar Triagem' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(f.rpc).toHaveBeenLastCalledWith('concluir_triagem_atendimento', expect.objectContaining({ p_tecnico_id: 'tecnico1', p_dados_triagem: expect.objectContaining({ peso: 63, altura: 156, imc: 25.89 }), p_encaminhar_enfermagem: false }));
     expect(f.update).not.toHaveBeenCalled(); expect(f.log).not.toHaveBeenCalled();
@@ -67,10 +66,10 @@ describe('Triagem: conclusão atômica e erros recuperáveis', () => {
     f.rpc.mockResolvedValueOnce({ data: null, error: { code: '23514', message: 'Confira a altura' } });
     // Failure audit remains a separate diagnostic write, never a clinical fallback.
     f.from.mockReturnValueOnce({ insert: async () => ({ error: null }) });
-    fireEvent.click(screen.getByRole('button', { name: 'Seguir sem Enfermagem' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar Triagem' }));
     await waitFor(() => expect(f.toast.error).toHaveBeenCalledWith('Confira a altura'));
     expect(screen.getByRole('dialog')).toBeInTheDocument(); expect(screen.getByLabelText('Peso (kg)')).toHaveValue('63');
-    expect(screen.getByRole('button', { name: 'Seguir sem Enfermagem' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Finalizar Triagem' })).toBeEnabled();
     expect(f.update).not.toHaveBeenCalled();
   });
 });

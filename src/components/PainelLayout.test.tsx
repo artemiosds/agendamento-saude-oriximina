@@ -114,8 +114,9 @@ describe('jornadas do menu lateral', () => {
     account.licenses = { regulacao: false };
     const menu = mount('/painel');
     expect(menu.getByRole('button', { name: 'Recepção e Fluxo do Paciente' })).toHaveAttribute('aria-expanded', 'true');
-    expect(menu.getByRole('link', { name: 'Agenda Diária' })).toHaveAttribute('href', '/painel/agenda');
-    expect(menu.getByRole('link', { name: 'Pacientes' })).toBeInTheDocument();
+    const reception=within(document.getElementById('menu-grupo-recepcao')!);
+    expect(reception.getByRole('link', { name: 'Agenda Diária' })).toHaveAttribute('href', '/painel/agenda');
+    expect(reception.getByRole('link', { name: 'Pacientes' })).toBeInTheDocument();
     expect(menu.queryByRole('link', { name: 'Fila de Espera' })).toBeNull();
     expect(menu.queryByRole('button', { name: 'Gestão e Escalas' })).toBeNull();
     expect(menu.queryByRole('button', { name: 'Atendimento Clínico' })).toBeNull();

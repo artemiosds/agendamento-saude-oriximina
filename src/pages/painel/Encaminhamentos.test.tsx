@@ -75,10 +75,10 @@ describe('document-only referrals page', () => {
     h.list.mockResolvedValue(Array.from({ length: 23 }, (_, i) => received(`Paciente ${String(i).padStart(2, '0')}`)));
     mount(); await screen.findByText('Paciente 00');
     fireEvent.click(screen.getByRole('button', { name: 'Próxima' }));
-    expect(screen.getByText('Página 2 de 2')).toBeInTheDocument();
+    expect(screen.getAllByText('Página 2 de 2')).toHaveLength(2);
     vi.useFakeTimers();
     fireEvent.change(screen.getByLabelText('Buscar paciente nos recebidos'), { target: { value: 'Paciente 01' } });
-    expect(screen.getByText('Página 2 de 2')).toBeInTheDocument();
+    expect(screen.getAllByText('Página 2 de 2')).toHaveLength(2);
     await act(async () => { vi.advanceTimersByTime(360); });
     expect(screen.getByText('Paciente 01')).toBeInTheDocument();
     expect(screen.queryByText('Paciente 22')).not.toBeInTheDocument();

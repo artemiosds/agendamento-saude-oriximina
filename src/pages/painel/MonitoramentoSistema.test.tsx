@@ -15,9 +15,9 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 function countQuery(count: number | null, error: { message: string } | null = null) {
-  return Object.assign(Promise.resolve({ count, error }), {
-    gte: () => Promise.resolve({ count: error ? null : count, error }),
-  });
+  const result={count,error};
+  const builder={abortSignal:()=>Promise.resolve(result),gte:()=>builder,lte:()=>builder};
+  return builder;
 }
 
 beforeEach(() => {
@@ -27,7 +27,7 @@ beforeEach(() => {
   mocks.from.mockImplementation((table: string) => ({
     select: (_columns: string, options?: { head?: boolean }) => options?.head
       ? countQuery(table === 'treatment_sessions' ? 14 : 2, table === 'action_logs' ? { message: 'Consulta negada' } : null)
-      : { eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) },
+      : { eq: () => ({ order: () => ({limit:()=>({abortSignal:()=>Promise.resolve({data:[],count:0,error:null})})}) }) },
   }));
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({
     checked_at: '2026-11-16T12:00:00Z', database_bytes: 4096,
@@ -55,7 +55,7 @@ describe('Monitoramento do Sistema', () => {
   it('não interpreta uma falha do medidor como zero arquivos nem oferece exclusão', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));
     render(<MonitoramentoSistema />);
-    await screen.findByText('Não verificado');
+    await screen.findAllByText('Não verificado');
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Arquivos e Storage' }), { button: 0, ctrlKey: false });
     expect(screen.getByText(/Medidor de armazenamento ainda não disponível/)).toBeInTheDocument();
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Retenção' }), { button: 0, ctrlKey: false });
