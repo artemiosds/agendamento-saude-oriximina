@@ -109,7 +109,11 @@ const GerenciarProcedimentos: React.FC = () => {
   const [savingSigtapCfg, setSavingSigtapCfg] = useState(false);
   const [configReady,setConfigReady]=useState(false);
   const [catalogFailed,setCatalogFailed]=useState(false);
-  const cfgLock=useRef(false),linkLock=useRef(false);
+  const cfgLock=useRef(false),linkLock=useRef(false),customLock=useRef(false),editSeq=useRef(0);
+  const [cidReady,setCidReady]=useState(false);
+  const customBaseline=useRef<{codigo:string;version:string;cids:{codigo:string;descricao:string}[]}|null>(null);
+  const confirmMaster=async()=>{const {data,error}=await supabase.auth.getSession();if(error||!user?.authUserId||!isMaster||user.ativo!==true||data.session?.user.id!==user.authUserId)throw Error('Sessão não confirmada.');};
+  const readCids=async(codigo:string)=>readCompleteCatalog<{id:string;codigo:string;descricao:string}>(async(from,to)=>{const {data,error,count}=await supabase.from('sigtap_procedimento_cids').select('cid_codigo,cid_descricao',{count:'exact'}).eq('procedimento_codigo',codigo).order('cid_codigo').range(from,to);if(error||!data)throw Error('CIDs não confirmados.');return {rows:data.map(r=>({id:r.cid_codigo,codigo:r.cid_codigo,descricao:r.cid_descricao||''})),count};});
   const {load:loadSection,save:writeSection}=useAdministrativeConfigSection("config_sigtap");
   // Escopo do toggle: global (admin global) ou da unidade do master atual
   const sigtapScope: 'global' | 'unidade' = isGlobalAdmin ? 'global' : 'unidade';
@@ -220,6 +224,7 @@ const GerenciarProcedimentos: React.FC = () => {
     if(!window.confirm("Salvar os vínculos deste procedimento?"))return;
     linkLock.current=true;setSavingLinks(true);
     try {
+      await confirmMaster();
       const current = links.get(manageProc.codigo) || new Set();
       const actual=await readCompleteCatalog<{id:string}>(async(from,to)=>{const {data,error,count}=await supabase.from("procedimento_profissionais").select("profissional_id",{count:"exact"}).eq("procedimento_codigo",manageProc.codigo).order("profissional_id").range(from,to);if(error||!data)throw Error("Vínculos não confirmados.");return {rows:data.map(r=>({id:r.profissional_id})),count};});
       if(!confirmKeys([...current],actual.map(r=>r.id)))throw Error("Vínculos alterados. Atualize a consulta.");
@@ -263,30 +268,19 @@ const GerenciarProcedimentos: React.FC = () => {
   }, [procs]);
 
   // ===== Custom CRUD =====
-  const openCreate = () => {
-    setEditingCodigo(null);
-    setForm(emptyForm);
-    setCustomOpen(true);
-  };
-
-  const openEdit = (p: SigtapProc) => {
-    setEditingCodigo(p.codigo);
-    setForm({
-      codigo: p.codigo,
-      nome: p.nome,
-      descricao: p.descricao || "",
-      especialidade: p.especialidade,
-      valor: p.valor != null ? String(p.valor) : "",
-      cids: cidsByProc[p.codigo] || [],
-      cidInput: "",
-    });
-    if (!cidsByProc[p.codigo]) {
-      procedureService.getCidsForProcedure(p.codigo).then((cids) => {
-        setCidsByProc((prev) => ({ ...prev, [p.codigo]: cids }));
-        setForm((f) => ({ ...f, cids }));
-      });
-    }
-    setCustomOpen(true);
+  const openCreate=()=>{if(customLock.current||catalogFailed)return;editSeq.current++;customBaseline.current=null;setEditingCodigo(null);setForm(emptyForm);setCidReady(true);setCustomOpen(true);};
+  const openEdit=async(p:SigtapProc)=>{
+    if(customLock.current||catalogFailed||p.origem!=='PERSONALIZADO')return;
+    const seq=++editSeq.current;customBaseline.current=null;setCidReady(false);setEditingCodigo(p.codigo);setForm({...emptyForm,codigo:p.codigo,nome:p.nome,descricao:p.descricao||'',especialidade:p.especialidade,valor:p.valor==null?'':String(p.valor)});setCustomOpen(true);
+    try{
+      const {data,error}=await supabase.from('sigtap_procedimentos').select('codigo,updated_at,nome,descricao,especialidade,valor').eq('codigo',p.codigo).eq('origem','PERSONALIZADO').maybeSingle();
+      if(error||!data)throw Error('Procedimento não confirmado.');
+      const cids=(await readCids(p.codigo)).map(({codigo,descricao})=>({codigo,descricao}));
+      if(seq!==editSeq.current)return;
+      customBaseline.current={codigo:p.codigo,version:data.updated_at,cids};
+      setForm({...emptyForm,codigo:p.codigo,nome:data.nome,descricao:data.descricao,especialidade:data.especialidade,valor:data.valor==null?'':String(data.valor),cids});
+      setCidReady(true);
+    }catch{if(seq===editSeq.current)toast.error('CIDs ou procedimento não confirmados. Feche e abra novamente.');}
   };
 
   const addCidToForm = () => {
@@ -300,70 +294,61 @@ const GerenciarProcedimentos: React.FC = () => {
     setForm((f) => ({ ...f, cids: f.cids.filter((c) => c.codigo !== code) }));
   };
 
-  const saveCustom = async () => {
-    if(catalogFailed||loading||savingCustom)return;
-    if (form.nome.trim().length < 3) return toast.error("Nome deve ter ao menos 3 caracteres.");
-    if (!form.especialidade) return toast.error("Selecione a especialidade.");
-    setSavingCustom(true);
-    try {
-      const valorNum = form.valor ? parseFloat(form.valor.replace(",", ".")) : null;
-      if (editingCodigo) {
-        await procedureService.updateCustom(editingCodigo, {
-          nome: form.nome.trim(),
-          descricao: form.descricao,
-          especialidade: form.especialidade,
-          valor: valorNum,
-        });
-        // Sincronizar CIDs (replace)
-        await (supabase as any).from("sigtap_procedimento_cids").delete().eq("procedimento_codigo", editingCodigo);
-        if (form.cids.length > 0) {
-          await (supabase as any).from("sigtap_procedimento_cids").insert(
-            form.cids.map((c) => ({
-              procedimento_codigo: editingCodigo,
-              cid_codigo: c.codigo,
-              cid_descricao: c.descricao || "",
-            })),
-          );
-        }
-        await (supabase as any)
-          .from("sigtap_procedimentos")
-          .update({ total_cids: form.cids.length })
-          .eq("codigo", editingCodigo);
-        toast.success("Procedimento atualizado.");
-      } else {
-        await procedureService.createCustom({
-          codigo: form.codigo.trim() || undefined,
-          nome: form.nome.trim(),
-          descricao: form.descricao,
-          especialidade: form.especialidade,
-          valor: valorNum,
-          cids: form.cids,
-          criadoPor: user?.id || "",
-        });
-        toast.success("Procedimento criado.");
+  const saveCustom=async()=>{
+    if(!cidReady||catalogFailed||loading||customLock.current||!isMaster)return;
+    if(form.nome.trim().length<3||!form.especialidade){toast.error('Confira nome e especialidade.');return;}
+    const valor=form.valor?Number(form.valor.replace(',','.')):null;
+    if(valor!==null&&(!Number.isFinite(valor)||valor<0)){toast.error('Valor inválido.');return;}
+    if(!window.confirm('Salvar procedimento personalizado e vínculos CID?'))return;
+    customLock.current=true;setSavingCustom(true);
+    try{
+      await confirmMaster();
+      const old=customBaseline.current;
+      const codigo=editingCodigo||form.codigo.trim()||`CUSTOM-${crypto.randomUUID().replace(/-/g,'').slice(0,12).toUpperCase()}`;
+      const payload={nome:form.nome.trim(),descricao:form.descricao,especialidade:form.especialidade,valor,updated_at:new Date().toISOString()};
+      const desired=form.cids.map(c=>c.codigo);
+      if(editingCodigo){
+        if(!old||old.codigo!==codigo)throw Error('Leitura não confirmada.');
+        const actual=await readCids(codigo);
+        if(!confirmKeys(old.cids.map(c=>JSON.stringify([c.codigo,c.descricao])),actual.map(c=>JSON.stringify([c.codigo,c.descricao]))))throw Error('CIDs alterados. Recarregue.');
+        const {data,error}=await supabase.from('sigtap_procedimentos').update(payload).eq('codigo',codigo).eq('origem','PERSONALIZADO').eq('updated_at',old.version).select('codigo').maybeSingle();
+        if(error||data?.codigo!==codigo)throw Error('Procedimento alterado ou gravação não confirmada.');
+      }else{
+        const {data,error}=await supabase.from('sigtap_procedimentos').insert({...payload,codigo,origem:'PERSONALIZADO',ativo:true,total_cids:0,criado_por:user?.id||''}).select('codigo').single();
+        if(error||data?.codigo!==codigo)throw Error('Criação não confirmada.');
       }
-      setCustomOpen(false);
-      await load();
-    } catch (e: any) {
-      toast.error("Erro: " + (e.message || ""));
-    } finally {
-      setSavingCustom(false);
-    }
+      const existing=old?.cids??[];
+      const added=form.cids.filter(c=>!existing.some(e=>e.codigo===c.codigo));
+      if(added.length){
+        const {data,error}=await supabase.from('sigtap_procedimento_cids').insert(added.map(c=>({procedimento_codigo:codigo,cid_codigo:c.codigo,cid_descricao:c.descricao||''}))).select('cid_codigo');
+        if(error||!confirmKeys(added.map(c=>c.codigo),data?.map(c=>c.cid_codigo)??null))throw Error('Inclusão de CIDs não confirmada.');
+      }
+      const removed=existing.filter(c=>!desired.includes(c.codigo)).map(c=>c.codigo);
+      if(removed.length){
+        const {data,error}=await supabase.from('sigtap_procedimento_cids').delete().eq('procedimento_codigo',codigo).in('cid_codigo',removed).select('cid_codigo');
+        if(error||!confirmKeys(removed,data?.map(c=>c.cid_codigo)??null))throw Error('Remoção de CIDs não confirmada.');
+      }
+      const actual=await readCids(codigo);
+      if(!confirmKeys(desired,actual.map(c=>c.codigo)))throw Error('Vínculos finais não confirmados.');
+      const {data,error}=await supabase.from('sigtap_procedimentos').update({total_cids:actual.length}).eq('codigo',codigo).eq('origem','PERSONALIZADO').select('codigo').maybeSingle();
+      if(error||data?.codigo!==codigo)throw Error('Total de CIDs não confirmado.');
+      procedureService.invalidateCache();setCidsByProc(prev=>({...prev,[codigo]:actual.map(({codigo,descricao})=>({codigo,descricao}))}));setCustomOpen(false);toast.success('Procedimento e CIDs confirmados.');await load();
+    }catch{setCidReady(false);setCatalogFailed(true);procedureService.invalidateCache();toast.error('Operação não confirmada; alterações podem estar parciais. Recarregue e confira antes de repetir.');}
+    finally{customLock.current=false;setSavingCustom(false);}
+  };
+  const handleDelete=async(p:SigtapProc)=>{
+    if(catalogFailed||loading||customLock.current||p.origem!=='PERSONALIZADO'||!isMaster)return;
+    if(!window.confirm(`Excluir o procedimento "${p.nome}"? Esta ação é irreversível.`))return;
+    customLock.current=true;setSavingCustom(true);
+    try{await confirmMaster();
+      const {data,error}=await supabase.from('sigtap_procedimentos').delete().eq('codigo',p.codigo).eq('origem','PERSONALIZADO').select('codigo').maybeSingle();
+      if(error||data?.codigo!==p.codigo)throw Error('Exclusão não confirmada.');
+      procedureService.invalidateCache();toast.success('Exclusão confirmada.');await load();
+    }catch{setCatalogFailed(true);toast.error('Exclusão não confirmada. Atualize antes de repetir.');}
+    finally{customLock.current=false;setSavingCustom(false);}
   };
 
-  const handleDelete = async (p: SigtapProc) => {
-    if(catalogFailed||loading||savingCustom)return;
-    if (!confirm(`Excluir o procedimento "${p.nome}"?`)) return;
-    try {
-      await procedureService.deleteCustom(p.codigo);
-      toast.success("Procedimento excluído.");
-      await load();
-    } catch (e: any) {
-      toast.error("Erro: " + (e.message || ""));
-    }
-  };
-
-  if(catalogFailed)return <Card><CardContent className="p-4 space-y-2"><p role="alert">Catálogo ou vínculos não confirmados. Atualize antes de editar.</p><Button onClick={()=>void load()}>Atualizar procedimentos</Button></CardContent></Card>;
+  if(catalogFailed)return <Card><CardContent className="p-4 space-y-2"><p role="alert">Catálogo ou vínculos não confirmados. Atualize antes de editar.</p><Button onClick={()=>{setCustomOpen(false);setManageProc(null);void load();}}>Atualizar procedimentos</Button></CardContent></Card>;
   return (
     <Card className="shadow-card border-0">
       <CardContent className="p-5">
@@ -541,7 +526,7 @@ const GerenciarProcedimentos: React.FC = () => {
         )}
 
         {/* Modal de vínculos */}
-        <Dialog open={!!manageProc} onOpenChange={(o) => !o && setManageProc(null)}>
+        <Dialog open={!!manageProc} onOpenChange={o=>{if(!o&&!linkLock.current)setManageProc(null);}}>
           <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Vincular Profissionais</DialogTitle>
@@ -617,7 +602,7 @@ const GerenciarProcedimentos: React.FC = () => {
               </div>
             )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setManageProc(null)}>
+              <Button variant="outline" disabled={savingLinks} onClick={() => setManageProc(null)}>
                 Cancelar
               </Button>
               <Button onClick={saveLinks} disabled={savingLinks}>
@@ -629,7 +614,7 @@ const GerenciarProcedimentos: React.FC = () => {
         </Dialog>
 
         {/* Modal de cadastro/edição custom */}
-        <Dialog open={customOpen} onOpenChange={setCustomOpen}>
+        <Dialog open={customOpen} onOpenChange={o=>{if(!customLock.current){if(!o)editSeq.current++;setCustomOpen(o);}}}>
           <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
@@ -728,10 +713,10 @@ const GerenciarProcedimentos: React.FC = () => {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setCustomOpen(false)}>
+              <Button variant="outline" disabled={savingCustom} onClick={()=>{editSeq.current++;setCustomOpen(false);}}>
                 Cancelar
               </Button>
-              <Button onClick={saveCustom} disabled={savingCustom}>
+              <Button onClick={saveCustom} disabled={savingCustom||!cidReady||catalogFailed}>
                 {savingCustom && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 Salvar
               </Button>

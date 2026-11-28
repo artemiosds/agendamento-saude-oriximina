@@ -86,6 +86,8 @@ const Configuracoes: React.FC = () => {
   const [templateDraft,setTemplateDraft]=useState(templates);
   const [channel,setChannel]=useState<'webhook'|'gmail'|'ambos'>('webhook');
   const [webhookSaved,setWebhookSaved]=useState(webhook);
+  const [googleSaved,setGoogleSaved]=useState(googleCalendar);
+  const oauthHandled=useRef('');
   const [webhookEditing, setWebhookEditing] = useState(!webhook.url);
   const [webhookTesting, setWebhookTesting] = useState(false);
   const [gmailTesting, setGmailTesting] = useState(false);
@@ -254,19 +256,20 @@ const Configuracoes: React.FC = () => {
 
   useEffect(() => {
     const code = searchParams.get('code');
-    if (code && user?.usuario==='admin.sms') {
-      gcal.exchangeCode(code).then(async () => {
-        toast.success('Google Agenda conectada com sucesso!');
+    if (code && user?.usuario==='admin.sms' && oauthHandled.current!==code) {
+      oauthHandled.current=code;
+      confirmAdmin().then(()=>gcal.exchangeCode(code)).then(async () => {
         await persistGoogleStatus(true);
+        toast.success('Google Agenda conectada com sucesso!');
         searchParams.delete('code');
         searchParams.delete('state');
         searchParams.delete('scope');
         setSearchParams(searchParams, { replace: true });
       }).catch(() => {
-        toast.error('Erro ao conectar Google Agenda.');
+        toast.error('Conexão ou atualização local não confirmada.');
       });
     }
-  }, []);
+  }, [user?.usuario,confirmAdmin,searchParams,gcal.exchangeCode]);
 
   const loadAdmin=useCallback(async()=>{
     if(!isMaster)return;
@@ -332,7 +335,8 @@ const Configuracoes: React.FC = () => {
     if(error||!data)throw Error('Configuração não confirmada.');
     const raw=configObject(data.configuracoes).googleCalendar;
     const next={...googleCalendar,...(raw===undefined?{}:configObject(raw)),conectado:connected};
-    await saveSystemConfigPatch({googleCalendar:next},user?.authUserId,{key:'googleCalendar',value:raw});
+    if(!sameConfigSection(raw,next))await saveSystemConfigPatch({googleCalendar:next},user?.authUserId,{key:'googleCalendar',value:raw});
+    integrationBaseline.current={...integrationBaseline.current,googleCalendar:next};setGoogleSaved(next);
   };
   const loadIntegrations=useCallback(async()=>{
     setIntegrationReady(false);
@@ -342,6 +346,7 @@ const Configuracoes: React.FC = () => {
       const w={url:'',ativo:false,status:'inativo',...(raw.webhook===undefined?{}:configObject(raw.webhook))} as typeof webhook;
       const mail={ativo:false,email:'',senhaApp:'',smtpHost:'smtp.gmail.com',smtpPort:587,...(raw.gmail===undefined?{}:configObject(raw.gmail))};
       const t={...templates,...(raw.templates===undefined?{}:configObject(raw.templates))};
+      setGoogleSaved({...googleCalendar,...(raw.googleCalendar===undefined?{}:configObject(raw.googleCalendar))});
       setWebhookSaved(w);setWebhookUrl(w.url);setWebhookEditing(!w.url);setGmailDraft({...mail,senhaApp:''});setTemplateDraft(t);
       setChannel(raw.canalNotificacao==='gmail'||raw.canalNotificacao==='ambos'?raw.canalNotificacao:'webhook');setIntegrationReady(true);
     }catch{toast.error('Integrações não confirmadas. Atualize antes de editar.');}
@@ -355,11 +360,11 @@ const Configuracoes: React.FC = () => {
     finally{integrationLock.current=false;setIntegrationBusy(false);}
   };
   const updateGoogle=async(data:Partial<typeof googleCalendar>)=>{
-    if(await saveIntegration('googleCalendar',old=>({...googleCalendar,...(old===undefined?{}:configObject(old)),...data})))toast.success('Regra Google Agenda confirmada.');
+    if(await saveIntegration('googleCalendar',old=>({...googleSaved,...(old===undefined?{}:configObject(old)),...data}))){setGoogleSaved(prev=>({...prev,...data}));toast.success('Regra Google Agenda confirmada.');}
   };
   const handleConnectGoogle=async()=>{try{await confirmAdmin();await gcal.connect();}catch{toast.error('Erro ao iniciar conexão.');}};
   const handleDisconnectGoogle=async()=>{
-    if(!window.confirm('Desconectar o Google Agenda?'))return;
+    if(integrationLock.current||gcal.loading||!window.confirm('Desconectar o Google Agenda?'))return;
     try{await confirmAdmin();await gcal.disconnect();await persistGoogleStatus(false);await loadIntegrations();toast.success('Desconexão confirmada.');}
     catch{toast.error('Desconexão ou atualização local não confirmada.');}
   };
@@ -854,10 +859,10 @@ const Configuracoes: React.FC = () => {
                     <Button variant="outline" className="w-full" onClick={handleConnectGoogle} disabled={gcal.loading}>{gcal.loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Conectar Google Agenda</Button>
                   )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50"><span className="text-sm text-muted-foreground">Criar evento</span><Switch checked={googleCalendar.criarEvento} onCheckedChange={v => updateGoogle({ criarEvento: v })} /></div>
-                    <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50"><span className="text-sm text-muted-foreground">Atualizar ao remarcar</span><Switch checked={googleCalendar.atualizarRemarcar} onCheckedChange={v => updateGoogle({ atualizarRemarcar: v })} /></div>
-                    <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50"><span className="text-sm text-muted-foreground">Remover ao cancelar</span><Switch checked={googleCalendar.removerCancelar} onCheckedChange={v => updateGoogle({ removerCancelar: v })} /></div>
-                    <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50"><span className="text-sm text-muted-foreground">Comprovante e-mail</span><Switch checked={googleCalendar.enviarEmail} onCheckedChange={v => updateGoogle({ enviarEmail: v })} /></div>
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50"><span className="text-sm text-muted-foreground">Criar evento</span><Switch checked={googleSaved.criarEvento} onCheckedChange={v => updateGoogle({ criarEvento: v })} /></div>
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50"><span className="text-sm text-muted-foreground">Atualizar ao remarcar</span><Switch checked={googleSaved.atualizarRemarcar} onCheckedChange={v => updateGoogle({ atualizarRemarcar: v })} /></div>
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50"><span className="text-sm text-muted-foreground">Remover ao cancelar</span><Switch checked={googleSaved.removerCancelar} onCheckedChange={v => updateGoogle({ removerCancelar: v })} /></div>
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50"><span className="text-sm text-muted-foreground">Comprovante e-mail</span><Switch checked={googleSaved.enviarEmail} onCheckedChange={v => updateGoogle({ enviarEmail: v })} /></div>
                   </div>
                 </div>
               </CardContent>
@@ -871,7 +876,7 @@ const Configuracoes: React.FC = () => {
                   <Badge variant={webhookSaved.status === 'ativo' ? 'default' : webhookSaved.status === 'erro' ? 'destructive' : 'secondary'} className="capitalize">{webhookSaved.status === 'ativo' ? '✅ Ativo' : webhookSaved.status === 'erro' ? '❌ Erro' : '⏸ Inativo'}</Badge>
                 </div>
                 <div className="space-y-4">
-                  <div><Label>URL do Webhook</Label><div className="flex gap-2 mt-1"><Input placeholder="https://hook.us2.make.com/..." value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)} disabled={!webhookEditing} className="flex-1" />{!webhookEditing && <Button variant="outline" size="icon" onClick={() => setWebhookEditing(true)}><Pencil className="w-4 h-4" /></Button>}</div></div>
+                  <div><Label>URL do Webhook</Label><div className="flex gap-2 mt-1"><Input type={webhookEditing?'text':'password'} placeholder="https://hook.us2.make.com/..." value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)} disabled={!webhookEditing} className="flex-1" />{!webhookEditing && <Button variant="outline" size="icon" onClick={() => setWebhookEditing(true)}><Pencil className="w-4 h-4" /></Button>}</div></div>
                   <div className="flex gap-2">
                     <Button className="gradient-primary text-primary-foreground flex-1" disabled={!webhookUrl.trim()||integrationBusy} onClick={()=>void saveWebhook(true)}>Salvar Webhook</Button>
                     <Button variant="outline" disabled={!webhookSaved.url || webhookTesting||webhookEditing||webhookUrl!==webhookSaved.url} onClick={async () => {
@@ -898,7 +903,7 @@ const Configuracoes: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div><Label>E-mail remetente</Label><Input placeholder="seuemail@gmail.com" value={gmailDraft.email} onChange={e=>setGmailDraft(d=>({...d,email:e.target.value}))} /></div>
-                  <div><Label>Senha de Aplicativo</Label><Input type="password" placeholder="Senha de app do Google" value={gmailDraft.senhaApp} onChange={e=>setGmailDraft(d=>({...d,senhaApp:e.target.value}))} /></div>
+                  <div><Label>Senha de Aplicativo</Label><Input type="password" placeholder="Em branco mantém a senha salva" value={gmailDraft.senhaApp} onChange={e=>setGmailDraft(d=>({...d,senhaApp:e.target.value}))} /></div>
                   <div><Label>Servidor SMTP</Label><Input value={gmailDraft.smtpHost} onChange={e=>setGmailDraft(d=>({...d,smtpHost:e.target.value}))} /></div>
                   <div><Label>Porta</Label><Input type="number" value={gmailDraft.smtpPort} onChange={e=>setGmailDraft(d=>({...d,smtpPort:Number(e.target.value)}))} /></div>
                 </div>

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import {validCompetencia,confirmKeys} from '@/lib/adminIntegrations';
+import {procedureService} from '@/services/procedureService';
 import { toast } from 'sonner';
 
 // Mapeamento grupo+subgrupo SIGTAP → especialidade interna
@@ -451,7 +452,7 @@ const SigtapZipImport: React.FC = () => {
     }).select('id').maybeSingle();
     if(logError||!log)throw Error('Dados importados, mas histórico não confirmado. Confira antes de repetir.');
 
-    setProgressPct(100);
+    procedureService.invalidateCache();setProgressPct(100);
     setStep('done');
     toast.success(`Importação concluída! ${procedures.length.toLocaleString('pt-BR')} procedimentos, ${cidLinks.length.toLocaleString('pt-BR')} vínculos CID`);
   };
@@ -500,6 +501,7 @@ const SigtapZipImport: React.FC = () => {
       await runImport(zipBytes, competencia);
     } catch (err: any) {
       console.error('[SIGTAP IMPORT]', err);
+      if(writesStarted.current)procedureService.invalidateCache();
       setErrorMsg((writesStarted.current?'Importação possivelmente parcial. Confira os lotes antes de repetir. ':'')+(err.message || 'Erro desconhecido'));
       setStep('error');
       addLog('error', err.message || 'Erro desconhecido');
