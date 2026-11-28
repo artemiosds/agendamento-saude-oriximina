@@ -1,0 +1,9 @@
+import {describe,it,expect} from 'vitest';
+import {adminAppointmentAllowed,validateOnlineRules,validateCancellationRules,confirmedIds} from './adminOperations';
+describe('operações administrativas',()=>{
+ it('protege estados concluídos, cancelados e de falta',()=>{for(const status of ['concluido','cancelado','falta','remarcado','aguardando_triagem'])for(const action of ['reactivate','transfer'] as const)expect(adminAppointmentAllowed({status,concluido_em:null,iniciado_em:null},action)).toBe(false);});
+ it('permite somente estados previstos e impede transferência iniciada',()=>{expect(adminAppointmentAllowed({status:'apto_atendimento',concluido_em:null,iniciado_em:null},'reactivate')).toBe(true);expect(adminAppointmentAllowed({status:'confirmado',concluido_em:null,iniciado_em:'2026-01-01'},'transfer')).toBe(false);expect(adminAppointmentAllowed({status:'confirmado',concluido_em:'2026-01-01',iniciado_em:null},'transfer')).toBe(false);});
+ it('valida antecedência e limite diário',()=>{expect(validateOnlineRules({antecedencia_minima_dias:30,antecedencia_maxima_dias:1,limite_por_dia_profissional:5})).toBeTruthy();expect(validateOnlineRules({antecedencia_minima_dias:0,antecedencia_maxima_dias:30,limite_por_dia_profissional:5})).toBeNull();});
+ it('valida penalidades sem impor novos limites máximos',()=>{expect(validateCancellationRules({prazo_minimo_horas:24,limite_cancelamentos_mes:3,dias_bloqueio_apos_limite:7,motivos:['Outro']})).toBeNull();expect(validateCancellationRules({prazo_minimo_horas:-1,limite_cancelamentos_mes:3,dias_bloqueio_apos_limite:7,motivos:['Outro']})).toBeTruthy();});
+ it('confirma exatamente o conjunto de registros esperado',()=>{expect(confirmedIds(['a','b'],[{id:'b'},{id:'a'}])).toBe(true);expect(confirmedIds(['a','b'],[{id:'a'},{id:'a'}])).toBe(false);expect(confirmedIds(['a'],null)).toBe(false);});
+});
