@@ -4,6 +4,9 @@ import { getDefaultModulePermission, ModuleName, ModulePermission } from "@/cont
 import { resolveWithParent, PERMISSION_PARENT, type PermissionSourceRow } from "@/lib/permissionResolution";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
+import {sameConfigSection} from "@/lib/configSectionGuard";
+import {confirmedIds} from "@/lib/adminOperations";
+import {readCompleteCatalog} from "@/lib/adminCatalog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -187,6 +190,40 @@ const Permissoes: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const savingLock = useRef(false);
+  const loadSequence=useRef(0);
+  const [directoryReady,setDirectoryReady]=useState(false);
+  const [readyKey,setReadyKey]=useState('');
+  const [loadFailed,setLoadFailed]=useState(false);
+  const scopeKey=JSON.stringify([user?.authUserId,tab,selectedUnidade,tab==='perfil'?selectedPerfil:selectedUserId]);
+  const latestScope=useRef(scopeKey);latestScope.current=scopeKey;
+  const profileKey=JSON.stringify([user?.authUserId,'perfil',selectedUnidade,selectedPerfil]);
+  const individualKey=JSON.stringify([user?.authUserId,'individual',selectedUnidade,selectedUserId]);
+  const confirmSession=async()=>{
+    const {data,error}=await supabase.auth.getSession();
+    if(error||!user?.authUserId||user.role!=='master'||user.ativo!==true||data.session?.user.id!==user.authUserId)throw Error('Sessão administrativa não confirmada.');
+  };
+  const readProfiles=useCallback(async(role:string)=>readCompleteCatalog(async(from,to)=>{
+    const {data,error,count}=await supabase.from('permissoes').select('*',{count:'exact'}).in('perfil',getRoleQueryKeys(role)).in('unidade_id',[unidadeScope,'']).order('id').range(from,to);
+    if(error||!data)throw Error('Permissões não confirmadas.');return {rows:data,count};
+  }),[unidadeScope]);
+  const readOverrides=useCallback(async(id:string)=>readCompleteCatalog(async(from,to)=>{
+    const {data,error,count}=await supabase.from('permissoes_usuario').select('*',{count:'exact'}).eq('user_id',id).in('unidade_id',[unidadeScope,'']).order('id').range(from,to);
+    if(error||!data)throw Error('Exceções não confirmadas.');return {rows:data,count};
+  }),[unidadeScope]);
+  const verifyScope=async(target:'perfil'|'user')=>{
+    await confirmSession();
+    if(latestScope.current!==scopeKey||readyKey!==scopeKey)throw Error('Escopo alterado.');
+    if(target==='perfil'){
+      if(!sameConfigSection(await readProfiles(selectedPerfil),perfilRows))throw Error('Permissões alteradas. Atualize antes de editar.');
+    }else{
+      const selected=funcionarios.find(f=>f.id===selectedUserId);
+      if(!selected||normalizeRoleKey(selected.role)==='master')throw Error('Funcionário não editável.');
+      const {data,error}=await supabase.from('funcionarios').select('id,role,ativo,unidade_id').eq('id',selected.id).maybeSingle();
+      if(error||!data?.ativo||data.role!==selected.role||data.unidade_id!==selected.unidade_id)throw Error('Funcionário alterado. Atualize a consulta.');
+      const [base,own]=await Promise.all([readProfiles(selected.role),readOverrides(selected.id)]);
+      if(!sameConfigSection(base,userBaseRows)||!sameConfigSection(own,userRows))throw Error('Permissões alteradas. Atualize antes de editar.');
+    }
+  };
 
   const logPerm = (acao: string, detalhes: Record<string, unknown>, before?: unknown, after?: unknown) => {
     void auditService.log({
@@ -209,6 +246,7 @@ const Permissoes: React.FC = () => {
 
   // Carregar unidades + funcionarios
   useEffect(() => {
+    let active=true;setDirectoryReady(false);
     (async () => {
       const unitsQuery = supabase.from("unidades").select("id, nome, ativo").eq("ativo", true).order("nome");
       const staffQuery = supabase.from("funcionarios").select("id, nome, usuario, role, unidade_id").eq("ativo", true).order("nome");
@@ -216,88 +254,55 @@ const Permissoes: React.FC = () => {
         isUnitMaster ? unitsQuery.eq("id", user?.unidadeId || "") : unitsQuery,
         isUnitMaster ? staffQuery.eq("unidade_id", user?.unidadeId || "") : staffQuery,
       ]);
-      if (u.error || f.error) toast.error("Não foi possível carregar unidades ou funcionários.");
+      if(!active)return;
+      if (u.error || f.error || !u.data || !f.data) {toast.error("Não foi possível carregar unidades ou funcionários.");return;}
+      setDirectoryReady(true);
       const ulist = (u.data || []).map((x) => ({ id: x.id, nome: x.nome }));
       setUnidades(ulist);
       if (isUnitMaster) setSelectedUnidade(user?.unidadeId || "");
       else setSelectedUnidade((current) => current || ulist[0]?.id || "");
       setFuncionarios((f.data || []) as FuncOption[]);
     })();
-  }, [isUnitMaster, user?.unidadeId]);
+    return()=>{active=false;};
+  }, [isUnitMaster, user?.unidadeId,user?.authUserId]);
 
-  // Carregar permissões do perfil para a unidade
-  const loadPerfil = useCallback(async () => {
-    if (!selectedUnidade) return;
+  const loadPerfil=useCallback(async()=>{
+    const seq=++loadSequence.current;setReadyKey('');setLoadFailed(false);setLoading(true);
+    try{
+      if(!selectedUnidade)throw Error('Selecione a unidade.');
+      const rows=await readProfiles(selectedPerfil);
+      if(seq!==loadSequence.current||latestScope.current!==profileKey)return;
+      setPerfilRows(rows);setReadyKey(profileKey);
+    }catch{if(seq===loadSequence.current&&latestScope.current===profileKey){setLoadFailed(true);toast.error('Não foi possível confirmar as permissões.');}}
+    finally{if(seq===loadSequence.current&&latestScope.current===profileKey)setLoading(false);}
+  },[selectedUnidade,selectedPerfil,readProfiles,profileKey]);
+  useEffect(()=>{if(tab==='perfil'&&selectedUnidade)void loadPerfil();},[loadPerfil,tab,selectedUnidade]);
+  const loadUser=useCallback(async()=>{
+    const seq=++loadSequence.current;setReadyKey('');setLoadFailed(false);
+    if(!selectedUserId||!selectedUnidade){setUserBaseRows([]);setUserRows([]);setLoading(false);return;}
     setLoading(true);
-    const { data, error } = await supabase
-      .from("permissoes")
-      .select("*")
-      .in("perfil", getRoleQueryKeys(selectedPerfil))
-      .in("unidade_id", [unidadeScope, ""]);
-    if (error) {
-      toast.error("Erro ao carregar permissões");
-      setLoading(false);
-      return;
-    }
-    setPerfilRows((data || []) as PermRow[]);
-    setLoading(false);
-  }, [selectedPerfil, selectedUnidade, unidadeScope]);
-
-  useEffect(() => { if (tab === "perfil") loadPerfil(); }, [loadPerfil, tab]);
-
-  // Carregar overrides do usuário selecionado
-  const loadUser = useCallback(async () => {
-    if (!selectedUserId || !selectedUnidade) { setUserBaseRows([]); setUserRows([]); return; }
-    setLoading(true);
-
-    const selectedFunc = funcionarios.find((f) => f.id === selectedUserId);
-    if (!selectedFunc || (isUnitMaster && selectedFunc.unidade_id !== selectedUnidade)) {
-      setUserBaseRows([]); setUserRows([]); setLoading(false); return;
-    }
-    const roleKey = normalizeRoleKey(selectedFunc.role);
-
-    const { data: baseData, error: baseError } = await supabase
-      .from("permissoes")
-      .select("*")
-      .in("perfil", getRoleQueryKeys(selectedFunc?.role || roleKey))
-      .in("unidade_id", [unidadeScope, ""]);
-
-    if (baseError) {
-      toast.error("Erro ao carregar permissões-base do perfil");
-      setUserBaseRows([]);
-      setUserRows([]);
-      setLoading(false);
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("permissoes_usuario")
-      .select("*")
-      .eq("user_id", selectedUserId)
-      .in("unidade_id", [unidadeScope, ""]);
-    if (error) {
-      toast.error("Erro ao carregar exceções do usuário");
-      setUserRows([]);
-      setLoading(false);
-      return;
-    }
-    setUserBaseRows((baseData || []) as PermRow[]);
-    setUserRows((data || []) as UserPermRow[]);
-    setLoading(false);
-  }, [funcionarios, selectedUserId, selectedUnidade, unidadeScope, isUnitMaster]);
-
-  useEffect(() => { if (tab === "individual") loadUser(); }, [loadUser, tab]);
+    try{
+      const selected=funcionarios.find(f=>f.id===selectedUserId);
+      if(!selected||(isUnitMaster&&selected.unidade_id!==selectedUnidade))throw Error('Funcionário fora do escopo.');
+      const [base,own]=await Promise.all([readProfiles(selected.role),readOverrides(selected.id)]);
+      if(seq!==loadSequence.current||latestScope.current!==individualKey)return;
+      setUserBaseRows(base);setUserRows(own);setReadyKey(individualKey);
+    }catch{if(seq===loadSequence.current&&latestScope.current===individualKey){setLoadFailed(true);toast.error('Não foi possível confirmar as permissões individuais.');}}
+    finally{if(seq===loadSequence.current&&latestScope.current===individualKey)setLoading(false);}
+  },[funcionarios,selectedUserId,selectedUnidade,isUnitMaster,readProfiles,readOverrides,individualKey]);
+  useEffect(()=>{if(tab==='individual')void loadUser();},[loadUser,tab]);
 
   // Realtime - quando QUALQUER permissão muda, recarrega
   useEffect(() => {
     const ch = supabase
       .channel("permissoes-admin-page")
       .on("postgres_changes", { event: "*", schema: "public", table: "permissoes" }, () => {
+        if(savingLock.current)return;
         if (tab === "perfil") loadPerfil();
         if (tab === "individual") loadUser();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "permissoes_usuario" }, () => {
-        if (tab === "individual") loadUser();
+        if(!savingLock.current&&tab === "individual") loadUser();
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -346,7 +351,7 @@ const Permissoes: React.FC = () => {
   };
 
   const togglePerfil = async (modulo: ModuleName, action: keyof ModulePermission) => {
-    if (savingLock.current || ROUTE_DEPENDENCIES[modulo] || (isUnitMaster && selectedUnidade !== user?.unidadeId)) return;
+    if (savingLock.current || !canWriteScope || ROUTE_DEPENDENCIES[modulo]) return;
     savingLock.current = true;
     const existing = getPerfilRow(modulo);
     const baseRow: PermRow = existing
@@ -364,14 +369,8 @@ const Permissoes: React.FC = () => {
     const key = `perfil-${modulo}-${action}`;
     setSaving(key);
 
-    // Optimistic
-    setPerfilRows((prev) => {
-      const idx = prev.findIndex((r) => r.perfil === normalizeRoleKey(selectedPerfil) && r.modulo === modulo && r.unidade_id === unidadeScope);
-      if (idx >= 0) { const cp = [...prev]; cp[idx] = updated; return cp; }
-      return [...prev, updated];
-    });
-
     try {
+      await verifyScope("perfil");
       const { data: saved, error } = await supabase
         .from("permissoes")
         .upsert(
@@ -387,6 +386,7 @@ const Permissoes: React.FC = () => {
       } else {
         toast.success(`${MODULO_LABELS[modulo]} → ${ACTION_LABELS[action]}: ${newVal ? "ATIVADO" : "DESATIVADO"}`);
         logPerm("permissao_perfil_alterada", { perfil: normalizeRoleKey(selectedPerfil), modulo, acao: action, valor: newVal }, existing, updated);
+        await loadPerfil();
       }
     } catch {
       toast.error("Não foi possível salvar a permissão.");
@@ -420,7 +420,7 @@ const Permissoes: React.FC = () => {
       }, PERMISSION_PARENT[modulo] ? getDefaultModulePermission(selectedUserRoleKey, PERMISSION_PARENT[modulo] as ModuleName) : undefined);
 
   const toggleUser = async (modulo: ModuleName, action: keyof ModulePermission) => {
-    if (!selectedUserId || savingLock.current || ROUTE_DEPENDENCIES[modulo] || (isUnitMaster && selectedUnidade !== user?.unidadeId)) return;
+    if (!selectedUserId || savingLock.current || !canWriteScope || selectedUserRoleKey==="master" || ROUTE_DEPENDENCIES[modulo]) return;
     savingLock.current = true;
     const existing = getUserOverrideRow(modulo);
     const baseProfile = getUserEffectiveRow(modulo);
@@ -446,13 +446,8 @@ const Permissoes: React.FC = () => {
     const key = `user-${modulo}-${action}`;
     setSaving(key);
 
-    setUserRows((prev) => {
-      const idx = prev.findIndex((r) => r.modulo === modulo && r.unidade_id === unidadeScope);
-      if (idx >= 0) { const cp = [...prev]; cp[idx] = updated; return cp; }
-      return [...prev, updated];
-    });
-
     try {
+      await verifyScope("user");
       const { data: saved, error } = await supabase
         .from("permissoes_usuario")
         .upsert(
@@ -468,6 +463,7 @@ const Permissoes: React.FC = () => {
       } else {
         toast.success(`Exceção salva: ${MODULO_LABELS[modulo]} → ${ACTION_LABELS[action]}`);
         logPerm("permissao_usuario_alterada", { funcionario_id: selectedUserId, modulo, acao: action, valor: newVal }, existing, updated);
+        await loadUser();
       }
     } catch {
       toast.error("Não foi possível salvar a exceção.");
@@ -479,10 +475,11 @@ const Permissoes: React.FC = () => {
   };
 
   const resetUserOverride = async (modulo: ModuleName) => {
-    if (!selectedUserId || savingLock.current || (isUnitMaster && selectedUnidade !== user?.unidadeId)) return;
+    if (!selectedUserId || savingLock.current || !canWriteScope || selectedUserRoleKey==="master" || !window.confirm("Remover a exceção deste módulo e voltar à regra herdada?")) return;
     savingLock.current = true;
     setSaving(`user-reset-${modulo}`);
     try {
+      await verifyScope("user");
       const { data: deleted, error } = await supabase
         .from("permissoes_usuario")
         .delete()
@@ -496,7 +493,7 @@ const Permissoes: React.FC = () => {
       } else {
         toast.success(`Exceção removida: ${MODULO_LABELS[modulo]}`);
         logPerm("excecao_usuario_removida", { funcionario_id: selectedUserId, modulo });
-        setUserRows((prev) => prev.filter((r) => !(r.modulo === modulo && r.unidade_id === unidadeScope)));
+        await loadUser();
       }
     } catch {
       toast.error("Não foi possível remover a exceção.");
@@ -513,35 +510,37 @@ const Permissoes: React.FC = () => {
     can_delete: preset === "total", can_execute: preset === "total",
   });
   const PRESET_LABEL: Record<Preset, string> = { total: "Acesso total", leitura: "Apenas leitura", bloquear: "Bloqueado" };
-  const canWriteScope = !(isUnitMaster && selectedUnidade !== user?.unidadeId);
+  const canWriteScope = directoryReady&&!loading&&!loadFailed&&readyKey===scopeKey&&!!selectedUnidade&&(isGlobalAdmin||(isUnitMaster&&selectedUnidade===user?.unidadeId));
 
   const applyPreset = async (target: "perfil" | "user", modulos: ModuleName[], preset: Preset) => {
     const list = modulos.filter((m) => !ROUTE_DEPENDENCIES[m]);
     if (!list.length || savingLock.current || !canWriteScope) return;
-    if (target === "user" && !selectedUserId) return;
+    if (target === "user" && (!selectedUserId||selectedUserRoleKey==="master")) return;
     if (list.length > 1 || preset === "total") {
       const motivo = askMotivo(`Aplicar "${PRESET_LABEL[preset]}" em ${list.length} módulo(s)?`);
       if (!motivo) return;
       await runPreset(target, list, preset, motivo);
-    } else await runPreset(target, list, preset);
+    } else if(window.confirm(`Aplicar "${PRESET_LABEL[preset]}" ao módulo selecionado?`))await runPreset(target, list, preset);
   };
   const runPreset = async (target: "perfil" | "user", list: ModuleName[], preset: Preset, motivo?: string) => {
     savingLock.current = true; setSaving(`preset-${target}`);
     const vals = presetValues(preset);
     const perfil = normalizeRoleKey(selectedPerfil);
     try {
-      const { error } = target === "perfil"
-        ? await supabase.from("permissoes").upsert(list.map((modulo) => ({ perfil, modulo, unidade_id: unidadeScope, ...vals })), { onConflict: "perfil,modulo,unidade_id" })
-        : await supabase.from("permissoes_usuario").upsert(list.map((modulo) => ({ user_id: selectedUserId, modulo, unidade_id: unidadeScope, ...vals })), { onConflict: "user_id,modulo,unidade_id" });
-      if (error) toast.error(`Erro: ${error.message}`);
+      await verifyScope(target);
+      const { data,error } = target === "perfil"
+        ? await supabase.from("permissoes").upsert(list.map((modulo) => ({ perfil, modulo, unidade_id: unidadeScope, ...vals })), { onConflict: "perfil,modulo,unidade_id" }).select("modulo")
+        : await supabase.from("permissoes_usuario").upsert(list.map((modulo) => ({ user_id: selectedUserId, modulo, unidade_id: unidadeScope, ...vals })), { onConflict: "user_id,modulo,unidade_id" }).select("modulo");
+      if (error||!confirmedIds(list,data?.map(r=>({id:r.modulo}))??null)) throw Error("Resultado da operação em lote não confirmado.");
       else {
         toast.success(`${PRESET_LABEL[preset]} aplicado em ${list.length} módulo(s).`);
         logPerm(target === "perfil" ? "permissao_perfil_em_massa" : "permissao_usuario_em_massa",
           { perfil: target === "perfil" ? perfil : undefined, funcionario_id: target === "user" ? selectedUserId : undefined, modulos: list, preset, motivo_alteracao: motivo });
       }
-    } finally {
-      savingLock.current = false; setSaving(null);
+    } catch{toast.error("Operação em lote não confirmada. Confira as permissões atuais.");}
+    finally {
       if (target === "perfil") await loadPerfil(); else await loadUser();
+      savingLock.current = false; setSaving(null);
     }
   };
 
@@ -551,33 +550,35 @@ const Permissoes: React.FC = () => {
     if (!motivo) return;
     savingLock.current = true; setSaving("copy");
     try {
-      const { data, error } = await supabase.from("permissoes").select("*").in("perfil", getRoleQueryKeys(source)).in("unidade_id", [unidadeScope, ""]);
-      if (error) { toast.error("Erro ao ler o perfil de origem."); return; }
-      const rows = (data || []) as PermRow[];
+      await verifyScope("perfil");
+      const rows=await readProfiles(source);
       const destino = normalizeRoleKey(selectedPerfil);
       const payload = (Object.keys(MODULO_LABELS) as ModuleName[]).filter((m) => !ROUTE_DEPENDENCIES[m]).map((modulo) => {
         const r = rows.find((x) => x.modulo === modulo && x.unidade_id === unidadeScope) || rows.find((x) => x.modulo === modulo && x.unidade_id === "");
         const d = r ?? getDefaultModulePermission(normalizeRoleKey(source), modulo);
         return { perfil: destino, modulo, unidade_id: unidadeScope, can_view: !!d.can_view, can_create: !!d.can_create, can_edit: !!d.can_edit, can_delete: !!d.can_delete, can_execute: !!d.can_execute };
       });
-      const { error: upErr } = await supabase.from("permissoes").upsert(payload, { onConflict: "perfil,modulo,unidade_id" });
-      if (upErr) toast.error(`Erro: ${upErr.message}`);
+      const { data:saved,error: upErr } = await supabase.from("permissoes").upsert(payload, { onConflict: "perfil,modulo,unidade_id" }).select("modulo");
+      if (upErr||!confirmedIds(payload.map(p=>p.modulo),saved?.map(r=>({id:r.modulo}))??null)) throw Error("Cópia não confirmada.");
       else { toast.success(`Permissões copiadas de ${PERFIL_LABELS[source]}.`); logPerm("permissao_perfil_copiada", { origem: source, destino, motivo_alteracao: motivo }); }
-    } finally { savingLock.current = false; setSaving(null); await loadPerfil(); }
+    } catch{toast.error("Cópia não confirmada. Confira as regras atuais.");}finally { await loadPerfil();savingLock.current = false; setSaving(null); }
   };
 
   const resetAllUserOverrides = async () => {
-    if (!selectedUserId || savingLock.current || !canWriteScope) return;
+    if (!selectedUserId || savingLock.current || !canWriteScope||selectedUserRoleKey==="master") return;
     const count = userRows.filter((r) => r.unidade_id === unidadeScope).length;
     if (!count) { toast.info("Este funcionário não tem exceções nesta unidade."); return; }
     const motivo = askMotivo(`Remover as ${count} exceção(ões) e voltar o funcionário ao padrão do perfil?`);
     if (!motivo) return;
     savingLock.current = true; setSaving("reset-all");
     try {
-      const { error } = await supabase.from("permissoes_usuario").delete().eq("user_id", selectedUserId).eq("unidade_id", unidadeScope);
-      if (error) toast.error("Erro ao remover exceções.");
+      await verifyScope("user");
+      const ids=userRows.filter(r=>r.unidade_id===unidadeScope).map(r=>r.id).filter((id):id is string=>!!id);
+      if(ids.length!==count)throw Error("Exceções não confirmadas.");
+      const { data:deleted,error } = await supabase.from("permissoes_usuario").delete().eq("user_id", selectedUserId).eq("unidade_id", unidadeScope).in("id",ids).select("id");
+      if (error||!confirmedIds(ids,deleted)) throw Error("Remoção não confirmada.");
       else { toast.success("Funcionário voltou ao padrão do perfil."); logPerm("excecoes_usuario_redefinidas", { funcionario_id: selectedUserId, total: count, motivo_alteracao: motivo }); }
-    } finally { savingLock.current = false; setSaving(null); await loadUser(); }
+    } catch{toast.error("Remoção não confirmada. Confira as exceções atuais.");}finally { await loadUser();savingLock.current = false; setSaving(null); }
   };
 
   const ActionChips = ({ perm }: { perm?: Partial<ModulePermission> }) => {
@@ -644,16 +645,17 @@ const Permissoes: React.FC = () => {
       {!selectedUnidade ? (
         <Card><CardContent className="pt-6 text-center text-muted-foreground">Selecione uma unidade para continuar.</CardContent></Card>
       ) : (
-      <Tabs value={tab} onValueChange={setTab}>
+      <Tabs value={tab} onValueChange={v=>{if(!savingLock.current)setTab(v);}}>
         <TabsList className="grid w-full grid-cols-2 max-w-md h-auto">
-          <TabsTrigger value="perfil">Permissões por Perfil</TabsTrigger>
-          <TabsTrigger value="individual">Permissões Individuais</TabsTrigger>
+          <TabsTrigger value="perfil" disabled={!!saving}>Permissões por Perfil</TabsTrigger>
+          <TabsTrigger value="individual" disabled={!!saving}>Permissões Individuais</TabsTrigger>
         </TabsList>
         <div className="relative max-w-md mt-4">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input aria-label="Buscar módulo" placeholder="Buscar módulo de acesso..." className="pl-9"
             value={moduleSearch} onChange={(event) => setModuleSearch(event.target.value)} />
         </div>
+        {(!directoryReady||loadFailed||(!loading&&readyKey!==scopeKey&&(tab==="perfil"||!!selectedUserId)))&&<div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">Consulta não confirmada. Edição bloqueada.<Button variant="outline" size="sm" disabled={!!saving||!directoryReady} onClick={()=>void(tab==="perfil"?loadPerfil():loadUser())}>Atualizar permissões</Button></div>}
         <p className="text-xs text-muted-foreground">Os módulos informativos mostram qual permissão realmente controla a página. As regras salvas permanecem preservadas.</p>
         {visibleGroups.length === 0 && <p role="status" className="text-sm text-muted-foreground py-4">Nenhum módulo corresponde à busca.</p>}
 
@@ -719,7 +721,7 @@ const Permissoes: React.FC = () => {
                               <Switch
                                 checked={!!row?.[action]}
                                 onCheckedChange={() => togglePerfil(modulo, action)}
-                                disabled={!!saving || !!ROUTE_DEPENDENCIES[modulo]}
+                                disabled={!!saving || !canWriteScope || !!ROUTE_DEPENDENCIES[modulo]}
                                 aria-label={`${ACTION_LABELS[action]} em ${MODULO_LABELS[modulo]}`}
                               />
                               <span className="text-sm">{ACTION_LABELS[action]}</span>
@@ -761,7 +763,7 @@ const Permissoes: React.FC = () => {
                   {funcionariosFiltered.length === 0 ? (
                     <div className="p-4 text-center text-sm text-muted-foreground">Nenhum profissional encontrado.</div>
                   ) : funcionariosFiltered.map((f) => (
-                    <button key={f.id} type="button" onClick={() => setSelectedUserId(f.id)}
+                    <button key={f.id} type="button" disabled={!!saving} onClick={()=>{if(!savingLock.current)setSelectedUserId(f.id);}}
                       className="w-full text-left px-3 py-2 hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary flex items-center justify-between">
                       <div>
                         <div className="font-medium text-sm">{f.nome}</div>
@@ -781,7 +783,7 @@ const Permissoes: React.FC = () => {
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={resetAllUserOverrides} disabled={!!saving || !canWriteScope}><RotateCcw className="w-3 h-3 mr-1" />Redefinir exceções</Button>
-                    <Button variant="ghost" size="sm" onClick={() => { setSelectedUserId(""); setUserBaseRows([]); setUserRows([]); }}>Trocar</Button>
+                    <Button variant="ghost" size="sm" disabled={!!saving} onClick={() => { if(savingLock.current)return;setSelectedUserId(""); setUserBaseRows([]); setUserRows([]); }}>Trocar</Button>
                   </div>
                 </div>
               )}
@@ -830,7 +832,7 @@ const Permissoes: React.FC = () => {
                                 <Switch
                                   checked={!!effective?.[action]}
                                   onCheckedChange={() => toggleUser(modulo, action)}
-                                  disabled={!!saving || !!ROUTE_DEPENDENCIES[modulo] || selectedUserRoleKey === "master"}
+                                  disabled={!!saving || !canWriteScope || !!ROUTE_DEPENDENCIES[modulo] || selectedUserRoleKey === "master"}
                                   aria-label={`${ACTION_LABELS[action]} em ${MODULO_LABELS[modulo]} para o funcionário selecionado`}
                                 />
                                 <span className="text-sm">{ACTION_LABELS[action]}</span>
@@ -847,7 +849,7 @@ const Permissoes: React.FC = () => {
                         {override?.unidade_id === unidadeScope && (
                           <div className="pt-2 border-t mt-2">
                             <Button variant="ghost" size="sm" onClick={() => resetUserOverride(modulo)}
-                              disabled={!!saving}>
+                              disabled={!!saving||!canWriteScope||selectedUserRoleKey==="master"}>
                               {saving === `user-reset-${modulo}` ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RotateCcw className="w-3 h-3 mr-1" />}
                               Remover exceção (voltar ao perfil)
                             </Button>
