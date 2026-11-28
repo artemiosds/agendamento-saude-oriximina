@@ -314,7 +314,7 @@ const ConfigWhatsApp: React.FC = () => {
 
 
   const writeConnection=async(patch:TablesUpdate<'clinica_config'>)=>{
-    if(connectionLock.current||connectionFailed||!baseline.current)throw Error('Configuração não confirmada.');
+    if(connectionLock.current||actionLock.current||connectionFailed||!baseline.current)throw Error('Configuração não confirmada.');
     connectionLock.current=true;setConnectionBusy(true);
     try{await confirmSession();const old=baseline.current;const {data,error}=await supabase.from('clinica_config').update({...patch,updated_at:nextVersion(old.updated_at)}).eq('id',old.id).eq('updated_at',old.updated_at).select('*').maybeSingle();if(error||!data)throw Error('Gravação não confirmada.');baseline.current=data;return data;}
     catch(error){setConnectionFailed(true);throw error;}
@@ -348,13 +348,15 @@ const ConfigWhatsApp: React.FC = () => {
   };
 
   const checkConnection = async () => {
-    if(connectionFailed||connectionBusy||!baseline.current)return;
+    if(actionLock.current||connectionLock.current||connectionFailed||connectionBusy||!baseline.current)return;
     if(evolutionConfig.evolution_instance_name!==baseline.current.evolution_instance_name||evolutionConfig.evolution_base_url!==baseline.current.evolution_base_url||!apiKeyMasked){toast.error('Salve as alterações antes de verificar.');return;}
     if (!evolutionConfig.evolution_instance_name || !originalApiKey) {
       toast.error('Configure a instância e API Key primeiro.');
       return;
     }
+    actionLock.current=true;setActionBusy(true);
     try {
+      await confirmSession();
       const [{ data: statusData, error: statusError }, { data: instancesData }] = await Promise.all([
         evolutionDiagnostic('status'),
         evolutionDiagnostic('instances'),
@@ -369,7 +371,7 @@ const ConfigWhatsApp: React.FC = () => {
       setStatusDetail(prev => ({
         ...prev,
         last_check_at: new Date().toISOString(),
-        last_error: errorMsg || '',
+        last_error: errorMsg ? 'Diagnóstico retornou erro. Confira o provedor.' : '',
       }));
 
       switch (detailed) {
@@ -403,7 +405,7 @@ const ConfigWhatsApp: React.FC = () => {
           break;
         default:
           setEvolutionStatus('error');
-          toast.error(errorMsg || 'Erro ao verificar conexão.');
+          toast.error('Erro ao verificar conexão. Confira a instância salva.');
       }
 
       // Recarrega métricas e status persistido
@@ -415,6 +417,7 @@ const ConfigWhatsApp: React.FC = () => {
         .maybeSingle();
       if (persisted) setStatusDetail(persisted as any);
     } catch { setEvolutionStatus('error'); toast.error('Não foi possível conectar.'); }
+    finally{actionLock.current=false;setActionBusy(false);}
   };
 
   const reprocessQueue = async () => {
@@ -544,10 +547,12 @@ const ConfigWhatsApp: React.FC = () => {
       toast.error('Preencha Server URL e Admin Token primeiro.');
       return;
     }
-    if(connectionFailed||!baseline.current||uazConfig.uazapi_server_url!==baseline.current.uazapi_server_url||uazConfig.uazapi_instance!==baseline.current.uazapi_instance||!uazTokenMasked){toast.error('Salve as alterações antes de verificar.');return;}
-    setUazTesting(true);
+    if(actionLock.current||connectionLock.current||connectionFailed||!baseline.current||uazConfig.uazapi_server_url!==baseline.current.uazapi_server_url||uazConfig.uazapi_instance!==baseline.current.uazapi_instance||!uazTokenMasked){toast.error('Salve as alterações antes de verificar.');return;}
+    actionLock.current=true;setActionBusy(true);setUazTesting(true);
     try {
-      const { data } = await uazapigoService.getConnectionStatus();
+      await confirmSession();
+      const { data,error } = await uazapigoService.getConnectionStatus();
+      if(error)throw Error('Diagnóstico não confirmado.');
       const detailed = (data as any)?.status_detailed;
       switch (detailed) {
         case 'conectado': setUazStatus('connected'); toast.success('✅ UazapiGO conectada!'); break;
@@ -558,10 +563,10 @@ const ConfigWhatsApp: React.FC = () => {
         case 'instancia_inexistente': setUazStatus('no_instance'); toast.error('❌ Instância não encontrada'); break;
         case 'server_url_invalida': setUazStatus('error'); toast.error('❌ Server URL inválido'); break;
         case 'rede_indisponivel': setUazStatus('error'); toast.error('❌ Rede indisponível'); break;
-        default: setUazStatus('error'); toast.error((data as any)?.error || 'Erro ao verificar UazapiGO');
+        default: setUazStatus('error'); toast.error('Erro ao verificar UazapiGO. Confira a instância salva.');
       }
-    } catch (err: any) { setUazStatus('error'); toast.error(`Erro: ${err.message}`); }
-    setUazTesting(false);
+    } catch { setUazStatus('error'); toast.error('Não foi possível confirmar o diagnóstico UazapiGO.'); }
+    finally{actionLock.current=false;setActionBusy(false);setUazTesting(false);}
   };
 
   const createUazInstance = async () => {
@@ -749,7 +754,7 @@ const ConfigWhatsApp: React.FC = () => {
                     <Button className="gradient-primary text-primary-foreground flex-1 min-w-[120px]" disabled={connectionFailed||connectionBusy||actionBusy||evolutionSaving || !evolutionConfig.evolution_instance_name} onClick={saveEvolutionConfig}>
                       {evolutionSaving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}Salvar
                     </Button>
-                    <Button variant="outline" disabled={connectionFailed||connectionBusy||!evolutionConfig.evolution_instance_name} onClick={checkConnection}>
+                    <Button variant="outline" disabled={actionBusy||evolutionLoading||connectionFailed||connectionBusy||!evolutionConfig.evolution_instance_name} onClick={checkConnection}>
                       <RefreshCw className="w-4 h-4 mr-1" />Verificar
                     </Button>
                   </div>
@@ -829,7 +834,7 @@ const ConfigWhatsApp: React.FC = () => {
                 </Button>
                 <Button
                   variant="outline"
-                  disabled={connectionFailed||connectionBusy||uazTesting || !uazConfig.uazapi_server_url || !originalUazToken}
+                  disabled={actionBusy||evolutionLoading||connectionFailed||connectionBusy||uazTesting || !uazConfig.uazapi_server_url || !originalUazToken}
                   onClick={checkUazConnection}
                 >
                   {uazTesting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
@@ -892,8 +897,8 @@ const ConfigWhatsApp: React.FC = () => {
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50">
                   <div className="text-xs text-muted-foreground">Último erro</div>
-                  <div className="font-medium mt-1 text-xs truncate" title={statusDetail.last_error || ''}>
-                    {statusDetail.last_error || '—'}
+                  <div className="font-medium mt-1 text-xs truncate" title={statusDetail.last_error ? 'Falha registrada pelo provedor' : ''}>
+                    {statusDetail.last_error ? 'Falha registrada pelo provedor' : '—'}
                   </div>
                 </div>
               </div>
