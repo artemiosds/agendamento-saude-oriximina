@@ -1,6 +1,6 @@
 /** Validation of newly edited print fields; existing settings are never silently rewritten. */
-export function printSettingError(next: {margens: Record<string,number>; relatorioEvolucao: {historicoSessoes:number}}, previous: typeof next): string | null {
-  for (const side of ['superior','inferior','esquerda','direita']) {
+export function printSettingError(next: {margens: {superior:number;inferior:number;esquerda:number;direita:number}; relatorioEvolucao: {historicoSessoes:number}}, previous: typeof next): string | null {
+  for (const side of ['superior','inferior','esquerda','direita'] as const) {
     const value = next.margens[side];
     if (value !== previous.margens[side] && (!Number.isInteger(value) || value < 5 || value > 50)) return 'Margens devem estar entre 5 e 50 mm.';
   }

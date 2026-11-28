@@ -327,6 +327,8 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
     onUpdate: () => setDirty(true),
   });
 
+  useEffect(()=>{if(editor&&!editor.isDestroyed)editor.setEditable(!saving&&!loading&&!loadFailed);},[editor,saving,loading,loadFailed]);
+
   // Load existing
   useEffect(() => {
     if (!templateId) return;
@@ -625,6 +627,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
         }
       `}</style>
 
+      <fieldset disabled={saving} className="space-y-4 min-w-0">
       {/* Header form */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="md:col-span-2 space-y-1.5">
@@ -1129,6 +1132,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
         </Button>
       </div>
 
+      </fieldset>
       {/* Add manual field dialog */}
       <Dialog open={!!addFieldOpen} onOpenChange={(o) => { if (!o) setAddFieldOpen(null); }}>
         <DialogContent>

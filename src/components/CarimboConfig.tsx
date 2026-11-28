@@ -137,8 +137,8 @@ const CarimboConfig: React.FC = () => {
     writeLock.current=false;setUploading(null);
   };
 
-  const update = (field: keyof CarimboRecord, value: any) => setCarimbo(prev => ({ ...prev, [field]: value }));
-  const updateCD = (field: keyof CarimboCustomData, value: any) => setCarimbo(prev => ({ ...prev, custom_data: { ...prev.custom_data, [field]: value } }));
+  const update = <K extends keyof CarimboRecord>(field: K, value: CarimboRecord[K]) => {setCarimbo(prev => ({ ...prev, [field]: value }));setStatus('Alterações ainda não salvas');};
+  const updateCD = <K extends keyof CarimboCustomData>(field: K, value: CarimboCustomData[K]) => {setCarimbo(prev => ({ ...prev, custom_data: { ...prev.custom_data, [field]: value } }));setStatus('Alterações ainda não salvas');};
 
   if(loadFailed)return <Card><CardContent className="p-4 space-y-2"><p role="alert">Não foi possível consultar seu carimbo. Edição bloqueada.</p><Button onClick={()=>void loadCarimbo()}>Tentar novamente</Button></CardContent></Card>;
   if (loading) return <div className="flex items-center gap-2 p-4"><Loader2 className="animate-spin w-4 h-4" /> Carregando...</div>;
@@ -157,7 +157,7 @@ const CarimboConfig: React.FC = () => {
         <p role="status" className="text-xs text-muted-foreground">{status}</p>
         {saveFailed&&<Button size="sm" variant="outline" onClick={()=>{if(window.confirm('Descartar rascunho e consultar novamente?'))void loadCarimbo();}}>Recarregar carimbo</Button>}
         <fieldset disabled={saving||!!uploading||saveFailed} className="space-y-5 min-w-0">
-        <RadioGroup value={carimbo.tipo} onValueChange={v => update('tipo', v)} className="flex flex-wrap gap-6">
+        <RadioGroup value={carimbo.tipo} onValueChange={v => {if(v==='digital'||v==='imagem')update('tipo',v);}} className="flex flex-wrap gap-6">
           <div className="flex items-center gap-2"><RadioGroupItem value="digital" id="tipo-digital" /><Label htmlFor="tipo-digital">Carimbo digital (gerado pelo sistema)</Label></div>
           <div className="flex items-center gap-2"><RadioGroupItem value="imagem" id="tipo-imagem" /><Label htmlFor="tipo-imagem">Imagem do carimbo físico</Label></div>
         </RadioGroup>
@@ -175,7 +175,7 @@ const CarimboConfig: React.FC = () => {
           <div className="space-y-1.5"><Label className="text-xs font-semibold">CNS profissional (opcional)</Label><Input value={cd.cns_profissional || ''} onChange={e => updateCD('cns_profissional', e.target.value)} placeholder="000 0000 0000 0000" /></div>
           <div className="space-y-1.5"><Label className="text-xs font-semibold">Cidade/UF</Label><Input value={cd.cidade_uf || ''} onChange={e => updateCD('cidade_uf', e.target.value)} placeholder="Oriximiná/PA" /></div>
           <div className="space-y-1.5"><Label className="text-xs font-semibold">Posição no documento</Label>
-            <Select value={cd.posicao || 'center'} onValueChange={v => updateCD('posicao', v)}>
+            <Select value={cd.posicao || 'center'} onValueChange={v => {if(v==='left'||v==='center'||v==='right')updateCD('posicao',v);}}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="left">Esquerda</SelectItem>
@@ -188,15 +188,15 @@ const CarimboConfig: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {[
+          {([
             { key: 'mostrar_linha', label: 'Linha de assinatura' },
             { key: 'mostrar_nome', label: 'Nome' },
             { key: 'mostrar_conselho', label: 'Conselho' },
             { key: 'mostrar_data_local', label: 'Data e local' },
-          ].map(item => (
+          ] as const).map(item => (
             <div key={item.key} className="flex items-center justify-between p-2 bg-muted/40 rounded-lg gap-2">
               <span className="text-xs">{item.label}</span>
-              <Switch checked={(cd as any)[item.key] !== false} onCheckedChange={v => updateCD(item.key as any, v)} />
+              <Switch checked={cd[item.key] !== false} onCheckedChange={v => updateCD(item.key, v)} />
             </div>
           ))}
         </div>

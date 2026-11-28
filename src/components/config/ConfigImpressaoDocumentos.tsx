@@ -49,6 +49,7 @@ const ConfigImpressaoDocumentos: React.FC = () => {
   const [loadFailed, setLoadFailed] = useState(false);
   const [saveState,setSaveState] = useState<'idle'|'draft'|'saving'|'saved'|'error'>('idle');
   const revision = useRef(0);
+  const pendingWrites=useRef(0);
   const confirmed = useRef<ImpressaoConfig>(DEFAULT);
   const draft = useRef<ImpressaoConfig>(DEFAULT);
   const uploadLock = useRef(false);
@@ -66,9 +67,9 @@ const ConfigImpressaoDocumentos: React.FC = () => {
     const cfg = raw === undefined ? undefined : configObject(raw) as Partial<ImpressaoConfig> & {cabecalho?: Partial<ImpressaoConfig> & {logoUrl?:string}};
     let loaded: ImpressaoConfig = DEFAULT;
     if (cfg) {
-      const headerOld = cfg.cabecalho || {};
+      const headerOld: Partial<ImpressaoConfig> & {logoUrl?:string} = cfg.cabecalho ?? {};
       const centralLegado = cfg.mostrarLogoCentral ?? headerOld.mostrarLogoCentral ?? false;
-      const lc = cfg.logosConfig || {};
+      const lc: Partial<ImpressaoConfig['logosConfig']> = cfg.logosConfig || {};
       loaded = {
         ...DEFAULT,
         ...cfg,
@@ -109,7 +110,7 @@ const ConfigImpressaoDocumentos: React.FC = () => {
     const sequence=revision.current;
     const validation=printSettingError(updated,confirmed.current);
     if(validation){setSaveState('error');toast.error(validation);return false;}
-    setSaving(true);setSaveState('saving');
+    pendingWrites.current++;setSaving(true);setSaveState('saving');
     let ok=false;
     try {
       ok=await writeSection(previous=>{
@@ -120,7 +121,7 @@ const ConfigImpressaoDocumentos: React.FC = () => {
       if(ok){confirmed.current=updated;invalidateDocumentConfigCache();}
     }catch(error){toast.error(error instanceof Error?error.message:'Gravação não confirmada.');}
     if(sequence===revision.current){setSaveState(ok?'saved':'error');if(ok)toast.success('Configuração salva');}
-    setSaving(false);
+    pendingWrites.current--;setSaving(pendingWrites.current>0);
     return ok;
   };
   const update = <K extends keyof ImpressaoConfig>(key: K, value: ImpressaoConfig[K]) => {
@@ -132,7 +133,7 @@ const ConfigImpressaoDocumentos: React.FC = () => {
   const saveCurrent = () => save(draft.current);
 
   const uploadLogo = async (file: File, slot: 'esquerda' | 'central' | 'direita') => {
-    if(uploadLock.current||saving||loadFailed||loading)return;
+    if(uploadLock.current||pendingWrites.current>0||loadFailed||loading)return;
     const ext=logoExtension(file.type);
     if(!ext||!file.size||file.size>3*1024*1024){toast.error('Selecione PNG, JPG, WebP ou SVG de até 3MB.');return;}
     uploadLock.current=true;setUploading(slot);
