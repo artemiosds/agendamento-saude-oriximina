@@ -7,7 +7,7 @@ import { createConfigQueue, snapshotConfigPatch } from '@/lib/configWriteQueue';
 
 type Baseline = { key: string; identity: string; raw: unknown };
 /** Scoped to administrative editors, not clinical records or professional preferences. */
-export function useAdministrativeConfigSection(key: string) {
+export function useAdministrativeConfigSection(key: string,auditAcao?:string) {
   const { user } = useAuth();
   const { atualizarConfiguracao } = useConfiguracao();
   const identity = user?.role === 'master' && user.ativo === true ? user.authUserId : undefined;
@@ -28,11 +28,11 @@ export function useAdministrativeConfigSection(key: string) {
     const current = baseline.current;
     if (!identity || !current || current.identity !== identity || current.key !== key) throw Error('Leitura ou sessão não confirmada. Nenhuma gravação realizada.');
     const value = snapshotConfigPatch({ value: build(current.raw) }).value;
-    const ok = await atualizarConfiguracao(key, value, { silent: true, expectedSection: { key, value: current.raw } });
+    const ok = await atualizarConfiguracao(key, value, { silent: true, auditAcao, expectedSection: { key, value: current.raw } });
     if (!ok) return false;
     if (baseline.current === current) baseline.current = { ...current, raw: value };
     return true;
-  }), [identity, key, atualizarConfiguracao]);
+  }), [identity, key, atualizarConfiguracao,auditAcao]);
   return { load, save };
 }
 

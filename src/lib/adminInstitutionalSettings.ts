@@ -33,7 +33,7 @@ export const DEFAULT: SistemaConfig = {
 const groups=['instituicao','notificacoes','aparencia','conformidade'] as const;
 export function readInstitutionalConfig(raw:unknown):SistemaConfig{
  const root=raw===undefined?{}:configObject(raw);
- const result={...DEFAULT,...root};
+ const result:Record<string,unknown>={...DEFAULT,...root};
  for(const group of groups){
    const current=root[group]===undefined?{}:configObject(root[group]);
    const defaults=DEFAULT[group];
@@ -53,14 +53,21 @@ export function mergeInstitutionalEdits(raw:unknown,baseline:SistemaConfig,draft
  for(const group of groups){
    const old=configObject(baseline[group]),edited=configObject(draft[group]);
    const delta=Object.fromEntries(Object.entries(edited).filter(([key,value])=>!sameConfigSection(old[key],value)));
-   if(Object.keys(delta).length)next[group]={...DEFAULT[group],...(root[group]===undefined?{}:configObject(root[group])),...delta};
+   if(Object.keys(delta).length){
+     const stored=root[group]===undefined?{}:configObject(root[group]);
+     const initial=root[group]===undefined?DEFAULT[group]:stored;
+     const patch:Record<string,unknown>={...initial,...delta};
+     // The existing schema requires a name for an institution object.
+     if(group==='instituicao'&&patch.nome===undefined)patch.nome=baseline.instituicao.nome;
+     next[group]=patch;
+   }
  }
  return next;
 }
 export function validateInstitutionalEdits(before:SistemaConfig,after:SistemaConfig):string|null{
  const old=before.instituicao,i=after.instituicao;
  if(i.nome!==old.nome&&!i.nome.trim())return 'Informe o nome da instituição.';
- if(i.logoUrl!==old.logoUrl&&i.logoUrl!==''&&!safeIntegrationUrl(i.logoUrl))return 'Informe URL HTTP/HTTPS válida para o logotipo.';
+ if(i.logoUrl!==old.logoUrl&&i.logoUrl!==''&&(!safeIntegrationUrl(i.logoUrl)||/[<>"'\s]/.test(i.logoUrl)))return 'Informe URL HTTP/HTTPS válida para o logotipo.';
  if(i.email!==old.email&&i.email!==''&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(i.email))return 'Informe um e-mail institucional válido.';
  if(after.aparencia.corPrimaria!==before.aparencia.corPrimaria&&!/^#[0-9a-fA-F]{6}$/.test(after.aparencia.corPrimaria))return 'A cor deve estar no formato #RRGGBB.';
  for(const key of ['retencaoDados','anonimizarApos'] as const){

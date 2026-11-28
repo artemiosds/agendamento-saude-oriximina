@@ -19,7 +19,7 @@ const CONFIG_KEY = 'config_sistema';
 
 const ConfigSistema: React.FC<{onDirtyChange?:(dirty:boolean)=>void}> = ({onDirtyChange}) => {
   const {user}=useAuth();
-  const {load,save:writeSection}=useAdministrativeConfigSection(CONFIG_KEY);
+  const {load,save:writeSection}=useAdministrativeConfigSection(CONFIG_KEY,'ALTERAR_CONFIG_SISTEMA');
   const {syncPendingDrafts}=useConfiguracao();
   const [config,setConfig]=useState<SistemaConfig>(DEFAULT);
   const [confirmed,setConfirmed]=useState<SistemaConfig>(DEFAULT);
