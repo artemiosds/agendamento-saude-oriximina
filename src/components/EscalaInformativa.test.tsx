@@ -39,7 +39,7 @@ describe('cadastro informativo', () => {
     fireEvent.click(form.getByRole('gridcell', { name: '4' }));
     fireEvent.click(form.getByRole('button', { name: 'Remover 24/11/2026' }));
     expect(f.rpc).not.toHaveBeenCalled();
-    expect(form.getByText('Maternidade Municipal · Sala de Parto · 08h às 12h · 2 datas')).toBeTruthy();
+    expect(form.getByText('Pessoa fictícia · Maternidade Municipal · Sala de Parto · 08h às 12h · 2 datas · 8h 0min previstos no lote')).toBeTruthy();
     fireEvent.click(form.getByRole('button', { name: 'Salvar 2 datas' }));
     await waitFor(() => expect(form.getByRole('status').textContent).toBe('2 datas salvas na escala.'));
     expect(f.rpc).toHaveBeenCalledTimes(1);
@@ -53,9 +53,9 @@ describe('cadastro informativo', () => {
   it('oferece atalhos do mês, limpar seleção e plantão de 24h com unidade existente', async () => {
     f.rpc.mockResolvedValue({ data: 1, error: null });
     const { form } = open();
-    fireEvent.click(form.getByRole('button', { name: 'Segundas' }));
+    fireEvent.click(form.getByRole('button', { name: 'Seg' }));
     expect(form.getByText('5 datas marcadas')).toBeTruthy();
-    fireEvent.click(form.getByRole('button', { name: 'Terças' }));
+    fireEvent.click(form.getByRole('button', { name: 'Ter' }));
     expect(form.getByText('9 datas marcadas')).toBeTruthy();
     fireEvent.click(form.getByRole('button', { name: 'Finais de semana' }));
     expect(form.getByText('18 datas marcadas')).toBeTruthy();
@@ -65,7 +65,7 @@ describe('cadastro informativo', () => {
     fireEvent.change(form.getByLabelText(/Local de trabalho/), { target: { value: 'Unidade fictícia' } });
     fireEvent.change(form.getByLabelText('Turno'), { target: { value: 'plantao24' } });
     fireEvent.click(form.getByRole('gridcell', { name: '29' }));
-    expect(form.getByText('Unidade fictícia · 07h às 07h do dia seguinte · 1 data')).toBeTruthy();
+    expect(form.getByText('Pessoa fictícia · Unidade fictícia · 07h às 07h do dia seguinte · 1 data · 24h 0min previstos no lote')).toBeTruthy();
     fireEvent.click(form.getByRole('button', { name: 'Salvar 1 data' }));
     await waitFor(() => expect(f.rpc).toHaveBeenCalledWith('salvar_escalas_personalizadas', expect.objectContaining({
       p_unidade: 'u1', p_datas: ['2026-11-29'], p_inicio: '07:00', p_duracao: 1440,
@@ -74,9 +74,10 @@ describe('cadastro informativo', () => {
 
   it('informa quantos dias da semana serão repetidos, sem contar a mesma segunda duas vezes', () => {
     const { form } = open();
-    fireEvent.click(form.getByRole('button', { name: 'Segundas' }));
-    fireEvent.click(form.getByRole('button', { name: 'Terças' }));
+    fireEvent.click(form.getByRole('button', { name: 'Seg' }));
+    fireEvent.click(form.getByRole('button', { name: 'Ter' }));
     fireEvent.click(form.getByRole('button', { name: 'Repetir toda semana' }));
+    expect(form.getByText('2 dias da semana serão repetidos')).toBeTruthy();
     expect(form.getByRole('button', { name: 'Salvar 2 dias por semana' })).toBeTruthy();
     expect(f.rpc).not.toHaveBeenCalled();
   });

@@ -1,6 +1,6 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import HistoricoTriagem from "./HistoricoTriagem";
 
 type IndexResult = { data: { id: string }[]; count: number; error: Error | null };
@@ -169,7 +169,7 @@ describe("Histórico de Triagem: carregamento, erro e vazio", () => {
     fireEvent.change(screen.getByPlaceholderText("Nome do paciente..."), { target: { value: "Paciente" } });
     expect(await screen.findByText("Paciente de teste")).toBeInTheDocument();
     expect(mocks.queryCount).toBe(2);
-    expect(screen.getByText("1 registro(s) encontrado(s)")).toBeInTheDocument();
+    expect(within(screen.getByText('Registros encontrados').parentElement!).getByText('1',{exact:true})).toBeInTheDocument();
   });
 
   it('encontra nomes independentemente de acentos e espaços extras', async () => {
@@ -224,7 +224,7 @@ describe("Histórico de Triagem: carregamento, erro e vazio", () => {
     render(<HistoricoTriagem />);
     await screen.findByText('Nenhum registro encontrado.');
     fireEvent.change(screen.getByPlaceholderText('Nome do paciente...'), { target: { value: 'Paciente' } });
-    await screen.findByText('1 registro(s) encontrado(s)');
+    await waitFor(()=>expect(within(screen.getByText('Registros encontrados').parentElement!).getByText('1',{exact:true})).toBeInTheDocument());
     expect(screen.getAllByText('Paciente de teste')).toHaveLength(1);
   });
 
