@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOperacional } from '@/contexts/OperacionalContext';
@@ -27,6 +27,9 @@ import HealthDashboard from './whatsapp/HealthDashboard';
 import WebhookUrlCard from './whatsapp/WebhookUrlCard';
 import { whatsappService, uazapigoService } from '@/services/whatsappService';
 import { toast } from 'sonner';
+import type {Tables,TablesUpdate,Json} from '@/integrations/supabase/types';
+import {configObject} from '@/lib/configSectionGuard';
+import {confirmedCounts,validReminderHours,providerFunction,confirmedProcessing,nextVersion} from '@/lib/adminWhatsApp';
 
 const TEMPLATE_TYPES = [
   { tipo: 'confirmacao', label: 'Agendamento Criado', icon: '✅', description: 'Quando um agendamento é criado' },
@@ -85,6 +88,22 @@ const ConfigWhatsApp: React.FC = () => {
 
   const isGlobalAdmin = user?.usuario === 'admin.sms';
   const userUnitId = user?.unidadeId || '';
+  const [connectionFailed,setConnectionFailed]=useState(false);
+  const [connectionBusy,setConnectionBusy]=useState(false);
+  const connectionLock=useRef(false);
+  const baseline=useRef<Tables<'clinica_config'>|null>(null);
+  const reminderBaseline=useRef<{raw:unknown;version:string|null}|null>(null);
+  const [reminderReady,setReminderReady]=useState(false);
+  const [reminderSaving,setReminderSaving]=useState(false);
+  const reminderLock=useRef(false);
+  const [templatesFailed,setTemplatesFailed]=useState(false);
+  const templateLock=useRef(false);
+  const [statsReady,setStatsReady]=useState(false);
+  const [logsFailed,setLogsFailed]=useState(false);
+  const actionLock=useRef(false);
+  const [actionBusy,setActionBusy]=useState(false);
+  const confirmSession=useCallback(async()=>{const {data,error}=await supabase.auth.getSession();if(error||!user?.authUserId||user.role!=='master'||user.ativo!==true||data.session?.user.id!==user.authUserId)throw Error('Sessão administrativa não confirmada.');},[user?.authUserId,user?.role,user?.ativo]);
+  const evolutionDiagnostic=useCallback(async(action:'status'|'instances')=>supabase.functions.invoke('send-whatsapp-evolution',{body:{action}}),[]);
 
   // Evolution API config
   const [evolutionConfig, setEvolutionConfig] = useState({
@@ -153,10 +172,13 @@ const ConfigWhatsApp: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState('conexao');
 
   // Load Evolution config
-  useEffect(() => {
-    (async () => {
+  const loadConnection=useCallback(async()=>{
+      setEvolutionLoading(true);setConnectionFailed(false);setReminderReady(false);baseline.current=null;reminderBaseline.current=null;setEvolutionStatus('idle');setUazStatus('idle');
       try {
-        const { data } = await supabase.from('clinica_config').select('*').limit(1).maybeSingle();
+        await confirmSession();
+        const { data,error } = await supabase.from('clinica_config').select('*').maybeSingle();
+        if(error||!data)throw Error('Configuração da conexão não confirmada.');
+        baseline.current=data;
         if (data) {
           setEvolutionConfigId(data.id);
           const apiKey = data.evolution_api_key || '';
@@ -166,13 +188,13 @@ const ConfigWhatsApp: React.FC = () => {
             logo_url: data.logo_url || '',
             telefone: data.telefone || '',
             evolution_base_url: data.evolution_base_url || 'https://api.agendamento-saude-sms-oriximina.site',
-            evolution_api_key: apiKey,
+            evolution_api_key: '',
             evolution_instance_name: data.evolution_instance_name || '',
           });
           if (data.evolution_instance_name && apiKey) {
             const [{ data: statusData }, { data: instancesData }] = await Promise.all([
-              whatsappService.getConnectionStatus(),
-              whatsappService.getInstances(),
+              evolutionDiagnostic('status'),
+              evolutionDiagnostic('instances'),
             ]);
             if (statusData) {
               const detailed = (statusData as any).status_detailed;
@@ -198,7 +220,7 @@ const ConfigWhatsApp: React.FC = () => {
           setOriginalUazToken(uazTok);
           setUazConfig({
             uazapi_server_url: (data as any).uazapi_server_url || 'https://free.uazapi.com',
-            uazapi_admin_token: uazTok,
+            uazapi_admin_token: '',
             uazapi_instance: (data as any).uazapi_instance || '',
             uazapi_ativo: !!(data as any).uazapi_ativo,
           });
@@ -207,35 +229,33 @@ const ConfigWhatsApp: React.FC = () => {
         }
 
         // Load reminder hours from system_config
-        const { data: sysData } = await supabase.from('system_config').select('configuracoes').eq('id', 'config_whatsapp').maybeSingle();
+        const { data: sysData,error:sysError } = await supabase.from('system_config').select('configuracoes,updated_at').eq('id', 'config_whatsapp').maybeSingle();
+        if(!sysError){reminderBaseline.current={raw:sysData?.configuracoes,version:sysData?.updated_at??null};setReminderReady(true);}
         if (sysData?.configuracoes) {
           const cfg = sysData.configuracoes as any;
           if (cfg.horas_lembrete_1) setHorasLembrete1(cfg.horas_lembrete_1);
           if (cfg.horas_lembrete_2) setHorasLembrete2(cfg.horas_lembrete_2);
         }
-      } catch {}
-      setEvolutionLoading(false);
-    })();
-  }, []);
+      } catch {setConnectionFailed(true);}
+      finally{setEvolutionLoading(false);}
+  }, [confirmSession,evolutionDiagnostic]);
+  useEffect(()=>{void loadConnection();},[loadConnection]);
 
   // Carrega métricas da fila quando aba Logs ou Conexão é aberta
   const loadQueueStats = useCallback(async () => {
+    setStatsReady(false);
     try {
       const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const [{ count: pendentes }, { count: enviadas }, { count: falhas }, { count: expiradas }, { count: processando }] = await Promise.all([
+      const results = await Promise.all([
         supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'pendente'),
         supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'enviado').gte('processado_em', dayAgo),
         supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'erro').gte('processado_em', dayAgo),
         supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'bloqueado').gte('processado_em', dayAgo),
         supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'processando'),
       ]);
-      setQueueStats({
-        pendentes: pendentes ?? 0,
-        enviadas_24h: enviadas ?? 0,
-        falhas_24h: falhas ?? 0,
-        expiradas_24h: expiradas ?? 0,
-        processando: processando ?? 0,
-      });
+      const counts=confirmedCounts(results);if(!counts)return;
+      const [pendentes,enviadas,falhas,expiradas,processando]=counts;
+      setQueueStats({pendentes,enviadas_24h:enviadas,falhas_24h:falhas,expiradas_24h:expiradas,processando});setStatsReady(true);
     } catch {}
   }, []);
 
@@ -243,63 +263,38 @@ const ConfigWhatsApp: React.FC = () => {
 
   // Load templates
   const loadTemplates = useCallback(async () => {
-    setTemplatesLoading(true);
+    setTemplatesLoading(true);setTemplatesFailed(false);
     try {
       let query = supabase.from('whatsapp_templates').select('*');
       if (!isGlobalAdmin) query = query.eq('unidade_id', userUnitId);
-      const { data } = await query.order('tipo');
-      setTemplates((data as any[]) || []);
-    } catch {}
+      const { data,error } = await query.order('tipo');
+      if(error||!data)throw Error('Consulta não confirmada.');setTemplates(data);
+    } catch {setTemplatesFailed(true);}
     setTemplatesLoading(false);
   }, [isGlobalAdmin, userUnitId]);
 
   useEffect(() => { loadTemplates(); }, [loadTemplates]);
 
-  // Set editing message when template changes
-  useEffect(() => {
-    const existing = templates.find(t => t.tipo === selectedTemplate && t.unidade_id === userUnitId);
-    setEditingMessage(existing?.mensagem || DEFAULT_TEMPLATES[selectedTemplate] || '');
-  }, [selectedTemplate, templates, userUnitId]);
-
-  const getCurrentTemplate = () => templates.find(t => t.tipo === selectedTemplate && t.unidade_id === userUnitId);
-  const isTemplateActive = () => getCurrentTemplate()?.ativo ?? true;
-
-  const saveTemplate = async () => {
-    setTemplateSaving(true);
-    try {
-      const existing = getCurrentTemplate();
-      if (existing?.id) {
-        await supabase.from('whatsapp_templates').update({
-          mensagem: editingMessage,
-          updated_at: new Date().toISOString(),
-        }).eq('id', existing.id);
-      } else {
-        await supabase.from('whatsapp_templates').insert({
-          unidade_id: userUnitId,
-          tipo: selectedTemplate,
-          mensagem: editingMessage,
-          ativo: true,
-        });
-      }
-      await loadTemplates();
-      toast.success('Template salvo com sucesso!');
-    } catch (err: any) {
-      toast.error(`Erro: ${err.message}`);
-    }
-    setTemplateSaving(false);
+  const currentTemplate=templates.find(t=>t.tipo===selectedTemplate&&t.unidade_id===userUnitId);
+  const confirmedMessage=currentTemplate?.mensagem??DEFAULT_TEMPLATES[selectedTemplate]??'';
+  useEffect(()=>{setEditingMessage(confirmedMessage);},[confirmedMessage,selectedTemplate,userUnitId]);
+  const isTemplateActive=()=>currentTemplate?.ativo??true;
+  const writeTemplate=async(tipo:string,patch:{mensagem?:string;ativo?:boolean})=>{
+    if(templateLock.current||templatesLoading||templatesFailed||!userUnitId)return;
+    templateLock.current=true;setTemplateSaving(true);
+    try{
+      await confirmSession();
+      const existing=templates.find(t=>t.tipo===tipo&&t.unidade_id===userUnitId);
+      const {data:actual,error:readError}=await supabase.from('whatsapp_templates').select('id,mensagem,ativo').eq('unidade_id',userUnitId).eq('tipo',tipo).maybeSingle();
+      if(readError||actual?.id!==existing?.id||(actual&&(actual.mensagem!==existing?.mensagem||actual.ativo!==existing?.ativo)))throw Error('Modelo alterado. Recarregue.');
+      const result=actual?await supabase.from('whatsapp_templates').update({...patch,updated_at:new Date().toISOString()}).eq('id',actual.id).eq('unidade_id',userUnitId).eq('mensagem',actual.mensagem).eq('ativo',actual.ativo).select('id,unidade_id,tipo,mensagem,ativo').maybeSingle():await supabase.from('whatsapp_templates').insert({unidade_id:userUnitId,tipo,mensagem:DEFAULT_TEMPLATES[tipo]||'',ativo:true,...patch}).select('id,unidade_id,tipo,mensagem,ativo').single();
+      if(result.error||!result.data)throw Error('Gravação não confirmada.');
+      const saved=result.data;setTemplates(prev=>[...prev.filter(t=>t.id!==saved.id),saved]);toast.success('Configuração de mensagem confirmada.');
+    }catch{setTemplatesFailed(true);toast.error('Gravação não confirmada. Atualize os modelos antes de repetir.');}
+    finally{templateLock.current=false;setTemplateSaving(false);}
   };
-
-  const toggleTemplate = async (tipo: string) => {
-    const existing = templates.find(t => t.tipo === tipo && t.unidade_id === userUnitId);
-    if (existing?.id) {
-      await supabase.from('whatsapp_templates').update({ ativo: !existing.ativo }).eq('id', existing.id);
-    } else {
-      await supabase.from('whatsapp_templates').insert({
-        unidade_id: userUnitId, tipo, mensagem: DEFAULT_TEMPLATES[tipo] || '', ativo: false,
-      });
-    }
-    await loadTemplates();
-  };
+  const saveTemplate=()=>{if(!editingMessage.trim()){toast.error('Informe a mensagem.');return;}void writeTemplate(selectedTemplate,{mensagem:editingMessage});};
+  const toggleTemplate=(tipo:string)=>{const existing=templates.find(t=>t.tipo===tipo&&t.unidade_id===userUnitId);void writeTemplate(tipo,{ativo:!(existing?.ativo??true)});};
 
   const resetToDefault = () => {
     setEditingMessage(DEFAULT_TEMPLATES[selectedTemplate] || '');
@@ -314,8 +309,16 @@ const ConfigWhatsApp: React.FC = () => {
     .replace(/\{\{hora\}\}/g, '14:00');
 
 
+  const writeConnection=async(patch:TablesUpdate<'clinica_config'>)=>{
+    if(connectionLock.current||connectionFailed||!baseline.current)throw Error('Configuração não confirmada.');
+    connectionLock.current=true;setConnectionBusy(true);
+    try{await confirmSession();const old=baseline.current;const {data,error}=await supabase.from('clinica_config').update({...patch,updated_at:nextVersion(old.updated_at)}).eq('id',old.id).eq('updated_at',old.updated_at).select('*').maybeSingle();if(error||!data)throw Error('Gravação não confirmada.');baseline.current=data;return data;}
+    catch(error){setConnectionFailed(true);throw error;}
+    finally{connectionLock.current=false;setConnectionBusy(false);}
+  };
   // Save Evolution config
   const saveEvolutionConfig = async () => {
+    if(connectionLock.current||connectionFailed||!window.confirm('Salvar configuração da Evolution API?'))return;
     setEvolutionSaving(true);
     try {
       const baseUrl = (evolutionConfig.evolution_base_url || '').replace(/\/+$/, '');
@@ -331,25 +334,26 @@ const ConfigWhatsApp: React.FC = () => {
         updated_at: new Date().toISOString()
       };
       
-      const { error } = await supabase.from('clinica_config').update(payload).eq('id', evolutionConfigId || '00000000-0000-0000-0000-000000000000');
-      if (error) throw error;
+      await writeConnection(payload);
       
-      setOriginalApiKey(apiKeyToSave);
+      setEvolutionConfig(p=>({...p,evolution_api_key:'',evolution_base_url:baseUrl}));setEvolutionStatus('idle');setOriginalApiKey(apiKeyToSave);
       setApiKeyMasked(true);
       toast.success('Configurações da Evolution API salvas!');
-    } catch (err: any) { toast.error(`Erro ao salvar: ${err.message}`); }
+    } catch { toast.error('Gravação não confirmada. Atualize a conexão.'); }
     setEvolutionSaving(false);
   };
 
   const checkConnection = async () => {
+    if(connectionFailed||connectionBusy||!baseline.current)return;
+    if(evolutionConfig.evolution_instance_name!==baseline.current.evolution_instance_name||evolutionConfig.evolution_base_url!==baseline.current.evolution_base_url||!apiKeyMasked){toast.error('Salve as alterações antes de verificar.');return;}
     if (!evolutionConfig.evolution_instance_name || !originalApiKey) {
       toast.error('Configure a instância e API Key primeiro.');
       return;
     }
     try {
       const [{ data: statusData, error: statusError }, { data: instancesData }] = await Promise.all([
-        whatsappService.getConnectionStatus(),
-        whatsappService.getInstances(),
+        evolutionDiagnostic('status'),
+        evolutionDiagnostic('instances'),
       ]);
       if (statusError) throw statusError;
       if (instancesData?.instances) setEvolutionInstances(instancesData.instances);
@@ -410,28 +414,33 @@ const ConfigWhatsApp: React.FC = () => {
   };
 
   const reprocessQueue = async () => {
-    setReprocessing(true);
+    if(actionLock.current||!window.confirm('Processar a fila agora? Poderá disparar mensagens reais elegíveis.'))return;
+    actionLock.current=true;setActionBusy(true);setReprocessing(true);
     try {
+      await confirmSession();
       const { data, error } = await whatsappService.processQueue();
       if (error) throw error;
-      const d = data as any;
-      toast.success(`Fila processada: ${d?.processed ?? 0} enviadas, ${d?.skipped_past ?? 0} expiradas, ${d?.errors ?? 0} erros`);
+      if(!confirmedProcessing(data))throw Error('Processamento não confirmado.');
+      toast.success(`Processamento confirmado: ${data.processed} processadas${data.failed===undefined?'':` · ${data.failed} falhas`}`);
       loadQueueStats();
     } catch (err: any) {
       toast.error(`Erro ao processar fila: ${err.message}`);
     }
-    setReprocessing(false);
+    actionLock.current=false;setActionBusy(false);setReprocessing(false);
   };
 
   const testWhatsApp = async () => {
     if (!testPhone) { toast.error('Informe o número para teste.'); return; }
-    setEvolutionTesting(true);
+    if(actionLock.current||connectionFailed||!window.confirm('Enviar mensagem de teste real para o número informado?'))return;
+    actionLock.current=true;setActionBusy(true);setEvolutionTesting(true);
     try {
-      const service = activeProvider === 'uazapigo' ? uazapigoService : whatsappService;
-      const { data, error } = await service.sendTest(testPhone);
+      await confirmSession();
+      const {data:provider,error:providerError}=await supabase.from('clinica_config').select('whatsapp_provider_active').eq('id',evolutionConfigId!).maybeSingle();
+      if(providerError||!provider||provider.whatsapp_provider_active!==activeProvider)throw Error('Provedor alterado. Atualize a conexão.');
+      const {data,error}=await supabase.functions.invoke(providerFunction(activeProvider),{body:{tipo:'teste',telefone_teste:testPhone}});
       if (error) throw error;
       if (data?.success) {
-        toast.success('Mensagem de teste enviada!');
+        toast.success('Solicitação de teste aceita. Confira o recebimento.');
         if (activeProvider === 'evolution') setEvolutionStatus('connected');
         else setUazStatus('connected');
       } else { 
@@ -444,21 +453,21 @@ const ConfigWhatsApp: React.FC = () => {
       if (activeProvider === 'evolution') setEvolutionStatus('error');
       else setUazStatus('error');
     }
-    setEvolutionTesting(false);
+    actionLock.current=false;setActionBusy(false);setEvolutionTesting(false);
   };
 
   // Load logs
   const loadLogs = useCallback(async () => {
-    setLogsLoading(true);
+    setLogsLoading(true);setLogsFailed(false);
     try {
       let query = supabase.from('notification_logs').select('*')
         .in('canal', ['whatsapp_evolution', 'whatsapp_uazapigo'])
         .order('criado_em', { ascending: false })
         .limit(100);
       if (logsFilter !== 'todos') query = query.eq('status', logsFilter);
-      const { data } = await query;
-      setLogs((data as any[]) || []);
-    } catch {}
+      const { data,error } = await query;
+      if(error||!data)throw Error('Consulta não confirmada.');setLogs(data as NotifLog[]);
+    } catch {setLogsFailed(true);}
     setLogsLoading(false);
   }, [logsFilter]);
 
@@ -466,31 +475,39 @@ const ConfigWhatsApp: React.FC = () => {
 
   const resendMessage = async (log: NotifLog) => {
     if (!log.agendamento_id) { toast.error('Sem agendamento vinculado.'); return; }
+    if(actionLock.current||logsFailed||connectionFailed||!window.confirm('Solicitar novo envio? Confira se o destinatário ainda não recebeu.'))return;
+    actionLock.current=true;setActionBusy(true);
     try {
-      const { data, error } = await supabase.functions.invoke('send-whatsapp-evolution', {
+      await confirmSession();
+      const {data:provider,error:providerError}=await supabase.from('clinica_config').select('whatsapp_provider_active').eq('id',evolutionConfigId!).maybeSingle();
+      if(providerError||!provider||provider.whatsapp_provider_active!==activeProvider)throw Error('Provedor alterado. Atualize a conexão.');
+      const { data, error } = await supabase.functions.invoke(providerFunction(activeProvider), {
         body: { agendamento_id: log.agendamento_id, tipo: log.evento },
       });
       if (error) throw error;
-      if (data?.success) toast.success('Mensagem reenviada!');
+      if (data?.success) toast.success('Solicitação de reenvio aceita. Confira o histórico.');
       else toast.error(data?.error || 'Erro');
       loadLogs();
-    } catch (err: any) { toast.error(`Erro: ${err.message}`); }
+    } catch { toast.error('Reenvio não confirmado. Confira o histórico antes de repetir.'); }
+    finally{actionLock.current=false;setActionBusy(false);}
   };
 
   // Save reminder config
-  const saveReminderConfig = async () => {
-    try {
-      await supabase.from('system_config').upsert({
-        id: 'config_whatsapp',
-        configuracoes: { horas_lembrete_1: horasLembrete1, horas_lembrete_2: horasLembrete2 } as any,
-        updated_at: new Date().toISOString(),
-      });
-      toast.success('Configurações de tempo salvas!');
-    } catch (err: any) { toast.error(`Erro: ${err.message}`); }
+  const saveReminderConfig=async()=>{
+    if(reminderLock.current||!reminderReady||!reminderBaseline.current||!validReminderHours(horasLembrete1,horasLembrete2)){toast.error('Confira a leitura e os limites de lembretes.');return;}
+    reminderLock.current=true;setReminderSaving(true);
+    try{await confirmSession();const old=reminderBaseline.current;const next={...(old.raw===undefined?{}:configObject(old.raw)),horas_lembrete_1:horasLembrete1,horas_lembrete_2:horasLembrete2};
+      const payload={configuracoes:next as Json,updated_at:old.version?nextVersion(old.version):new Date().toISOString()};
+      const result=old.version?await supabase.from('system_config').update(payload).eq('id','config_whatsapp').eq('updated_at',old.version).select('id,updated_at').maybeSingle():await supabase.from('system_config').insert({id:'config_whatsapp',...payload}).select('id,updated_at').single();
+      if(result.error||!result.data)throw Error('Gravação não confirmada.');
+      reminderBaseline.current={raw:next,version:result.data.updated_at};toast.success('Tempo de lembretes confirmado.');
+    }catch{setReminderReady(false);toast.error('Gravação não confirmada. Atualize a configuração.');}
+    finally{reminderLock.current=false;setReminderSaving(false);}
   };
 
   // ─── UazapiGO ──────────────────────────────────────────────
   const saveUazConfig = async () => {
+    if(connectionLock.current||connectionFailed||!window.confirm('Salvar configuração UazapiGO?'))return;
     setUazSaving(true);
     try {
       const serverUrl = (uazConfig.uazapi_server_url || '').trim().replace(/\/+$/, '');
@@ -507,10 +524,9 @@ const ConfigWhatsApp: React.FC = () => {
         updated_at: new Date().toISOString()
       };
       
-      const { error } = await supabase.from('clinica_config').update(payload).eq('id', evolutionConfigId || '00000000-0000-0000-0000-000000000000');
-      if (error) throw error;
+      await writeConnection(payload);
       
-      setOriginalUazToken(tokenToSave);
+      setUazConfig(p=>({...p,uazapi_admin_token:'',uazapi_server_url:serverUrl}));setUazStatus('idle');setOriginalUazToken(tokenToSave);
       setUazTokenMasked(true);
       toast.success('Configuração UazapiGO salva.');
     } catch (err: any) { toast.error(`Erro: ${err.message}`); }
@@ -522,6 +538,7 @@ const ConfigWhatsApp: React.FC = () => {
       toast.error('Preencha Server URL e Admin Token primeiro.');
       return;
     }
+    if(connectionFailed||!baseline.current||uazConfig.uazapi_server_url!==baseline.current.uazapi_server_url||uazConfig.uazapi_instance!==baseline.current.uazapi_instance||!uazTokenMasked){toast.error('Salve as alterações antes de verificar.');return;}
     setUazTesting(true);
     try {
       const { data } = await uazapigoService.getConnectionStatus();
@@ -548,8 +565,10 @@ const ConfigWhatsApp: React.FC = () => {
     }
     const name = uazConfig.uazapi_instance?.trim() || prompt('Nome da nova instância UazapiGO:') || '';
     if (!name) return;
-    setUazCreating(true);
+    if(actionLock.current||connectionFailed||!window.confirm('Criar uma instância no serviço UazapiGO?'))return;
+    actionLock.current=true;setActionBusy(true);setUazCreating(true);
     try {
+      await confirmSession();
       const { data } = await uazapigoService.createInstance(name);
       const d = data as any;
       if (d?.success && d?.instance) {
@@ -560,34 +579,19 @@ const ConfigWhatsApp: React.FC = () => {
         toast.error(d?.error || 'Falha ao criar instância');
       }
     } catch (err: any) { toast.error(`Erro: ${err.message}`); }
-    setUazCreating(false);
+    actionLock.current=false;setActionBusy(false);setUazCreating(false);
   };
 
-  const switchProvider = async (next: 'evolution' | 'uazapigo') => {
-    if (next === 'uazapigo' && !uazConfig.uazapi_ativo) {
-      toast.error('Ative e configure a UazapiGO antes de selecioná-la como provedor.');
-      return;
-    }
-    if (next === 'uazapigo' && (!uazConfig.uazapi_server_url || !originalUazToken || !uazConfig.uazapi_instance)) {
-      toast.error('UazapiGO ainda não está totalmente configurada.');
-      return;
-    }
-    try {
-      if(!evolutionConfigId){toast.error('Configuração da conexão não confirmada.');return;}
-      const {data,error}=await supabase.from('clinica_config').update({
-        whatsapp_provider_active:next,updated_at:new Date().toISOString(),
-      }).eq('id',evolutionConfigId).select('id').maybeSingle();
-      if(error||!data)throw Error('Alteração de provedor não confirmada.');
-      setActiveProvider(next);
-      toast.success(`Provedor ativo: ${next==='evolution'?'Evolution API':'UazapiGO'}`);
-    }catch{toast.error('Não foi possível confirmar a alteração do provedor.');}
+  const switchProvider=async(next:'evolution'|'uazapigo')=>{
+    const old=baseline.current;
+    if(!old||connectionFailed||connectionLock.current||actionLock.current||next===activeProvider)return;
+    if(next==='uazapigo'&&(!old.uazapi_ativo||!old.uazapi_server_url||!old.uazapi_admin_token||!old.uazapi_instance)){toast.error('Salve a configuração UazapiGO antes de selecionar.');return;}
+    if(next==='evolution'&&(!old.evolution_base_url||!old.evolution_api_key||!old.evolution_instance_name)){toast.error('Configure a Evolution antes de selecionar.');return;}
+    if(!window.confirm('Alterar o provedor ativo de envio de WhatsApp?'))return;
+    try{const saved=await writeConnection({whatsapp_provider_active:next});if(saved.whatsapp_provider_active!==next)throw Error('Provedor não confirmado.');setActiveProvider(next);toast.success('Provedor ativo confirmado.');}
+    catch{toast.error('Alteração de provedor não confirmada.');}
   };
-
-  const maskedUazToken = originalUazToken
-    ? originalUazToken.length <= 8
-      ? '••••••••'
-      : `${originalUazToken.slice(0, 4)}${'•'.repeat(Math.max(8, originalUazToken.length - 8))}${originalUazToken.slice(-4)}`
-    : '';
+  const maskedUazToken=originalUazToken?'••••••••':'';
 
   const statusBadge = (status: string) => {
     switch (status) {
@@ -605,11 +609,7 @@ const ConfigWhatsApp: React.FC = () => {
     return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   };
 
-  const maskedApiKey = originalApiKey
-    ? originalApiKey.length <= 8
-      ? '••••••••'
-      : `${originalApiKey.slice(0, 4)}${'•'.repeat(Math.max(8, originalApiKey.length - 8))}${originalApiKey.slice(-4)}`
-    : '';
+  const maskedApiKey=originalApiKey?'••••••••':'';
 
   const templateInfo = TEMPLATE_TYPES.find(t => t.tipo === selectedTemplate);
 
@@ -621,15 +621,16 @@ const ConfigWhatsApp: React.FC = () => {
         </div>
         <div>
           <h2 className="text-xl font-bold font-display text-foreground">WhatsApp Business</h2>
-          <p className="text-sm text-muted-foreground">Automação de mensagens via Evolution API</p>
+          <p className="text-sm text-muted-foreground">Central de conexões, automações e acompanhamento de envios</p>
         </div>
-        <div className="ml-auto">{statusBadge(evolutionStatus)}</div>
+        <div className="ml-auto">{connectionFailed?<Badge variant="outline">Não confirmado</Badge>:statusBadge(activeProvider==='evolution'?evolutionStatus:uazStatus)}</div>
       </div>
 
 
 
+      <div className="rounded-xl border bg-card p-4 flex flex-wrap gap-3 items-center justify-between"><div><p className="font-semibold">Provedor salvo: {connectionFailed||evolutionLoading?'não confirmado':activeProvider==='evolution'?'Evolution API':'UazapiGO'}</p><p role="status" className="text-xs text-muted-foreground">{connectionFailed?'Conexão não confirmada. Atualize antes de editar.':connectionBusy?'Gravando configuração…':'As verificações consultam a configuração salva.'}</p></div><Button size="sm" variant="outline" disabled={connectionBusy||actionBusy||reminderSaving||evolutionLoading} onClick={()=>{if(window.confirm('Recarregar a conexão e descartar alterações locais?'))void loadConnection();}}>Atualizar conexão</Button></div>
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
-        <TabsList className="grid grid-cols-2 md:grid-cols-8 w-full">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 w-full h-auto gap-1">
           <TabsTrigger value="conexao" className="gap-1.5"><Zap className="w-4 h-4" /> Conexão</TabsTrigger>
           <TabsTrigger value="mensagens" className="gap-1.5"><FileText className="w-4 h-4" /> Mensagens</TabsTrigger>
           <TabsTrigger value="eventos" className="gap-1.5"><Bell className="w-4 h-4" /> Eventos</TabsTrigger>
@@ -673,7 +674,7 @@ const ConfigWhatsApp: React.FC = () => {
                   <p className="text-xs text-muted-foreground mt-1">Apenas o provedor selecionado envia mensagens. Nunca os dois ao mesmo tempo.</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Select value={activeProvider} onValueChange={(v) => switchProvider(v as 'evolution' | 'uazapigo')}>
+                  <Select disabled={connectionFailed||connectionBusy||evolutionLoading||actionBusy} value={activeProvider} onValueChange={(v) => switchProvider(v as 'evolution' | 'uazapigo')}>
                     <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="evolution">Evolution API</SelectItem>
@@ -739,10 +740,10 @@ const ConfigWhatsApp: React.FC = () => {
                     ) : <Input placeholder="Nome da instância" value={evolutionConfig.evolution_instance_name} onChange={e => setEvolutionConfig(p => ({ ...p, evolution_instance_name: e.target.value }))} />}
                   </div>
                   <div className="flex gap-2 flex-wrap">
-                    <Button className="gradient-primary text-primary-foreground flex-1 min-w-[120px]" disabled={evolutionSaving || !evolutionConfig.evolution_instance_name} onClick={saveEvolutionConfig}>
+                    <Button className="gradient-primary text-primary-foreground flex-1 min-w-[120px]" disabled={connectionFailed||connectionBusy||actionBusy||evolutionSaving || !evolutionConfig.evolution_instance_name} onClick={saveEvolutionConfig}>
                       {evolutionSaving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}Salvar
                     </Button>
-                    <Button variant="outline" disabled={!evolutionConfig.evolution_instance_name} onClick={checkConnection}>
+                    <Button variant="outline" disabled={connectionFailed||connectionBusy||!evolutionConfig.evolution_instance_name} onClick={checkConnection}>
                       <RefreshCw className="w-4 h-4 mr-1" />Verificar
                     </Button>
                   </div>
@@ -815,14 +816,14 @@ const ConfigWhatsApp: React.FC = () => {
               <div className="flex gap-2 flex-wrap">
                 <Button
                   className="gradient-primary text-primary-foreground flex-1 min-w-[120px]"
-                  disabled={uazSaving}
+                  disabled={connectionFailed||connectionBusy||actionBusy||evolutionLoading||uazSaving}
                   onClick={saveUazConfig}
                 >
                   {uazSaving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}Salvar
                 </Button>
                 <Button
                   variant="outline"
-                  disabled={uazTesting || !uazConfig.uazapi_server_url || !originalUazToken}
+                  disabled={connectionFailed||connectionBusy||uazTesting || !uazConfig.uazapi_server_url || !originalUazToken}
                   onClick={checkUazConnection}
                 >
                   {uazTesting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
@@ -830,7 +831,7 @@ const ConfigWhatsApp: React.FC = () => {
                 </Button>
                 <Button
                   variant="outline"
-                  disabled={uazCreating || !uazConfig.uazapi_server_url || !originalUazToken}
+                  disabled={connectionFailed||actionBusy||uazCreating || !uazConfig.uazapi_server_url || !originalUazToken}
                   onClick={createUazInstance}
                   title={(!uazConfig.uazapi_server_url || !originalUazToken)
                     ? 'Configure Server URL e Admin Token para criar instância.'
@@ -843,7 +844,7 @@ const ConfigWhatsApp: React.FC = () => {
 
               <p className="text-xs text-muted-foreground">
                 ℹ️ A UazapiGO só é usada para envios quando estiver marcada como <strong>Provedor ativo</strong> acima.
-                Admin Token nunca é exibido após salvar.
+                Token mascarado na interface. A credencial continua no armazenamento existente.
               </p>
             </CardContent>
           </Card>
@@ -856,7 +857,7 @@ const ConfigWhatsApp: React.FC = () => {
                 <h3 className="font-semibold text-foreground flex items-center gap-2">
                   <Shield className="w-4 h-4" /> Monitoramento e Fila
                 </h3>
-                <Button variant="outline" size="sm" disabled={reprocessing} onClick={reprocessQueue}>
+                <Button variant="outline" size="sm" disabled={actionBusy||reprocessing} onClick={reprocessQueue}>
                   {reprocessing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RotateCcw className="w-4 h-4 mr-1" />}
                   Reprocessar fila agora
                 </Button>
@@ -895,24 +896,24 @@ const ConfigWhatsApp: React.FC = () => {
 
               <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-center">
                 <div className="p-3 rounded-lg bg-yellow-500/10">
-                  <div className="text-2xl font-bold text-yellow-600">{queueStats.pendentes}</div>
+                  <div className="text-2xl font-bold text-yellow-600">{statsReady?queueStats.pendentes:'—'}</div>
                   <div className="text-xs text-muted-foreground">Pendentes</div>
                 </div>
                 <div className="p-3 rounded-lg bg-blue-500/10">
-                  <div className="text-2xl font-bold text-blue-600">{queueStats.processando}</div>
+                  <div className="text-2xl font-bold text-blue-600">{statsReady?queueStats.processando:'—'}</div>
                   <div className="text-xs text-muted-foreground">Processando</div>
                 </div>
                 <div className="p-3 rounded-lg bg-success/10">
-                  <div className="text-2xl font-bold text-success">{queueStats.enviadas_24h}</div>
+                  <div className="text-2xl font-bold text-success">{statsReady?queueStats.enviadas_24h:'—'}</div>
                   <div className="text-xs text-muted-foreground">Enviadas 24h</div>
                 </div>
                 <div className="p-3 rounded-lg bg-destructive/10">
-                  <div className="text-2xl font-bold text-destructive">{queueStats.falhas_24h}</div>
+                  <div className="text-2xl font-bold text-destructive">{statsReady?queueStats.falhas_24h:'—'}</div>
                   <div className="text-xs text-muted-foreground">Falhas 24h</div>
                 </div>
                 <div className="p-3 rounded-lg bg-muted">
-                  <div className="text-2xl font-bold text-muted-foreground">{queueStats.expiradas_24h}</div>
-                  <div className="text-xs text-muted-foreground">Expiradas 24h</div>
+                  <div className="text-2xl font-bold text-muted-foreground">{statsReady?queueStats.expiradas_24h:'—'}</div>
+                  <div className="text-xs text-muted-foreground">Bloqueadas 24h</div>
                 </div>
               </div>
 
@@ -927,7 +928,7 @@ const ConfigWhatsApp: React.FC = () => {
               <h3 className="font-semibold text-foreground flex items-center gap-2"><Send className="w-4 h-4" /> Teste de Envio</h3>
               <div className="flex gap-2">
                 <Input placeholder="5593999990000" value={testPhone} onChange={e => setTestPhone(e.target.value)} className="flex-1" />
-                <Button variant="outline" disabled={evolutionTesting || !testPhone} onClick={testWhatsApp}>
+                <Button variant="outline" disabled={actionBusy||connectionFailed||evolutionLoading||evolutionTesting || !testPhone} onClick={testWhatsApp}>
                   {evolutionTesting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}Enviar Teste
                 </Button>
               </div>
@@ -949,13 +950,15 @@ const ConfigWhatsApp: React.FC = () => {
                   <p className="text-xs text-muted-foreground mt-1">Padrão: 2h antes</p>
                 </div>
               </div>
-              <Button className="gradient-primary text-primary-foreground" onClick={saveReminderConfig}>Salvar Tempo</Button>
+              <Button className="gradient-primary text-primary-foreground" disabled={!reminderReady||reminderSaving} onClick={saveReminderConfig}>Salvar Tempo</Button>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* ─── MENSAGENS ─── */}
         <TabsContent value="mensagens" className="space-y-4 mt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2"><p role="status" className="text-sm text-muted-foreground">{templatesFailed?'Consulta/gravação não confirmada.':templatesLoading?'Carregando modelos…':editingMessage!==confirmedMessage?'Alterações ainda não salvas':'Modelos consultados'} · Unidade: {unidades.find(u=>u.id===userUnitId)?.nome??'não selecionada'}</p><Button size="sm" variant="outline" disabled={templateSaving} onClick={()=>{if(editingMessage===confirmedMessage||window.confirm('Descartar a edição e recarregar?'))void loadTemplates();}}>Atualizar modelos</Button></div>
+          <fieldset disabled={templatesFailed||templatesLoading||templateSaving||!userUnitId} className="min-w-0">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Sidebar - Template list */}
             <div className="space-y-2">
@@ -967,7 +970,7 @@ const ConfigWhatsApp: React.FC = () => {
                 return (
                   <button
                     key={tt.tipo}
-                    onClick={() => setSelectedTemplate(tt.tipo)}
+                    onClick={()=>{if(editingMessage===confirmedMessage||window.confirm('Descartar alterações não salvas?'))setSelectedTemplate(tt.tipo);}}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all ${
                       isActive ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     }`}
@@ -1048,6 +1051,7 @@ const ConfigWhatsApp: React.FC = () => {
               </Card>
             </div>
           </div>
+          </fieldset>
         </TabsContent>
 
         {/* ─── EVENTOS ─── */}
@@ -1070,7 +1074,7 @@ const ConfigWhatsApp: React.FC = () => {
                           <p className="text-xs text-muted-foreground">{tt.description}</p>
                         </div>
                       </div>
-                      <Switch checked={enabled} onCheckedChange={() => toggleTemplate(tt.tipo)} />
+                      <Switch checked={enabled} disabled={templatesFailed||templatesLoading||templateSaving||!userUnitId} onCheckedChange={() => toggleTemplate(tt.tipo)} />
                     </div>
                   );
                 })}
@@ -1152,7 +1156,7 @@ const ConfigWhatsApp: React.FC = () => {
 
               {logsLoading ? (
                 <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-              ) : logs.length === 0 ? (
+              ) : logsFailed ? <p role="alert" className="text-sm text-destructive">Histórico não confirmado. Atualize a consulta.</p> : logs.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground text-sm">Nenhum log encontrado</div>
               ) : (
                 <ScrollArea className="h-[400px]">
@@ -1185,7 +1189,7 @@ const ConfigWhatsApp: React.FC = () => {
                           </TableCell>
                           <TableCell>
                             {log.status === 'erro' && log.agendamento_id && (
-                              <Button variant="ghost" size="sm" onClick={() => resendMessage(log)}>
+                              <Button variant="ghost" size="sm" disabled={actionBusy||logsFailed||connectionFailed} onClick={() => resendMessage(log)}>
                                 <RotateCcw className="w-3 h-3 mr-1" />Reenviar
                               </Button>
                             )}

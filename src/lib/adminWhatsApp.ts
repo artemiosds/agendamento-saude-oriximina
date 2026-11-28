@@ -1,0 +1,6 @@
+/** Administrative confirmation helpers; no sending. */
+export function confirmedCounts(rows:readonly {count:number|null;error:unknown}[]):number[]|null{if(rows.some(r=>r.error||r.count===null||!Number.isSafeInteger(r.count)||r.count<0))return null;return rows.map(r=>r.count as number);}
+export function validReminderHours(first:number,second:number){return Number.isInteger(first)&&first>=1&&first<=72&&Number.isInteger(second)&&second>=1&&second<=12;}
+export function providerFunction(provider:string){if(provider==='evolution')return 'send-whatsapp-evolution';if(provider==='uazapigo')return 'send-whatsapp-uazapigo';throw Error('Provedor não confirmado.');}
+export function confirmedProcessing(value:unknown):value is {success:true;processed:number;failed?:number;skipped?:string}{if(!value||typeof value!=='object')return false;const v=value as Record<string,unknown>;return v.success===true&&typeof v.processed==='number'&&Number.isSafeInteger(v.processed)&&v.processed>=0&&(v.failed===undefined||(typeof v.failed==='number'&&Number.isSafeInteger(v.failed)&&v.failed>=0));}
+export function nextVersion(previous:string){const old=Date.parse(previous);if(!Number.isFinite(old))throw Error('Versão não confirmada.');return new Date(Math.max(Date.now(),old+1)).toISOString();}
