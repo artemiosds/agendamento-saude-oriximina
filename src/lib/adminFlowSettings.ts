@@ -1,0 +1,6 @@
+export function mergeFlowSettings(previous:Record<string,unknown>,patch:Record<string,unknown>){return {...previous,...patch};}
+export function validTurno(nome:string,inicio:string,fim:string){const time=/^(?:[01]\d|2[0-3]):[0-5]\d$/;return !!nome.trim()&&time.test(inicio)&&time.test(fim)&&inicio!==fim;}
+export type CarenessDraft={profession_key:string;enabled:boolean;duration_value:number;duration_unit:string;scope:string};
+export function validCareness(row:CarenessDraft){return !!row.profession_key&&Number.isInteger(row.duration_value)&&row.duration_value>=1&&row.duration_value<=3650&&['days','months'].includes(row.duration_unit)&&['global','unit'].includes(row.scope);}
+export function carePreviewKey(row:CarenessDraft,signature:string){return JSON.stringify([row.profession_key,row.enabled,row.duration_value,row.duration_unit,row.scope,signature]);}
+export function validImpact(value:unknown):value is {total:number;expired:number;blocked_now:number}{if(!value||typeof value!=='object')return false;const v=value as Record<string,unknown>;return ['total','expired','blocked_now'].every(k=>typeof v[k]==='number'&&Number.isSafeInteger(v[k])&&(v[k] as number)>=0)&&(v.expired as number)+(v.blocked_now as number)<=(v.total as number);}

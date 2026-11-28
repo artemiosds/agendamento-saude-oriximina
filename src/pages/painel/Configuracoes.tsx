@@ -247,6 +247,7 @@ const Configuracoes: React.FC = () => {
         const { data } = await supabase
           .from('triage_settings')
           .select('*')
+          .is('profissional_id',null)
           .or(`unidade_id.eq.${unitId},unidade_id.is.null`)
           .order('unidade_id', { ascending: false, nullsFirst: false })
           .limit(1)
@@ -523,7 +524,7 @@ const Configuracoes: React.FC = () => {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-semibold font-display text-foreground">Triagem de Enfermagem</h3>
-                    <p className="text-sm text-muted-foreground">Etapa opcional antes do atendimento</p>
+                    <p className="text-sm text-muted-foreground">Regra efetiva da unidade ou fallback global</p>
                   </div>
                   {triageLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -531,15 +532,16 @@ const Configuracoes: React.FC = () => {
                     <Switch
                       checked={triageEnabled}
                       onCheckedChange={async (v) => {
+                        if(!window.confirm('Alterar a regra efetiva de triagem (unidade ou global)?'))return;
                         setTriageEnabled(v);
                         try {
                           const unitId = user?.unidadeId || null;
                           if (triageSettingId) {
-                            const { error } = await supabase
+                            const { data,error } = await supabase
                               .from('triage_settings')
                               .update({ enabled: v, updated_at: new Date().toISOString() })
-                              .eq('id', triageSettingId);
-                            if (error) throw error;
+                              .eq('id', triageSettingId).is('profissional_id',null).select('id,enabled').maybeSingle();
+                            if (error||!data||data.enabled!==v) throw Error('Gravação não confirmada.');
                           } else {
                             const { data: inserted, error } = await supabase
                               .from('triage_settings')

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,8 +11,10 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2, Loader2, Pencil, Clock } from 'lucide-react';
-import ConfiguracaoTriagem from '@/components/ConfiguracaoTriagem';
 import { toast } from 'sonner';
+import {useAdministrativeConfigSection} from '@/hooks/useProntuarioSettings';
+import {configObject,sameConfigSection} from '@/lib/configSectionGuard';
+import {mergeFlowSettings,validTurno} from '@/lib/adminFlowSettings';
 
 const CONFIG_KEY = 'config_fluxo_atendimento';
 
@@ -43,6 +45,8 @@ interface FluxoConfig {
     prazoAlertaPts: number;
   };
   turnos: TurnoDefinition[];
+  alerta_minutos_em_atendimento?:number;
+  coordenador_pode_concluir?:boolean;
 }
 
 const DEFAULT: FluxoConfig = {
@@ -95,6 +99,14 @@ const ConfigFluxoAtendimento: React.FC = () => {
   const { user } = useAuth();
   const [config, setConfig] = useState<FluxoConfig>(DEFAULT);
   const [loading, setLoading] = useState(true);
+  const [saving,setSaving]=useState(false);
+  const [failed,setFailed]=useState(false);
+  const [status,setStatus]=useState('');
+  const draft=useRef(DEFAULT),confirmed=useRef(DEFAULT),lock=useRef(false);
+  const {load,save:writeSection}=useAdministrativeConfigSection(CONFIG_KEY);
+  const [triageFailed,setTriageFailed]=useState(false);
+  const triageLock=useRef(false);
+  const triageRaw=useRef<boolean|null>(null);
   const [triageEnabled, setTriageEnabled] = useState(false);
   const [triageLoading, setTriageLoading] = useState(true);
   const [triageSettingId, setTriageSettingId] = useState<string | null>(null);
@@ -104,65 +116,92 @@ const ConfigFluxoAtendimento: React.FC = () => {
   const [newTurno, setNewTurno] = useState<{ nome: string; horaInicio: string; horaFim: string }>({ nome: '', horaInicio: '08:00', horaFim: '12:00' });
   const [showNewTurno, setShowNewTurno] = useState(false);
 
-  const loadConfig = useCallback(async () => {
-    const [cfgRes, triageRes] = await Promise.all([
-      supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle(),
-      supabase.from('triage_settings').select('*').is('profissional_id', null).maybeSingle(),
-    ]);
-    const cfg = cfgRes.data?.configuracoes as any;
-    if (cfg?.[CONFIG_KEY]) {
-      const saved = cfg[CONFIG_KEY];
-      setConfig({ ...DEFAULT, ...saved, turnos: saved.turnos || DEFAULT.turnos });
-    }
-    if (triageRes.data) { setTriageEnabled(triageRes.data.enabled ?? false); setTriageSettingId(triageRes.data.id); }
-    setTriageLoading(false);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { loadConfig(); }, [loadConfig]);
-
-  const save = async (updated: FluxoConfig) => {
-    const { data: existing } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-    const existingConfig = (existing?.configuracoes as any) || {};
-    await supabase.from('system_config').upsert({
-      id: 'default',
-      configuracoes: { ...existingConfig, [CONFIG_KEY]: updated },
-      updated_at: new Date().toISOString(),
-    });
-    setConfig(updated);
-    toast.success('Configuração salva');
+  const confirmSession=useCallback(async()=>{
+    const {data,error}=await supabase.auth.getSession();
+    if(error||!user?.authUserId||user.role!=='master'||user.ativo!==true||data.session?.user.id!==user.authUserId)throw Error('Sessão não confirmada.');
+  },[user?.authUserId,user?.role,user?.ativo]);
+  const loadConfig=useCallback(async()=>{
+    setLoading(true);setFailed(false);setStatus('');
+    setTriageLoading(true);setTriageFailed(false);setTriageSettingId(null);
+    try{
+      const raw=await load();
+      const saved=raw===undefined?{}:configObject(raw) as Partial<FluxoConfig>;
+      const next={...DEFAULT,...saved,triagem:{...DEFAULT.triagem,...saved.triagem},regrasAgendamento:{...DEFAULT.regrasAgendamento,...saved.regrasAgendamento},ptsCiclo:{...DEFAULT.ptsCiclo,...saved.ptsCiclo},turnos:saved.turnos||DEFAULT.turnos};
+      if(!Array.isArray(next.turnos)||!Array.isArray(next.tiposAtendimento)||!Array.isArray(next.classificacaoRisco)||!Array.isArray(next.triagem.camposObrigatorios)||!Array.isArray(next.triagem.camposOpcionais))throw Error('Estrutura inválida.');
+      draft.current=next;confirmed.current=next;setConfig(next);setStatus('Configuração carregada');
+    }catch{setFailed(true);setStatus('Leitura não confirmada. Edição bloqueada.');}
+    finally{setLoading(false);}
+    try{
+      await confirmSession();
+      const {data,error}=await supabase.from('triage_settings').select('*').is('profissional_id',null).is('unidade_id',null).maybeSingle();
+      if(error)throw error;
+      setTriageEnabled(data?.enabled??false);setTriageSettingId(data?.id??null);triageRaw.current=data?.enabled??null;
+    }catch{setTriageFailed(true);}
+    finally{setTriageLoading(false);}
+  },[load,confirmSession]);
+  useEffect(()=>{void loadConfig();},[loadConfig]);
+  const edit=(fn:(prev:FluxoConfig)=>FluxoConfig)=>{const next=fn(draft.current);draft.current=next;setConfig(next);setStatus('Alterações não confirmadas');};
+  const save=async(updated:FluxoConfig):Promise<boolean>=>{
+    if(lock.current||failed||loading)return false;
+    if(sameConfigSection(updated,confirmed.current))return true;
+    lock.current=true;setSaving(true);setStatus('Salvando…');draft.current=updated;setConfig(updated);
+    try{
+      const ok=await writeSection(previous=>mergeFlowSettings(previous===undefined?{}:configObject(previous),{...updated}));
+      if(!ok){setFailed(true);setStatus('Gravação não confirmada. Recarregue antes de editar.');return false;}
+      confirmed.current=updated;setStatus('Gravação confirmada');toast.success('Configuração salva');return true;
+    }catch{setFailed(true);setStatus('Gravação não confirmada.');return false;}
+    finally{lock.current=false;setSaving(false);}
+  };
+  const toggleGlobal=async(v:boolean)=>{
+    if(triageLock.current||triageLoading||triageFailed||!window.confirm('Alterar a regra global de triagem?'))return;
+    triageLock.current=true;setTriageLoading(true);
+    try{
+      await confirmSession();
+      const {data:current,error}=await supabase.from('triage_settings').select('id,enabled').is('profissional_id',null).is('unidade_id',null).maybeSingle();
+      if(error||current?.id!==(triageSettingId??undefined)||(current?.enabled??null)!==triageRaw.current)throw Error('Regra global alterada. Recarregue antes de repetir.');
+      const payload={enabled:v,updated_at:new Date().toISOString()};
+      const result=current?await (current.enabled===null?supabase.from('triage_settings').update(payload).eq('id',current.id).is('enabled',null):supabase.from('triage_settings').update(payload).eq('id',current.id).eq('enabled',current.enabled)).is('profissional_id',null).is('unidade_id',null).select('id,enabled').maybeSingle():await supabase.from('triage_settings').insert({...payload,profissional_id:null,unidade_id:null}).select('id,enabled').single();
+      if(result.error||!result.data||result.data.enabled!==v)throw Error('Alteração não confirmada.');
+      setTriageSettingId(result.data.id);triageRaw.current=v;setTriageEnabled(v);toast.success('Regra global confirmada.');
+    }catch(error){setTriageFailed(true);toast.error(error instanceof Error?error.message:'Gravação não confirmada.');}
+    finally{triageLock.current=false;setTriageLoading(false);}
   };
 
-  const handleAddTurno = () => {
-    if (!newTurno.nome.trim()) { toast.error('Informe o nome do turno'); return; }
+  const handleAddTurno = async () => {
+    if (!validTurno(newTurno.nome,newTurno.horaInicio,newTurno.horaFim)) { toast.error('Confira nome e horários do turno'); return; }
     const turno: TurnoDefinition = {
-      id: `turno_${Date.now()}`,
+      id: 'turno_'+crypto.randomUUID().replace(/-/g,'_'),
       nome: newTurno.nome.trim(),
       horaInicio: newTurno.horaInicio,
       horaFim: newTurno.horaFim,
       ativo: true,
     };
     const updated = { ...config, turnos: [...config.turnos, turno] };
-    save(updated);
+    if(!await save(updated))return;
     setNewTurno({ nome: '', horaInicio: '08:00', horaFim: '12:00' });
     setShowNewTurno(false);
   };
 
   const handleDeleteTurno = (id: string) => {
+    if(!window.confirm('Remover este turno da configuração? Confira os profissionais que o utilizam.'))return;
     const updated = { ...config, turnos: config.turnos.filter(t => t.id !== id) };
     save(updated);
   };
 
-  const handleUpdateTurno = (id: string, changes: Partial<TurnoDefinition>) => {
+  const handleUpdateTurno = async (id: string, changes: Partial<TurnoDefinition>) => {
+    const current=config.turnos.find(t=>t.id===id);if(!current)return;const next={...current,...changes};
+    if((changes.nome!==undefined||changes.horaInicio!==undefined||changes.horaFim!==undefined)&&!validTurno(next.nome,next.horaInicio,next.horaFim)){toast.error('Confira nome e horários do turno');return;}
     const updated = { ...config, turnos: config.turnos.map(t => t.id === id ? { ...t, ...changes } : t) };
-    save(updated);
+    if(!await save(updated))return;
     if (editingTurno?.id === id) setEditingTurno(null);
   };
 
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      <div className="rounded-xl border bg-card p-4 flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Fluxo assistencial e regras operacionais</h3><p role="status" className="text-xs text-muted-foreground">{status}</p></div><Button size="sm" variant="outline" disabled={saving||triageLoading} onClick={()=>{if(!failed||window.confirm('Descartar alterações não confirmadas e recarregar?'))void loadConfig();}}>Atualizar configurações</Button></div>
+      <fieldset disabled={saving||failed} className="space-y-4 min-w-0">
       {/* 5.1 Tipos de atendimento */}
       <Card className="shadow-card border-0">
         <CardContent className="p-5">
@@ -185,19 +224,8 @@ const ConfigFluxoAtendimento: React.FC = () => {
       <Card className="shadow-card border-0">
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold font-display text-foreground">Triagem</h3>
-            {triageLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
-              <Switch checked={triageEnabled} onCheckedChange={async v => {
-                setTriageEnabled(v);
-                if (triageSettingId) {
-                  await supabase.from('triage_settings').update({ enabled: v }).eq('id', triageSettingId);
-                } else {
-                  const { data } = await supabase.from('triage_settings').insert({ enabled: v }).select('id').single();
-                  if (data) setTriageSettingId(data.id);
-                }
-                toast.success(v ? 'Triagem habilitada' : 'Triagem desabilitada');
-              }} />
-            )}
+            <h3 className="font-semibold font-display text-foreground">Triagem — regra global</h3>
+            {triageLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : triageFailed ? <span role="alert" className="text-xs text-destructive">Regra global não confirmada</span> : <Switch checked={triageEnabled} onCheckedChange={toggleGlobal}/>}
           </div>
           <div className="space-y-2">
             {config.triagem.camposObrigatorios.map(c => (
@@ -216,7 +244,6 @@ const ConfigFluxoAtendimento: React.FC = () => {
               </div>
             ))}
           </div>
-          <ConfiguracaoTriagem />
         </CardContent>
       </Card>
 
@@ -230,8 +257,8 @@ const ConfigFluxoAtendimento: React.FC = () => {
                 <div className="w-6 h-6 rounded-full shrink-0" style={{ backgroundColor: cr.cor }} />
                 <Input
                   value={cr.label} className="h-8 text-sm border-0 bg-transparent focus-visible:ring-0 flex-1"
-                  onChange={e => setConfig(prev => ({ ...prev, classificacaoRisco: prev.classificacaoRisco.map(x => x.key === cr.key ? { ...x, label: e.target.value } : x) }))}
-                  onBlur={() => save(config)}
+                  onChange={e => edit(prev => ({ ...prev, classificacaoRisco: prev.classificacaoRisco.map(x => x.key === cr.key ? { ...x, label: e.target.value } : x) }))}
+                  onBlur={() => save(draft.current)}
                 />
                 <Input
                   type="color" value={cr.cor} className="w-10 h-8 p-0.5 border-0"
@@ -263,15 +290,15 @@ const ConfigFluxoAtendimento: React.FC = () => {
                 <Label className="text-xs">{item.label}</Label>
                 <Input type="number" min={item.min}
                   value={(config.regrasAgendamento as any)[item.key]}
-                  onChange={e => setConfig(prev => ({ ...prev, regrasAgendamento: { ...prev.regrasAgendamento, [item.key]: parseInt(e.target.value) || 0 } }))}
-                  onBlur={() => save(config)} className="h-9"
+                  onChange={e => edit(prev => ({ ...prev, regrasAgendamento: { ...prev.regrasAgendamento, [item.key]: parseInt(e.target.value) || 0 } }))}
+                  onBlur={() => save(draft.current)} className="h-9"
                 />
               </div>
             ))}
           </div>
           <div className="flex items-center justify-between p-3 mt-3 bg-muted/50 rounded-lg">
             <span className="text-sm">Permitir encaixe</span>
-            <Switch checked={config.regrasAgendamento.permitirEncaixe} onCheckedChange={v => save({ ...config, regrasAgendamento: { ...config.regrasAgendamento, permitirEncaixe: v } })} />
+            <Switch checked={config.regrasAgendamento.permitirEncaixe} onCheckedChange={v => save({ ...draft.current, regrasAgendamento: { ...config.regrasAgendamento, permitirEncaixe: v } })} />
           </div>
         </CardContent>
       </Card>
@@ -289,17 +316,17 @@ const ConfigFluxoAtendimento: React.FC = () => {
             ].map(item => (
               <div key={item.key} className="flex items-center justify-between p-2 bg-muted/30 rounded">
                 <span className="text-sm">{item.label}</span>
-                <Switch checked={(config.ptsCiclo as any)[item.key]} onCheckedChange={v => save({ ...config, ptsCiclo: { ...config.ptsCiclo, [item.key]: v } })} />
+                <Switch checked={(config.ptsCiclo as any)[item.key]} onCheckedChange={v => save({ ...draft.current, ptsCiclo: { ...config.ptsCiclo, [item.key]: v } })} />
               </div>
             ))}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <Label className="text-xs">Sessões padrão</Label>
-                <Input type="number" min={1} value={config.ptsCiclo.sessoesPadrao} onChange={e => setConfig(p => ({ ...p, ptsCiclo: { ...p.ptsCiclo, sessoesPadrao: parseInt(e.target.value) || 10 } }))} onBlur={() => save(config)} className="h-9" />
+                <Input type="number" min={1} value={config.ptsCiclo.sessoesPadrao} onChange={e => edit(p => ({ ...p, ptsCiclo: { ...p.ptsCiclo, sessoesPadrao: parseInt(e.target.value) || 10 } }))} onBlur={() => save(draft.current)} className="h-9" />
               </div>
               <div>
                 <Label className="text-xs">Frequência padrão</Label>
-                <Select value={config.ptsCiclo.frequenciaPadrao} onValueChange={v => save({ ...config, ptsCiclo: { ...config.ptsCiclo, frequenciaPadrao: v } })}>
+                <Select value={config.ptsCiclo.frequenciaPadrao} onValueChange={v => save({ ...draft.current, ptsCiclo: { ...config.ptsCiclo, frequenciaPadrao: v } })}>
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="semanal">Semanal</SelectItem>
@@ -310,7 +337,7 @@ const ConfigFluxoAtendimento: React.FC = () => {
               </div>
               <div>
                 <Label className="text-xs">Prazo alerta PTS (meses)</Label>
-                <Input type="number" min={1} value={config.ptsCiclo.prazoAlertaPts} onChange={e => setConfig(p => ({ ...p, ptsCiclo: { ...p.ptsCiclo, prazoAlertaPts: parseInt(e.target.value) || 6 } }))} onBlur={() => save(config)} className="h-9" />
+                <Input type="number" min={1} value={config.ptsCiclo.prazoAlertaPts} onChange={e => edit(p => ({ ...p, ptsCiclo: { ...p.ptsCiclo, prazoAlertaPts: parseInt(e.target.value) || 6 } }))} onBlur={() => save(draft.current)} className="h-9" />
               </div>
             </div>
           </div>
@@ -407,8 +434,9 @@ const ConfigFluxoAtendimento: React.FC = () => {
         </CardContent>
       </Card>
 
+      <ControleAtendimentosCard config={config} edit={edit} save={()=>save(draft.current)} />
+      </fieldset>
       <ControleFaltasCard />
-      <ControleAtendimentosCard />
     </div>
   );
 };
@@ -420,60 +448,49 @@ const FALTAS_KEY = 'config_fluxo_faltas';
 
 const ControleFaltasCard: React.FC = () => {
   const [cfg, setCfg] = useState({ limite_alerta: 2, limite_bloqueio: 4, canal_sistema: true, canal_whatsapp: false });
+  const {load,save:writeSection}=useAdministrativeConfigSection(FALTAS_KEY);
+  const [failed,setFailed]=useState(false);
+  const [status,setStatus]=useState('');
+  const lock=useRef(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-      const stored = (data?.configuracoes as any)?.[FALTAS_KEY];
-      if (stored) setCfg((p) => ({ ...p, ...stored }));
-      setLoading(false);
-    })();
-  }, []);
-
-  const reavaliar = async () => {
-    const { data, error } = await (supabase as any).rpc('reavaliar_todos_status_falta');
-    if (error) { toast.error('Erro ao reavaliar: ' + error.message); return null; }
-    return data;
+  const reload=useCallback(async()=>{
+    setLoading(true);setFailed(false);setStatus('');
+    try{const raw=await load();setCfg(p=>({...p,...(raw===undefined?{}:configObject(raw))}));}
+    catch{setFailed(true);setStatus('Leitura não confirmada.');}finally{setLoading(false);}
+  },[load]);
+  useEffect(()=>{void reload();},[reload]);
+  const reavaliar=async()=>{
+    const {data,error}=await (supabase as any).rpc('reavaliar_todos_status_falta');
+    if(error||!data){toast.error('Reavaliação não confirmada.');return null;}return data;
+  };
+  const save=async(next:typeof cfg)=>{
+    if(lock.current||failed||loading)return;
+    if(![next.limite_alerta,next.limite_bloqueio].every(v=>Number.isInteger(v)&&v>=1&&v<=20)){toast.error('Informe limites inteiros entre 1 e 20.');return;}
+    if(!window.confirm('Salvar regras de faltas e reavaliar todos os pacientes?'))return;
+    lock.current=true;setSaving(true);
+    try{
+      if(!await writeSection(previous=>mergeFlowSettings(previous===undefined?{}:configObject(previous),next))){setFailed(true);setStatus('Gravação não confirmada.');return;}
+      setCfg(next);setStatus('Configuração confirmada; reavaliando pacientes…');
+      const r=await reavaliar();setStatus(r?'Configuração e reavaliação confirmadas':'Configuração salva; reavaliação não confirmada.');
+      if(r)toast.success('Configuração e reavaliação confirmadas.');
+    }catch{setFailed(true);setStatus('Operação não confirmada. Recarregue.');}
+    finally{lock.current=false;setSaving(false);}
   };
 
-  const save = async (next: typeof cfg) => {
-    setSaving(true);
-    try {
-      const { data: existing, error: selErr } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-      if (selErr) throw selErr;
-      const existingConfig = (existing?.configuracoes as any) || {};
-      const { error: upErr } = await supabase.from('system_config').upsert({
-        id: 'default',
-        configuracoes: { ...existingConfig, [FALTAS_KEY]: next },
-        updated_at: new Date().toISOString(),
-      });
-      if (upErr) throw upErr;
-      setCfg(next);
-      const r = await reavaliar();
-      if (r) {
-        toast.success(`Salvo · ${r.bloqueados ?? 0} bloqueados / ${r.faltosos ?? 0} faltosos`);
-      } else {
-        toast.success('Configuração de faltas salva');
-      }
-    } catch (e: any) {
-      toast.error('Erro ao salvar: ' + (e?.message || 'desconhecido'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) return null;
+  if (loading) return <p role="status" className="text-sm">Carregando controle de faltas…</p>;
 
   return (
     <Card className="shadow-card border-0">
       <CardContent className="p-5 space-y-4">
         <div>
           <h3 className="font-semibold font-display text-foreground">Controle de Faltas</h3>
+          <p role="status" className="text-xs text-muted-foreground">{status}</p>{failed&&<Button size="sm" variant="outline" onClick={()=>void reload()}>Recarregar</Button>}
           <p className="text-xs text-muted-foreground mt-1">Define quando um paciente é marcado como FALTOSO ou BLOQUEADO da agenda.</p>
         </div>
 
+        <fieldset disabled={saving||failed} className="space-y-4 min-w-0">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <Label className="text-xs">Faltas para alerta FALTOSO</Label>
@@ -523,10 +540,8 @@ const ControleFaltasCard: React.FC = () => {
             variant="outline"
             disabled={saving}
             onClick={async () => {
-              setSaving(true);
-              const r = await reavaliar();
-              setSaving(false);
-              if (r) toast.success(`Reavaliados · ${r.bloqueados ?? 0} bloqueados / ${r.faltosos ?? 0} faltosos / ${r.regulares ?? 0} regulares`);
+              if(lock.current||failed||!window.confirm('Reavaliar todos os pacientes usando as regras salvas?'))return;
+              lock.current=true;setSaving(true);try{const r=await reavaliar();if(r)toast.success('Reavaliação confirmada.');}catch{toast.error('Reavaliação não confirmada.');}finally{lock.current=false;setSaving(false);}
             }}
           >
             {saving ? <Loader2 className="h-3 w-3 mr-2 animate-spin" /> : null}
@@ -536,49 +551,14 @@ const ControleFaltasCard: React.FC = () => {
             Recalcula o status (REGULAR/FALTOSO/BLOQUEADO) de todos os pacientes com base nos limites atuais.
           </p>
         </div>
+        </fieldset>
       </CardContent>
     </Card>
   );
 };
 
 // ─── Cartão: Controle de Atendimentos (Master) ────────────────────────────────
-const ATEND_KEY = 'config_fluxo_atendimento';
-const ControleAtendimentosCard: React.FC = () => {
-  const [cfg, setCfg] = useState({ alerta_minutos_em_atendimento: 60, coordenador_pode_concluir: false });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-      const stored = (data?.configuracoes as any)?.[ATEND_KEY];
-      if (stored) setCfg((p) => ({ ...p, ...stored }));
-      setLoading(false);
-    })();
-  }, []);
-
-  const save = async (next: typeof cfg) => {
-    setSaving(true);
-    try {
-      const { data: existing } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-      const existingConfig = (existing?.configuracoes as any) || {};
-      const { error } = await supabase.from('system_config').upsert({
-        id: 'default',
-        configuracoes: { ...existingConfig, [ATEND_KEY]: next },
-        updated_at: new Date().toISOString(),
-      });
-      if (error) throw error;
-      setCfg(next);
-      toast.success('Configuração de atendimentos salva');
-    } catch (e: any) {
-      toast.error('Erro ao salvar: ' + (e?.message || 'desconhecido'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) return null;
-
+const ControleAtendimentosCard:React.FC<{config:FluxoConfig;edit:(fn:(p:FluxoConfig)=>FluxoConfig)=>void;save:()=>Promise<boolean>}>=({config,edit,save})=>{
   return (
     <Card className="shadow-card border-0">
       <CardContent className="p-5 space-y-4">
@@ -595,17 +575,16 @@ const ControleAtendimentosCard: React.FC = () => {
             <Label className="text-xs">Tempo máximo sem finalização (minutos)</Label>
             <Input
               type="number" min={5} max={600}
-              value={cfg.alerta_minutos_em_atendimento}
-              onChange={(e) => setCfg((p) => ({ ...p, alerta_minutos_em_atendimento: Math.max(5, Number(e.target.value) || 60) }))}
-              onBlur={() => save(cfg)}
-              disabled={saving}
+              value={config.alerta_minutos_em_atendimento??60}
+              onChange={e=>edit(p=>({...p,alerta_minutos_em_atendimento:Math.max(5,Number(e.target.value)||60)}))}
+              onBlur={()=>void save()}
             />
             <p className="text-[11px] text-muted-foreground mt-1">Padrão: 60 minutos.</p>
           </div>
           <div className="flex items-center gap-3 pt-5">
             <Switch
-              checked={cfg.coordenador_pode_concluir}
-              onCheckedChange={(v) => save({ ...cfg, coordenador_pode_concluir: v })}
+              checked={config.coordenador_pode_concluir??false}
+              onCheckedChange={v=>{if(window.confirm('Alterar a autorização de conclusão pelo Coordenador?')){edit(p=>({...p,coordenador_pode_concluir:v}));void save();}}}
             />
             <Label className="text-xs cursor-pointer">Permitir Coordenador concluir atendimentos</Label>
           </div>
