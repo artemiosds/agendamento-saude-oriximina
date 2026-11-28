@@ -309,7 +309,6 @@ const ConfigSistemasIntegrados: React.FC = () => {
                   placeholder={editing.id?'Em branco mantém o token salvo':'Informe o token'}
                   value={editing.token_saida || ''}
                   onChange={(e) => setEditing({ ...editing, token_saida: e.target.value })}
-                  placeholder="Cole aqui o Token de ENTRADA do sistema externo"
                   className="bg-white"
                 />
                 <p className="text-[11px] text-muted-foreground flex items-start gap-1">
