@@ -1,0 +1,33 @@
+/* Institutional settings: reuse clinical hub tokens. Local page/portal rules only. */
+.config-admin-page { min-width:0; }
+.config-admin-page .config-admin-eyebrow { color:var(--cp-muted,hsl(var(--muted-foreground))); }
+.config-admin-page .config-admin-nav-top { border-color:var(--cp-line); }
+.config-admin-page .config-admin-nav-item { color:var(--cp-ink); line-height:1.25; min-height:2.5rem; transition:background-color 120ms ease,border-color 120ms ease; }
+.config-admin-page .config-admin-nav-item:hover { background:var(--cp-hover); }
+.config-admin-page .config-admin-nav-item.config-admin-nav-active { background:linear-gradient(115deg,#153b62,#08677d 70%,#0c7168); border-color:transparent; color:#fff; font-weight:700; }
+.config-admin-page .config-admin-nav-item.config-admin-nav-active:hover { background:linear-gradient(115deg,#153b62,#08677d 70%,#0c7168); color:#fff; }
+.config-admin-page .config-admin-nav-icon { width:1.85rem; height:1.85rem; border-radius:.55rem; }
+.config-admin-page .config-admin-nav-active .config-admin-nav-icon { background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.35); box-shadow:none; }
+.config-admin-page .config-admin-section-heading { box-shadow:var(--cp-shadow); }
+.config-admin-page .config-admin-viewport > [data-radix-scroll-area-viewport] > div { display:block !important; min-width:0; max-width:100%; }
+.config-admin-page .config-admin-content .config-admin-card,
+.config-admin-page .config-admin-content .shadow-card { border-radius:.85rem; box-shadow:0 2px 5px rgba(23,63,94,.08); min-width:0; backdrop-filter:none; transition:border-color 120ms ease; }
+.config-admin-page .config-admin-content .config-admin-card.border-0,
+.config-admin-page .config-admin-content .shadow-card.border-0 { border:1px solid hsl(var(--border)); }
+.dark .config-admin-page .config-admin-content .config-admin-card,
+.dark .config-admin-page .config-admin-content .shadow-card { box-shadow:0 2px 5px rgba(0,0,0,.18); }
+.config-admin-page .config-admin-tabs,
+.config-admin-modal .config-admin-tabs { border:1px solid hsl(var(--border)); border-radius:.75rem; padding:.25rem; background:hsl(var(--muted)/.55); min-height:2.5rem; height:auto; max-width:100%; }
+.config-admin-page .config-admin-tabs [role="tab"],
+.config-admin-modal .config-admin-tabs [role="tab"] { min-width:0; min-height:2.25rem; height:auto; padding:.45rem .6rem; white-space:normal; overflow-wrap:anywhere; line-height:1.25; border-radius:.5rem; }
+.config-admin-page .config-admin-tabs [role="tab"][data-state="active"],
+.config-admin-modal .config-admin-tabs [role="tab"][data-state="active"] { background:hsl(var(--primary)); color:hsl(var(--primary-foreground)); font-weight:650; box-shadow:none; }
+.config-admin-modal { background:hsl(var(--background)); border:1px solid hsl(var(--border)); border-radius:1rem; box-shadow:0 12px 45px rgba(15,43,69,.22); backdrop-filter:none; min-width:0; }
+.config-admin-modal .config-admin-modal-header { border-bottom:1px solid hsl(var(--border)); padding-bottom:.75rem; padding-right:1.75rem; text-align:left; }
+.config-admin-modal .config-admin-modal-title { color:hsl(var(--foreground)); font-weight:700; line-height:1.35; overflow-wrap:anywhere; }
+.config-admin-modal .config-admin-modal-footer { border-top:1px solid hsl(var(--border)); padding-top:.75rem; gap:.5rem; }
+.config-admin-modal .config-admin-modal-footer button { white-space:normal; min-height:2.5rem; height:auto; }
+.config-admin-confirm .config-admin-modal-header { padding-right:0; }
+@media(min-width:1024px){ .config-admin-page .config-admin-nav-panel { max-height:calc(100dvh - 7rem); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; } }
+@media(max-width:380px){ .config-admin-page .config-admin-nav-item { font-size:.8rem; } .config-admin-modal .config-admin-modal-footer button { width:100%; } }
+@media(prefers-reduced-motion:reduce){ .config-admin-page .config-admin-nav-item,.config-admin-page .config-admin-content .config-admin-card { transition:none; } }

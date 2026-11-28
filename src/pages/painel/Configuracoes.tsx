@@ -1,6 +1,7 @@
 import PortalQrCodeCard from '@/components/PortalQrCodeCard';
 import React, { lazy, Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import ConfigNavigation from '@/components/config/ConfigNavigation';
+import '@/styles/config-admin.css';
 import { CONFIG_SECTIONS, CONFIG_GROUPS, resolveConfigTab, type ConfigTabId } from '@/lib/configNavigation';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import GerenciarProcedimentos from '@/components/GerenciarProcedimentos';
@@ -977,33 +978,35 @@ const Configuracoes: React.FC = () => {
   };
 
   return (
-    <div className="animate-fade-in space-y-4">
-      <header className="rounded-2xl border bg-card p-4 sm:p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"><SettingsIcon className="w-5 h-5" aria-hidden="true" /></span>
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Administração do sistema</p>
-              <h1 className="text-xl sm:text-2xl font-bold font-display text-foreground">Configurações do Sistema</h1>
-            </div>
-          </div>
-          <Badge variant="outline" className="gap-1.5"><Shield className="w-3.5 h-3.5" aria-hidden="true" />{_isGlobalMaster ? 'Master global' : 'Perfil Master'}</Badge>
+    <div className="clinical-hub config-admin-page space-y-3 min-w-0">
+      <header className="clinical-hub-hero flex flex-wrap items-center gap-3">
+        <div className="clinical-patient-avatar flex items-center justify-center shrink-0"><SettingsIcon className="h-5 w-5" aria-hidden="true" /></div>
+        <div className="min-w-0 flex-1">
+          <p className="clinical-hub-eyebrow">Secretaria Municipal de Saúde · Administração do sistema</p>
+          <h1 className="clinical-hub-name text-xl sm:text-2xl font-bold font-display">Configurações do Sistema</h1>
+          <p className="clinical-patient-sub text-xs mt-1">Gerencie as configurações e regras existentes. As alterações seguem o mecanismo de salvamento de cada seção.</p>
         </div>
-        <p className="mt-3 text-sm text-muted-foreground">Gerencie as configurações e regras existentes. As alterações seguem o mecanismo de salvamento de cada seção.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold"><Shield className="w-3.5 h-3.5" aria-hidden="true" />{_isGlobalMaster ? 'Master global' : 'Perfil Master'}</span>
+          <span className="rounded-lg border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold tabular-nums">{_isGlobalMaster ? 12 : 10} seções</span>
+        </div>
       </header>
 
-      <div className="flex flex-col lg:flex-row gap-4 items-start min-h-[70vh]">
-        <div className="w-full lg:w-auto lg:shrink-0 lg:self-stretch">
+      <div className="flex flex-col lg:flex-row gap-3 items-start min-w-0">
+        <div className="w-full min-w-0 lg:w-auto lg:shrink-0 lg:sticky lg:top-4">
           <ConfigNavigation activeTab={activeTab} onSelect={selectConfigTab} isGlobalMaster={_isGlobalMaster} />
         </div>
 
-        <main className="w-full flex-1 min-w-0 space-y-4" aria-labelledby="config-active-title">
-          <div className="rounded-xl border bg-card px-4 py-3 sm:px-5 shadow-sm">
-            <p className="text-xs text-muted-foreground">{activeGroup.label}</p>
-            <h2 id="config-active-title" className="text-lg font-semibold font-display text-foreground">{activeSection.label}</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">{activeSection.description}</p>
+        <main className="config-admin-content w-full flex-1 min-w-0 space-y-3" aria-labelledby="config-active-title">
+          <div className="clinical-premium config-admin-section-heading flex items-start gap-3 p-3 sm:p-4 min-w-0">
+            <span className="clinical-dock-icon clinical-tone-blue shrink-0"><SettingsIcon className="w-4 h-4" aria-hidden="true" /></span>
+            <div className="min-w-0 flex-1">
+              <p className="config-admin-eyebrow text-[11px] font-semibold uppercase tracking-wide">{activeGroup.label}</p>
+              <h2 id="config-active-title" className="text-base sm:text-lg font-bold font-display break-words">{activeSection.label}</h2>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 break-words">{activeSection.description}</p>
+            </div>
           </div>
-          <ScrollArea className="h-full">
+          <ScrollArea className="h-full min-w-0 config-admin-viewport">
             <Suspense fallback={<div role="status" className="flex items-center justify-center gap-2 rounded-xl border bg-card py-12 text-sm text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Carregando seção...</div>}>
               {renderTabContent()}
             </Suspense>
